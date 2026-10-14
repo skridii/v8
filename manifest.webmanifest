@@ -1,0 +1,10 @@
+{
+  "name":"IRONLOG — 4 Day Upper Lower",
+  "short_name":"IRONLOG",
+  "start_url":"./",
+  "display":"standalone",
+  "background_color":"#090b0e",
+  "theme_color":"#0b0d10",
+  "description":"6-week 4-day Upper/Lower hypertrophy training log.",
+  "icons":[]
+}

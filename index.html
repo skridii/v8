@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d10">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+  <title>IRONLOG</title>
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <div class="brand">IRON<span>LOG</span></div>
+    <div class="sub">4-DAY UPPER / LOWER · 6 WEEK CYCLE</div>
+  </div>
+  <button id="installBtn" class="ghost hidden">Install</button>
+</header>
+
+<main>
+  <section class="week-panel">
+    <div>
+      <span class="eyebrow">CURRENT CYCLE</span>
+      <h1 id="weekTitle">WEEK 1</h1>
+    </div>
+    <div class="week-grid" id="weekGrid"></div>
+  </section>
+
+  <nav class="tabs" id="dayTabs"></nav>
+  <section id="workout"></section>
+</main>
+
+<div id="timerOverlay" class="overlay hidden">
+  <div class="timer-card">
+    <div class="eyebrow">REST TIMER</div>
+    <div id="timerValue">2:30</div>
+    <div id="timerExercise">Rest before your next set</div>
+    <div class="timer-actions">
+      <button id="skipTimer" class="secondary">SKIP</button>
+      <button id="add30" class="secondary">+30 SEC</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
