@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v9';
+const APP_VERSION = 'v10';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -82,7 +82,7 @@ function defaultLayout(exerciseNames = {}) {
   }));
 }
 function blankState() {
-  return { version: 6, cycle: 1, maxCycle: 1, week: 1, day: 0, exercises: {}, layouts: { '1-1': defaultLayout() }, variantChoice: {}, names: {}, exerciseNames: {}, savedAt: 0 };
+  return { version: 6, cycle: 1, maxCycle: 1, week: 1, day: 0, exercises: {}, layouts: { '1-1': defaultLayout() }, variantChoice: {}, names: {}, library: {}, exerciseNames: {}, savedAt: 0 };
 }
 function layoutKeysSorted() {
   return Object.keys(state.layouts).map(k => { const [c, w] = k.split('-').map(Number); return { k, c, w, p: pos(c, w) }; }).sort((a, b) => a.p - b.p);
@@ -103,11 +103,53 @@ function applyFrom(c, w, fn) {
 }
 function registerNames() {
   state.names = state.names || {};
+  state.library = state.library || {};
   for (const L of Object.values(state.layouts)) for (const day of L) for (const slot of day) for (const v of slot.variants) {
     const id = exId(v.name);
     if (!state.names[id]) state.names[id] = v.name;
+    if (!state.library[id]) state.library[id] = { name: v.name, hu: v.hu || '', reps: slot.reps || '2 × 8–10' };
   }
 }
+/* Gyakorlatlista: minden gyakorlat, ami valaha a programban volt, amit hozzáadtál, vagy amihez adat tartozik. */
+function libraryIds() {
+  const ids = new Set(Object.keys(state.library || {}));
+  for (const [id, obj] of Object.entries(state.exercises)) if (Object.values(obj.occurrences || {}).some(hasData)) ids.add(id);
+  return [...ids].sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'hu'));
+}
+function libMeta(id) { const m = state.library?.[id]; return { name: m?.name || nameOf(id), hu: m?.hu || '', reps: m?.reps || '2 × 8–10' }; }
+function lastDone(id) {
+  let best = null, bp = -1;
+  for (const [k, r] of Object.entries(state.exercises[id]?.occurrences || {})) {
+    if (!(r.sets || []).some(s => s?.done) && !r.warmup?.done) continue;
+    const [c, w, d] = k.split('-').map(Number), p = pos(c, w, d);
+    if (p > bp) { bp = p; best = { ...r, c, w, d }; }
+  }
+  return best;
+}
+function lastSummary(id) {
+  const l = lastDone(id); if (!l) return 'Még nincs rögzített adat';
+  const f = s => s?.done ? `${showNum(s.weight)} kg × ${showNum(s.reps)}` : '—';
+  return `Legutóbb (${cycLabel(l.c).toLowerCase()}${l.w}. hét): S1 ${f(l.sets?.[0])} · S2 ${f(l.sets?.[1])}`;
+}
+function daysWith(id, c, w) { return layoutFor(c, w).map((day, d) => day.some(s => s.variants.some(v => exId(v.name) === id)) ? DAYS[d].name : null).filter(Boolean); }
+/* Napi megmozgatott súly: minden kész szett súly × ismétlés az adott edzésnapon. */
+function dayVolume(c, w, d) {
+  let work = 0, warm = 0; const k = okey(c, w, d);
+  for (const obj of Object.values(state.exercises)) {
+    const r = obj.occurrences?.[k]; if (!r) continue;
+    if (r.warmup?.done && positive(r.warmup.weight) && positive(r.warmup.reps)) warm += toNum(r.warmup.weight) * toNum(r.warmup.reps);
+    for (const s of (r.sets || [])) if (s?.done && positive(s.weight) && positive(s.reps)) work += toNum(s.weight) * toNum(s.reps);
+  }
+  return { work, warm, total: work + warm };
+}
+function prevDayVolume(c, w, d) {
+  for (let p = pos(c, w) - 4; p >= 0; p -= 4) {
+    const cc = Math.floor(p / 24) + 1, ww = Math.floor((p % 24) / 4) + 1, v = dayVolume(cc, ww, d);
+    if (v.total > 0) return { ...v, c: cc, w: ww };
+  }
+  return null;
+}
+const kg = n => (Math.round(n * 10) / 10).toLocaleString('hu-HU').replace(/[\u00a0\u202f]/g, ' ');
 function nameOf(id) { return state.names?.[id] || prettyId(id); }
 
 /* Váltakozó gyakorlat: az adott hét választása, alapból mindig az előző alkalom ellentéte. */
@@ -383,6 +425,8 @@ function renderWorkout() {
   if (!ready) { workout.innerHTML = '<div class="note">Adatok betöltése…</div>'; return; }
   const c = state.cycle, w = state.week, d = state.day, day = DAYS[d], slots = curSlots();
   let h = `<div class="eyebrow">${cycLabel(c)}DAY ${d + 1} · 2 WORKING SETS / EXERCISE</div><div class="day-name">${day.name}</div><div class="day-meta">${day.subtitle} · Failure / RIR 0–1</div>`;
+  const vol = dayVolume(c, w, d), pv = prevDayVolume(c, w, d);
+  h += `<section class="volume-card"><div><div class="eyebrow">MEGMOZGATOTT SÚLY · ${day.name}</div><div class="volume-big">${kg(vol.total)} <small>kg</small></div><div class="volume-sub">Munkasorozatok: ${kg(vol.work)} kg · Bemelegítés: ${kg(vol.warm)} kg</div></div>${pv ? `<div class="volume-prev"><span>Előző ${day.name}</span><b>${kg(pv.total)} kg</b><span>${cycLabel(pv.c).toLowerCase()}${pv.w}. hét</span></div>` : ''}</section>`;
   slots.forEach((slot, e) => {
     const vi = variantIndex(c, w, d, slot), v = slot.variants[vi], name = v.name, id = exId(name);
     const rec = recordFor(c, w, d, name), last = latestBefore(c, w, d, name);
@@ -401,7 +445,7 @@ function renderWorkout() {
   });
   if (!slots.length) h += '<div class="note">Ezen a napon nincs gyakorlat. Adj hozzá egyet!</div>';
   h += '<button class="add-ex-btn" id="addExBtn">+ ÚJ GYAKORLAT HOZZÁADÁSA</button>';
-  h += '<div class="note">A CSERE gombbal a gyakorlat ettől a héttől egy új gyakorlatra cserélhető, saját előzményekkel. A régi gyakorlat adatai megmaradnak a FEJLŐDÉS oldalon.</div>';
+  h += '<div class="note">Hozzáadáskor a gyakorlatlistából is választhatsz: a korábbi gyakorlatok a legutóbbi súlyaikkal és előzményeikkel együtt térnek vissza.</div>';
   workout.innerHTML = h;
   bindInputs();
 }
@@ -465,8 +509,31 @@ function openEditor(mode, e) {
     ? 'Új név = új gyakorlat, saját, üres előzményekkel. A régi gyakorlat eddigi adatai megmaradnak és a FEJLŐDÉS oldalon visszanézhetők. A változás ettől a héttől érvényes, a korábbi hetek nem változnak, és a többi edzésnapot sem érinti.'
     : 'A gyakorlat ettől a héttől kerül be erre az edzésnapra. Ha egy már létező nevet adsz meg, annak előzményeit folytatja.';
   $('editRemove').classList.toggle('hidden', mode !== 'edit');
+  $('editRemoveAll').classList.toggle('hidden', mode !== 'edit');
+  $('libSearch').value = '';
+  renderLibrary();
   $('editOverlay').classList.remove('hidden');
+  $('editOverlay').scrollTop = 0;
 }
+function renderLibrary() {
+  if (!editCtx) return;
+  const { c, w, d, uid } = editCtx, q = norm($('libSearch').value);
+  const onThisDay = new Set((layoutFor(c, w)[d] || []).filter(s => s.uid !== uid).flatMap(s => s.variants.map(v => exId(v.name))));
+  const ids = libraryIds().filter(id => !onThisDay.has(id) && (!q || exId(nameOf(id)).includes(q) || norm(libMeta(id).hu).includes(q)));
+  $('libList').innerHTML = ids.length ? ids.map(id => {
+    const m = libMeta(id), where = daysWith(id, c, w);
+    return `<button type="button" class="lib-item" data-lib="${esc(id)}"><span class="lib-name">${esc(m.name)}${where.length ? ` <em>${esc(where.join(', '))}</em>` : ' <em class="off">nincs a programban</em>'}</span><span class="lib-last">${esc(lastSummary(id))}</span></button>`;
+  }).join('') : '<div class="empty">Nincs találat. Lent új gyakorlatot is létrehozhatsz.</div>';
+  $('libList').querySelectorAll('[data-lib]').forEach(b => b.onclick = () => {
+    const m = libMeta(b.dataset.lib);
+    $('editName').value = m.name; $('editHu').value = m.hu; $('editReps').value = m.reps;
+    $('editAlt').value = '';
+    $('libList').querySelectorAll('.lib-item').forEach(x => x.classList.toggle('selected', x === b));
+    $('editName').classList.remove('invalid');
+    toast(`Kiválasztva: ${m.name} – nyomd meg a MENTÉS gombot.`);
+  });
+}
+$('libSearch').oninput = renderLibrary;
 function closeEditor() { $('editOverlay').classList.add('hidden'); editCtx = null; }
 $('editCancel').onclick = closeEditor;
 $('editForm').onsubmit = ev => {
@@ -481,6 +548,9 @@ $('editForm').onsubmit = ev => {
     const prevAlt = mode === 'edit' ? layoutFor(c, w)[d].find(s => s.uid === uid)?.variants[1] : null;
     variants.push({ name: alt, hu: prevAlt && exId(prevAlt.name) === exId(alt) ? prevAlt.hu : (exId(alt) === exId(INCLINE.name) ? INCLINE.hu : '') });
   }
+  state.library = state.library || {};
+  state.library[exId(name)] = { name, hu, reps };
+  if (alt && !state.library[exId(alt)]) state.library[exId(alt)] = { name: alt, hu: variants[1].hu, reps };
   if (mode === 'add') {
     const nu = newUid();
     applyFrom(c, w, L => { L[d].push({ uid: nu, reps, variants: clone(variants) }); });
@@ -498,6 +568,16 @@ $('editRemove').onclick = () => {
   closeEditor(); save(); render();
   toast('Gyakorlat eltávolítva erről a napról.');
 };
+$('editRemoveAll').onclick = () => {
+  if (!editCtx) return;
+  const { uid, c, w, d } = editCtx, slot = layoutFor(c, w)[d].find(x => x.uid === uid); if (!slot) return;
+  const ids = slot.variants.map(v => exId(v.name)), names = slot.variants.map(v => v.name).join(' / ');
+  const where = [...new Set(ids.flatMap(id => daysWith(id, c, w)))];
+  if (!confirm(`${names}\n\nEltávolítod MINDEN edzésnapról (${where.join(', ')}) a ${cycLabel(c).toLowerCase()}${w}. héttől?\n\nA gyakorlat a listában marad, az adatai megmaradnak. Ha később visszaadod a listából, onnan folytatod, ahol abbahagytad.`)) return;
+  applyFrom(c, w, L => { for (let i = 0; i < L.length; i++) L[i] = L[i].map(s => ({ ...s, variants: s.variants.filter(v => !ids.includes(exId(v.name))) })).filter(s => s.variants.length); });
+  closeEditor(); save(); render();
+  toast('Eltávolítva minden edzésnapról. A gyakorlatlistában megmaradt.');
+};
 
 /* ---------- fejlődés ---------- */
 function renderHistory() {
@@ -506,17 +586,19 @@ function renderHistory() {
   const rows = DAYS.map((day, d) => {
     let done = 0; const total = (L[d] || []).length * 2;
     for (const slot of (L[d] || [])) { const r = recordFor(c, w, d, slotName(c, w, d, slot)); done += (r?.sets || []).slice(0, 2).filter(s => s?.done).length; }
-    return { name: day.name, done, total };
+    return { name: day.name, done, total, vol: dayVolume(c, w, d).total };
   });
   const started = rows.filter(x => x.done > 0).length, finished = rows.filter(x => x.total > 0 && x.done >= x.total).length;
   const doneSets = rows.reduce((a, x) => a + x.done, 0), allSets = rows.reduce((a, x) => a + x.total, 0);
-  h += `<section class="summary-card"><div class="summary-title">${cycLabel(c)}${w}. HÉT ÖSSZESÍTŐ</div><div class="summary-stats three"><div><strong>${started}/4</strong><span>edzésnap elkezdve</span></div><div><strong>${finished}/4</strong><span>edzésnap kész</span></div><div><strong>${doneSets}/${allSets}</strong><span>munkasorozat kész</span></div></div>${rows.map(x => `<div class="summary-row"><span>${x.name}</span><b>${x.done}/${x.total} szett${x.total && x.done >= x.total ? ' ✓' : ''}</b></div>`).join('')}</section>`;
+  h += `<section class="summary-card"><div class="summary-title">${cycLabel(c)}${w}. HÉT ÖSSZESÍTŐ</div><div class="summary-stats three"><div><strong>${started}/4</strong><span>edzésnap elkezdve</span></div><div><strong>${finished}/4</strong><span>edzésnap kész</span></div><div><strong>${doneSets}/${allSets}</strong><span>munkasorozat kész</span></div></div><div class="summary-row total"><span>Heti megmozgatott súly</span><b>${kg(rows.reduce((a, x) => a + x.vol, 0))} kg</b></div>${rows.map(x => `<div class="summary-row"><span>${x.name}</span><b>${x.done}/${x.total} szett · ${kg(x.vol)} kg${x.total && x.done >= x.total ? ' ✓' : ''}</b></div>`).join('')}</section>`;
 
   const active = [];
   L.forEach(day => day.forEach(slot => slot.variants.forEach(v => { const id = exId(v.name); if (!active.includes(id)) active.push(id); })));
   const archived = Object.keys(state.exercises).filter(id => !active.includes(id) && Object.values(state.exercises[id].occurrences || {}).some(hasData)).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
-  h += `<div class="history-section">JELENLEGI GYAKORLATOK</div>` + active.map(historyGroup).join('');
-  if (archived.length) h += `<div class="history-section">LECSERÉLT / KORÁBBI GYAKORLATOK</div>` + archived.map(historyGroup).join('');
+  h += `<input id="histSearch" class="lib-search hist-search" placeholder="🔍 Gyakorlat keresése…" autocomplete="off" value="${esc(histQuery)}">`;
+  h += `<div class="hist-block"><div class="history-section">JELENLEGI GYAKORLATOK</div>` + active.map(historyGroup).join('') + '</div>';
+  if (archived.length) h += `<div class="hist-block"><div class="history-section">LECSERÉLT / KORÁBBI GYAKORLATOK</div>` + archived.map(historyGroup).join('') + '</div>';
+  h += '<div class="empty hidden" id="histNone">Nincs ilyen nevű gyakorlat.</div>';
 
   h += `<div class="history-section">CIKLUS</div><div class="cycle-banner"><span>${state.maxCycle > 1 ? `${state.maxCycle} ciklus rögzítve. Váltás a fenti ‹ › nyilakkal.` : 'Új 6 hetes ciklus indításakor a mostani eredmények megmaradnak.'}</span><button class="primary" id="newCycleBtn2">ÚJ CIKLUS</button></div>`;
   h += '<div class="history-actions"><button id="exportBtn" class="secondary">BIZTONSÁGI MENTÉS FÁJLBA</button><label class="secondary import-label">MENTÉS BETÖLTÉSE<input id="importInput" type="file" accept=".json,application/json" hidden></label></div>';
@@ -526,10 +608,22 @@ function renderHistory() {
   }
   h += `<div class="note">Az alkalmazás minden változást azonnal ment, és naponta külön helyi másolatot is készít. A fájlba mentés külön, letölthető másolatot ad. IRONLOG ${APP_VERSION}</div>`;
   workout.innerHTML = h;
+  $('histSearch').oninput = e => { histQuery = e.target.value; filterHistory(); };
+  filterHistory();
   $('exportBtn').onclick = () => exportData(state, `ironlog-backup-${today()}.json`);
   $('importInput').onchange = e => importData(e.target.files[0]);
   $('newCycleBtn2').onclick = startNewCycle;
   workout.querySelectorAll('[data-snap]').forEach(b => b.onclick = () => { try { const raw = localStorage.getItem(b.dataset.snap); if (raw) exportData(JSON.parse(raw), `${b.dataset.snap}.json`); } catch (e) { toast('A másolat nem olvasható.'); } });
+}
+let histQuery = '';
+function filterHistory() {
+  const q = norm(histQuery); let any = false;
+  workout.querySelectorAll('.hist-block').forEach(b => {
+    let vis = 0;
+    b.querySelectorAll('[data-hname]').forEach(g => { const show = !q || g.dataset.hname.includes(q); g.classList.toggle('hidden', !show); if (show) vis++; });
+    b.classList.toggle('hidden', !vis); if (vis) any = true;
+  });
+  $('histNone')?.classList.toggle('hidden', any);
 }
 function snapLabel(k) {
   if (k === PRE_V6_KEY) return 'A v9 frissítés előtti állapot';
@@ -539,7 +633,7 @@ function snapLabel(k) {
 function historyGroup(id) {
   const pb = personalBest(id);
   const rows = Object.entries(state.exercises[id]?.occurrences || {}).filter(([, r]) => hasData(r)).map(([k, r]) => { const [c, w, d] = k.split('-').map(Number); return { c, w, d, r, p: pos(c, w, d) }; }).sort((a, b) => a.p - b.p);
-  let h = `<details class="history-group"><summary>${esc(nameOf(id))} ${pb ? `<span class="small-record">🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}</span>` : ''}</summary><div class="progress-ex">`;
+  let h = `<details class="history-group" data-hname="${esc(norm(nameOf(id)) + ' ' + norm(libMeta(id).hu))}"><summary>${esc(nameOf(id))} ${pb ? `<span class="small-record">🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}</span>` : ''}</summary><div class="progress-ex">`;
   if (!rows.length) h += '<div class="empty">Még nincs adat.</div>';
   for (const { c, w, d, r } of rows) {
     const f = s => `${esc(showNum(s?.weight)) || '—'} × ${esc(showNum(s?.reps)) || '—'}`;
@@ -635,7 +729,15 @@ window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferr
 installBtn.onclick = async () => { if (deferredPrompt) { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; installBtn.classList.add('hidden'); } };
 window.addEventListener('error', () => { try { toast('Hiba történt. Ha valami nem jelenik meg, indítsd újra az alkalmazást.'); } catch (e) {} });
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+/* Frissítés: ha új verzió települt, megjelenik a FRISSÍTÉS sáv (nem kell többször bezárni az appot). */
+let swReg = null;
+if ('serviceWorker' in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').then(r => { swReg = r; }).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) $('updateBar').classList.remove('hidden'); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) try { swReg?.update().catch(() => {}); } catch (e) {} });
+}
+$('updateBtn').onclick = () => { save(); setTimeout(() => location.reload(), 150); };
 render();
 load().then(() => { render(); restoreTimer(); }).catch(() => {
   // Ha a betöltés váratlanul elakad, NEM írunk felül semmit (ready=false marad).

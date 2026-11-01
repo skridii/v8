@@ -46,3 +46,27 @@
 .snap-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #22282e;font-size:11px;color:#aab2ba}
 .snap-row .secondary{padding:6px 9px;font-size:10px}
 @media(max-width:420px){.progress-row.four{grid-template-columns:52px 1fr 1fr 1fr;gap:5px;font-size:9.5px}.summary-stats.three strong{font-size:18px}.cycle-banner{font-size:11px}}
+
+/* IRONLOG v10 additions */
+.volume-card{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;background:linear-gradient(145deg,#141b10,#0e1115);border:1px solid #3a4b30;border-radius:17px;padding:14px 15px;margin:0 0 12px}
+.volume-big{font-size:30px;font-weight:950;letter-spacing:-1px;margin:6px 0 3px;color:#9cff57}
+.volume-big small{font-size:14px;color:#c6f99e;letter-spacing:0}
+.volume-sub{font-size:10px;color:#87919a}
+.volume-prev{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:10px;color:#7f8993;text-align:right;flex-shrink:0}
+.volume-prev b{font-size:15px;color:#dbe0e5}
+.summary-row.total{color:#dbe0e5;font-weight:800}
+.lib-box{margin-bottom:16px}
+.lib-head{font-size:10px;font-weight:900;color:#9cff57;letter-spacing:1.2px;margin:4px 0 8px}
+.lib-search{width:100%;background:#0a0d10;border:1px solid #2a3037;border-radius:9px;color:#fff;padding:11px 10px;outline:none;font-size:16px;margin-bottom:8px}
+.lib-search:focus{border-color:#9cff57}
+.lib-list{max-height:250px;overflow-y:auto;display:grid;gap:6px;-webkit-overflow-scrolling:touch}
+.lib-item{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;width:100%;background:#0a0d10;border:1px solid #252b31;border-radius:10px;padding:10px 11px;color:#f4f6f8;cursor:pointer}
+.lib-item.selected{border-color:#9cff57;background:#141b10}
+.lib-name{font-weight:900;font-size:13px}
+.lib-name em{font-style:normal;font-size:9px;font-weight:800;color:#9cff57;margin-left:4px}
+.lib-name em.off{color:#66717b}
+.lib-last{font-size:10px;color:#87919a}
+.danger-link+.danger-link{margin-top:10px}
+.update-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,env(safe-area-inset-bottom));z-index:40;display:flex;align-items:center;gap:12px;background:#11151a;border:1px solid #9cff57;border-radius:14px;padding:10px 10px 10px 15px;font-size:12px;font-weight:800;box-shadow:0 10px 40px #000;white-space:nowrap}
+@media(max-width:420px){.volume-big{font-size:26px}}
+.hist-search{margin:18px 0 0}

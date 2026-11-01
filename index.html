@@ -51,6 +51,12 @@
   <form class="timer-card edit-card" id="editForm" autocomplete="off">
     <div class="eyebrow" id="editEyebrow">GYAKORLAT CSERE</div>
     <div class="edit-title" id="editTitle"></div>
+    <div class="lib-box">
+      <div class="lib-head">VÁLASSZ A GYAKORLATLISTÁBÓL</div>
+      <input id="libSearch" class="lib-search" placeholder="Keresés…" autocomplete="off">
+      <div id="libList" class="lib-list"></div>
+    </div>
+    <div class="lib-head">VAGY ADD MEG / SZERKESZD</div>
     <label class="field"><span>Gyakorlat neve</span><input id="editName" autocomplete="off" autocapitalize="words"></label>
     <label class="field"><span>Magyar név (nem kötelező)</span><input id="editHu" autocomplete="off"></label>
     <label class="field"><span>Ismétlés</span><input id="editReps" autocomplete="off" placeholder="2 × 8–10"></label>
@@ -61,9 +67,11 @@
       <button type="submit" class="primary">MENTÉS</button>
     </div>
     <button type="button" id="editRemove" class="danger-link">Eltávolítás erről a napról</button>
+    <button type="button" id="editRemoveAll" class="danger-link">Eltávolítás minden edzésnapról (a listában marad)</button>
   </form>
 </div>
 
+<div id="updateBar" class="update-bar hidden"><span>Új verzió érhető el</span><button id="updateBtn" class="primary">FRISSÍTÉS</button></div>
 <div id="toast" class="toast"></div>
 <script src="app.js"></script>
 </body>
