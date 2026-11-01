@@ -16,3 +16,33 @@
 .summary-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid #242a30;font-size:11px;color:#aab2ba}
 .summary-row b{color:#9cff57;text-align:right}.small-record{font-size:10px;color:#9cff57;margin-left:5px}
 @media(max-width:420px){.swap-btn{padding:7px;font-size:9px}.summary-row{font-size:10px}.progress-row{grid-template-columns:65px 1fr 1fr;font-size:10px}}
+
+/* IRONLOG v9 additions */
+.cycle-nav{display:flex;align-items:center;gap:7px;white-space:nowrap}
+.cycle-btn{background:#15191e;border:1px solid #2a3037;color:#9cff57;border-radius:7px;width:26px;height:22px;font-weight:900;font-size:13px;padding:0;line-height:1;cursor:pointer}
+.cycle-btn:disabled{opacity:.3}
+.cycle-banner{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#141b10;border:1px solid #4b5b2d;border-radius:14px;padding:12px 14px;margin:0 0 15px;color:#c6f99e;font-size:12px;line-height:1.4}
+.cycle-banner .primary{flex-shrink:0}
+.primary{background:#9cff57;color:#081006;border:1px solid #9cff57;border-radius:10px;padding:9px 12px;font-weight:900;cursor:pointer}
+.variant-row{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.variant-tag{font-size:9px;letter-spacing:1px;font-weight:900;color:#081006;background:#9cff57;border-radius:6px;padding:4px 6px}
+.variant-btn{background:#0a0d10;border:1px dashed #3a4b30;color:#bafc8f;border-radius:8px;padding:7px 9px;font-size:10px;font-weight:800;cursor:pointer}
+.add-ex-btn{width:100%;margin-top:6px;padding:15px;border-radius:15px;border:1px dashed #3a4b30;background:rgba(156,255,87,.04);color:#9cff57;font-weight:900;font-size:12px;letter-spacing:.6px;cursor:pointer}
+.edit-overlay{place-items:start center;overflow-y:auto;padding-top:max(40px,env(safe-area-inset-top))}
+.edit-card{text-align:left;padding:22px 18px}
+.edit-title{font-size:19px;font-weight:900;margin:6px 0 16px}
+.field{display:block;margin-bottom:12px}
+.field span{display:block;font-size:10px;font-weight:800;color:#7e8791;letter-spacing:.8px;margin-bottom:6px;text-transform:uppercase}
+.field input{width:100%;background:#0a0d10;border:1px solid #2a3037;border-radius:9px;color:#fff;padding:12px 10px;outline:none;font-size:16px}
+.field input:focus{border-color:#9cff57}
+.field input.invalid{border-color:#ff4f5e}
+.edit-help{font-size:11px;color:#7f8993;margin:4px 0 18px;line-height:1.5}
+.edit-card .timer-actions button{min-width:0;flex:1}
+.danger-link{display:block;margin:16px auto 0;background:none;border:none;color:#ff6b77;font-weight:800;font-size:12px;cursor:pointer}
+.summary-stats.three{grid-template-columns:repeat(3,1fr)}
+.summary-stats.three strong{font-size:21px}
+.history-section{font-size:10px;letter-spacing:1.6px;color:#7e8791;font-weight:800;margin:22px 0 8px}
+.progress-row.four{grid-template-columns:62px 1fr 1fr 1fr}
+.snap-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #22282e;font-size:11px;color:#aab2ba}
+.snap-row .secondary{padding:6px 9px;font-size:10px}
+@media(max-width:420px){.progress-row.four{grid-template-columns:52px 1fr 1fr 1fr;gap:5px;font-size:9.5px}.summary-stats.three strong{font-size:18px}.cycle-banner{font-size:11px}}

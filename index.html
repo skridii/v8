@@ -20,12 +20,17 @@
 <main>
   <section class="week-panel">
     <div>
-      <span class="eyebrow">CURRENT CYCLE</span>
+      <div class="cycle-nav">
+        <button id="cyclePrev" class="cycle-btn hidden" aria-label="Előző ciklus">‹</button>
+        <span class="eyebrow" id="cycleLabel">CURRENT CYCLE</span>
+        <button id="cycleNext" class="cycle-btn hidden" aria-label="Következő ciklus">›</button>
+      </div>
       <h1 id="weekTitle">WEEK 1</h1>
     </div>
     <div class="week-grid" id="weekGrid"></div>
   </section>
 
+  <div id="cycleBanner"></div>
   <nav class="tabs" id="dayTabs"></nav>
   <section id="workout"></section>
 </main>
@@ -40,6 +45,23 @@
       <button id="add30" class="secondary">+30 SEC</button>
     </div>
   </div>
+</div>
+
+<div id="editOverlay" class="overlay edit-overlay hidden">
+  <form class="timer-card edit-card" id="editForm" autocomplete="off">
+    <div class="eyebrow" id="editEyebrow">GYAKORLAT CSERE</div>
+    <div class="edit-title" id="editTitle"></div>
+    <label class="field"><span>Gyakorlat neve</span><input id="editName" autocomplete="off" autocapitalize="words"></label>
+    <label class="field"><span>Magyar név (nem kötelező)</span><input id="editHu" autocomplete="off"></label>
+    <label class="field"><span>Ismétlés</span><input id="editReps" autocomplete="off" placeholder="2 × 8–10"></label>
+    <label class="field"><span>Váltakozó gyakorlat minden 2. héten (nem kötelező)</span><input id="editAlt" autocomplete="off" autocapitalize="words" placeholder="pl. Incline Bench Press"></label>
+    <div class="edit-help" id="editHelp"></div>
+    <div class="timer-actions">
+      <button type="button" id="editCancel" class="secondary">MÉGSE</button>
+      <button type="submit" class="primary">MENTÉS</button>
+    </div>
+    <button type="button" id="editRemove" class="danger-link">Eltávolítás erről a napról</button>
+  </form>
 </div>
 
 <div id="toast" class="toast"></div>
