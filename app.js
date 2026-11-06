@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v16';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -60,6 +60,9 @@ const lkey = (c, w) => `${c}-${w}`;
 const pos = (c, w, d = 0) => ((c - 1) * 6 + (w - 1)) * 4 + d;
 const clone = o => JSON.parse(JSON.stringify(o));
 const emptySet = () => ({ weight: '', reps: '', done: false });
+const slotSets = slot => Math.max(1, Number(slot?.sets) || 2);
+const showReps = slot => String(slot?.reps || '').replace(/^\s*\d+\s*×/, `${slotSets(slot)} ×`);
+function padSets(r, n) { while (r.sets.length < n) r.sets.push(emptySet()); return r; }
 const cleanNum = v => String(v ?? '').trim().replace(/\s+/g, '').replace(',', '.');
 const toNum = v => { const s = cleanNum(v); return s === '' ? NaN : Number(s); };
 const positive = v => { const n = toNum(v); return Number.isFinite(n) && n > 0; };
@@ -432,17 +435,19 @@ function renderTabs() {
 }
 /* Ádám programjának pontosítása (amit valójában csinál) – csak az admin fióknál jelenik meg, egyszer.
    Átnevezés MINDEN héten, az eddigi adatok az új név alá kerülnek (ugyanaz a gyakorlat volt, csak más néven). */
-const PROGRAM_FIX = [
+const PROGRAM_FIXES = [{ id: 'program2026', items: [
   ['Single-Arm Overhead Cable Triceps Extension', 'Overhead Cable Triceps Extension', 'Fejfeletti Tricepsz Csigán (2 kézzel)'],
   ['Chest-Supported Row', 'Chest-Supported Row', 'Mellkassal támasztott evezés – csípő felé húzva'],
   ['Lateral Raise', 'Machine Lateral Raise', 'Gépes Oldalemelés'],
   ['Scott Bench Preacher Curl', 'Machine Preacher Curl', 'Gépes Scott Bicepsz (csigás)'],
   ['Seated Hamstring Curl', 'Lying Hamstring Curl', 'Fekvő Combhajlítás'],
   ['Hanging Leg Raise', 'Hanging Oblique Leg Raise', 'Függeszkedős Oldalsó Lábemelés (oldalanként)']
-];
+] }, { id: 'program2026b', items: [
+  ['High Row Machine', 'Cable High Row', 'Magas Evezés Csigán']
+] }];
+const pendingFixes = () => PROGRAM_FIXES.filter(f => !state.fixes?.[f.id] && Object.values(state.layouts).some(L => L.some(day => day.some(sl => sl.variants.some(v => f.items.some(x => exId(x[0]) === exId(v.name) && (x[0] !== x[1] || v.hu !== x[2])))))));
 function programFixNeeded() {
-  if (!me?.is_admin || state.fixes?.program2026) return false;
-  return Object.values(state.layouts).some(L => L.some(day => day.some(sl => sl.variants.some(v => PROGRAM_FIX.some(f => exId(f[0]) === exId(v.name) && (f[0] !== f[1] || v.hu !== f[2]))))));
+  return !!me?.is_admin && pendingFixes().length > 0;
 }
 function renameEverywhere(oldName, newName, hu) {
   const o = exId(oldName), n = exId(newName);
@@ -462,16 +467,17 @@ function renameEverywhere(oldName, newName, hu) {
   state.names[n] = newName;
 }
 function applyProgramFix() {
-  const list = PROGRAM_FIX.map(f => f[0] === f[1] ? `• ${f[0]}: ${f[2]}` : `• ${f[0]} → ${f[1]}`).join('\n');
+  const fixes = pendingFixes(), items = fixes.flatMap(f => f.items);
+  const list = items.map(f => f[0] === f[1] ? `• ${f[0]}: ${f[2]}` : `• ${f[0]} → ${f[1]}`).join('\n');
   if (!confirm(`A programod gyakorlatai átnevezésre kerülnek arra, amit valójában csinálsz:\n\n${list}\n\nAz eddigi adataid az új név alá kerülnek (minden héten), semmi nem vész el. Előtte automatikus helyi másolat készül.\n\nMehet?`)) return;
   lsSet(PRE_IMPORT_PREFIX + new Date().toISOString().slice(0, 19).replace('T', ' ') + ' program', JSON.stringify(state)); pruneSnaps();
-  for (const [a, b, hu] of PROGRAM_FIX) renameEverywhere(a, b, hu);
-  state.fixes = { ...(state.fixes || {}), program2026: Date.now() };
+  for (const [a, b, hu] of items) renameEverywhere(a, b, hu);
+  state.fixes = { ...(state.fixes || {}) }; for (const f of fixes) state.fixes[f.id] = Date.now();
   save(); render(); toast('A programod frissítve, az adatok megmaradtak.');
 }
 function renderBanner() {
   if (ready && view === 'workout' && programFixNeeded()) {
-    cycleBanner.innerHTML = `<div class="cycle-banner"><span>A programod gyakorlatai frissíthetők arra, amit valójában csinálsz (2 kezes fejfeletti tricepsz, gépes oldalemelés, gépes Scott, fekvő combhajlítás, oldalsó lábemelés). Az adatok megmaradnak.</span><button class="primary" id="progFixBtn">FRISSÍTÉS</button></div>`;
+    cycleBanner.innerHTML = `<div class="cycle-banner"><span>A programod gyakorlatai frissíthetők arra, amit valójában csinálsz (${esc(pendingFixes().flatMap(f => f.items).map(x => x[1] === x[0] ? x[0] : x[1]).join(', '))}). Az adatok megmaradnak.</span><button class="primary" id="progFixBtn">FRISSÍTÉS</button></div>`;
     $('progFixBtn').onclick = applyProgramFix;
   } else if (ready && view === 'workout' && state.week === 6 && state.cycle === state.maxCycle) {
     cycleBanner.innerHTML = `<div class="cycle-banner"><span>A ${state.cycle}. ciklus utolsó hete. Ha végeztél, indíts újat – az eddigi eredmények megmaradnak.</span><button class="primary" id="newCycleBtn">ÚJ CIKLUS</button></div>`;
@@ -513,7 +519,7 @@ function renderWorkout() {
     const vi = variantIndex(c, w, d, slot), v = slot.variants[vi], name = v.name, id = exId(name);
     const rec = recordFor(c, w, d, name), last = latestBefore(c, w, d, name);
     const sets = rec?.sets || [emptySet(), emptySet()], wu = rec?.warmup || emptySet(), pb = personalBest(id);
-    h += `<article class="exercise"><div class="exercise-head"><div><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(name)}</button>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(slot.reps)}</div></div><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div>`;
+    h += `<article class="exercise"><div class="exercise-head"><div><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(name)}</button>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(showReps(slot))}</div></div><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div>`;
     if (slot.variants.length > 1) {
       const other = slot.variants[1 - vi];
       h += `<div class="variant-row"><span class="variant-tag">VÁLTAKOZÓ</span><button class="variant-btn" data-variant data-e="${e}">↔ Ezen a héten inkább: ${esc(other.name)}</button></div>`;
@@ -525,9 +531,9 @@ function renderWorkout() {
     if (last) h += `<div class="history"><div>LEGUTÓBBI ALKALOM · ${cycLabel(last.c)}${last.w}. HÉT · ${DAYS[last.d]?.name || ''}</div><strong>Warm-up: ${esc(showNum(last.warmup?.weight)) || '—'} kg × ${esc(showNum(last.warmup?.reps)) || '—'} · ${esc(setsText(last))}</strong></div>`;
     h += `<div class="sets"><div class="set-labels"><span>SET</span><span>KG</span><span>REPS</span><span></span></div>`;
     h += setRowHtml('W', e, wu, 'warmup');
-    const nSets = Math.max(2, sets.length);
+    const nSets = Math.max(slotSets(slot), sets.length);
     for (let s = 0; s < nSets; s++) h += setRowHtml(String(s + 1), e, sets[s] || emptySet(), 'work', s);
-    h += `<div class="set-tools"><button class="set-tool" data-addset data-e="${e}">+ SZETT</button>${nSets > 2 ? `<button class="set-tool minus" data-delset data-e="${e}">− UTOLSÓ SZETT</button>` : ''}</div>`;
+    h += `<div class="set-tools"><button class="set-tool" data-addset data-e="${e}">+ SZETT</button>${nSets > 1 ? `<button class="set-tool minus" data-delset data-e="${e}">− SZETT</button>` : ''}</div>`;
     h += `</div><div class="last">Bemelegítő szett után: <strong>1:00</strong> · Munkasorozat után: <strong>2:30</strong></div></article>`;
   });
   if (!slots.length) h += '<div class="note">Ezen a napon nincs gyakorlat. Adj hozzá egyet!</div>';
@@ -545,6 +551,7 @@ function bindInputs() {
     const slot = curSlots()[+inp.dataset.e]; if (!slot) return;
     lockVariant(slot);
     const s = +inp.dataset.s, r = ensureRecord(state.cycle, state.week, state.day, slotName(state.cycle, state.week, state.day, slot));
+    padSets(r, s + 1);
     const v = inp.dataset.kind === 'warmup' ? r.warmup : r.sets[s];
     v[inp.dataset.type] = cleanNum(inp.value); v.done = false; v.ts = Date.now(); r.ts = Date.now();
     if (positive(inp.value)) inp.classList.remove('invalid');
@@ -564,7 +571,7 @@ function bindInputs() {
     ins.forEach(inp => { if (!positive(inp.value)) { inp.classList.add('invalid'); invalid = true; } else inp.classList.remove('invalid'); });
     if (invalid) { toast('Add meg a súlyt és az ismétlésszámot pozitív számként!'); return; }
     lockVariant(slot);
-    const r = ensureRecord(state.cycle, state.week, state.day, name), v = kind === 'warmup' ? r.warmup : r.sets[s];
+    const r = padSets(ensureRecord(state.cycle, state.week, state.day, name), s + 1), v = kind === 'warmup' ? r.warmup : r.sets[s];
     v.weight = cleanNum(ins[0].value); v.reps = cleanNum(ins[1].value); v.done = true; v.ts = Date.now(); r.ts = Date.now();
     if (!r.doneAt) r.doneAt = Date.now();
     save(); renderWorkout(); renderWeeks();
@@ -580,18 +587,21 @@ function bindInputs() {
   workout.querySelectorAll('[data-swap]').forEach(btn => btn.onclick = () => openEditor('edit', +btn.dataset.e));
   workout.querySelectorAll('[data-addset]').forEach(btn => btn.onclick = () => {
     const slot = curSlots()[+btn.dataset.e]; if (!slot) return;
-    lockVariant(slot);
-    const r = ensureRecord(state.cycle, state.week, state.day, slotName(state.cycle, state.week, state.day, slot));
-    r.sets.push(emptySet()); r.ts = Date.now();
-    save(); renderWorkout();
+    // A szett a gyakorlathoz rögzül: ettől a héttől minden edzésen ennyi szett lesz.
+    const n = slotSets(slot) + 1, uid = slot.uid;
+    applyFrom(state.cycle, state.week, L => { for (const day of L) for (const sl of day) if (sl.uid === uid) sl.sets = n; });
+    save(); renderWorkout(); toast(`Mostantól ${n} munkasorozat ennél a gyakorlatnál.`);
   });
   workout.querySelectorAll('[data-delset]').forEach(btn => btn.onclick = () => {
     const slot = curSlots()[+btn.dataset.e]; if (!slot) return;
     const r = recordFor(state.cycle, state.week, state.day, slotName(state.cycle, state.week, state.day, slot));
-    if (!r || r.sets.length <= 2) return;
-    const last = r.sets[r.sets.length - 1];
-    if ((last.done || last.weight || last.reps) && !confirm(`Törlöd a ${r.sets.length}. szettet (${showNum(last.weight) || '—'} kg × ${showNum(last.reps) || '—'})?`)) return;
-    r.sets.pop(); save(); renderWorkout();
+    const cur = Math.max(slotSets(slot), r?.sets?.length || 0); if (cur <= 1) return;
+    const last = r?.sets?.[cur - 1];
+    if (last && (last.done || last.weight || last.reps) && !confirm(`Törlöd a ${cur}. szettet (${showNum(last.weight) || '—'} kg × ${showNum(last.reps) || '—'})?`)) return;
+    if (r && r.sets.length >= cur) r.sets.length = Math.max(1, cur - 1);
+    const n = Math.max(1, cur - 1), uid = slot.uid;
+    applyFrom(state.cycle, state.week, L => { for (const day of L) for (const sl of day) if (sl.uid === uid) sl.sets = n; });
+    save(); renderWorkout(); toast(`Mostantól ${n} munkasorozat ennél a gyakorlatnál.`);
   });
   workout.querySelectorAll('[data-stats]').forEach(btn => btn.onclick = () => openStats(btn.dataset.stats));
   $('addExBtn').onclick = () => openEditor('add');
@@ -707,7 +717,7 @@ function renderHistory() {
   let h = `<div class="eyebrow">PROGRESS & WEEKLY SUMMARY</div><div class="day-name">FEJLŐDÉS</div><div class="day-meta">Személyes rekordok, heti teljesítés és gyakorlatonkénti előzmények.</div>`;
   const rows = DAYS.map((day, d) => {
     let done = 0, total = 0;
-    for (const slot of (L[d] || [])) { const r = recordFor(c, w, d, slotName(c, w, d, slot)); total += Math.max(2, r?.sets?.length || 0); done += (r?.sets || []).filter(s => s?.done).length; }
+    for (const slot of (L[d] || [])) { const r = recordFor(c, w, d, slotName(c, w, d, slot)); total += Math.max(slotSets(slot), r?.sets?.length || 0); done += (r?.sets || []).filter(s => s?.done).length; }
     return { name: day.name, done, total, vol: dayVolume(c, w, d).total };
   });
   const started = rows.filter(x => x.done > 0).length, finished = rows.filter(x => x.total > 0 && x.done >= x.total).length;
@@ -828,8 +838,9 @@ function bindCharts(root) {
    Ismétlés alapú (saját testsúlyos) gyakorlatoknál a legtöbb ismétlés számít. */
 const RANKS = [
   { n: 'Vas', c: '#8b939c' }, { n: 'Bronz', c: '#cd7f32' }, { n: 'Ezüst', c: '#c9d1d9' }, { n: 'Arany', c: '#f2c94c' },
-  { n: 'Platina', c: '#56d6c9' }, { n: 'Gyémánt', c: '#7cc4ff' }, { n: 'Bajnok', c: '#ff5fa2' }
+  { n: 'Platina', c: '#56d6c9' }, { n: 'Gyémánt', c: '#7cc4ff' }, { n: 'Bajnok', c: '#ff5fa2' }, { n: 'Legenda', c: '#b98cff' }
 ];
+const MAX_PTS = RANKS.length * 3 - 1;
 const ROMAN = ['I', 'II', 'III'];
 // [név, magyar név, típus (w = súly, r = ismétlés), eszköz (free / machine / bw), [kezdő, újonc, középhaladó, haladó, elit] 80 kg-ra, alap ismétlés, más nevek]
 const RANK_DB_RAW = [
@@ -858,7 +869,7 @@ const RANK_DB_RAW = [
   ['Dumbbell Deadlift', 'Felhúzás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [22, 34, 48, 64, 82], '2 × 8–10', []],
   ['Goblet Squat', 'Kehely Guggolás', 'w', 'free', [18, 28, 40, 54, 70], '2 × 10–12', []],
   ['Dumbbell Bulgarian Split Squat', 'Bolgár Guggolás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [12, 20, 29, 40, 52], '2 × 8–10 / láb', []],
-  ['Hack Squat', 'Hack Guggolás Gépen (ráterhelés)', 'w', 'machine', [60, 110, 170, 240, 320], '2 × 6–8', []],
+  ['Hack Squat', 'Hack Guggolás Gépen (ráterhelés)', 'w', 'machine', [40, 80, 125, 180, 240], '2 × 6–8', []],
   ['Leg Press', 'Lábtoló Gép', 'w', 'machine', [120, 200, 290, 390, 500], '2 × 8–10', []],
   ['Smith Machine Squat', 'Smith Guggolás', 'w', 'machine', [60, 90, 125, 165, 210], '2 × 6–8', []],
   ['Smith Machine Bulgarian Split Squat', 'Smith Bolgár Guggolás', 'w', 'machine', [30, 55, 85, 120, 160], '2 × 8–10 / láb', []],
@@ -870,12 +881,13 @@ const RANK_DB_RAW = [
   ['Machine Hip Adduction', 'Csípő Addukció Gépen', 'w', 'machine', [60, 90, 125, 165, 210], '2 × 10–12', ['Hip Adduction']],
   ['Machine Hip Abduction', 'Csípő Abdukció Gépen', 'w', 'machine', [60, 90, 125, 165, 210], '2 × 10–12', ['Hip Abduction']],
   ['Standing Calf Raise', 'Álló Vádli Gépen', 'w', 'machine', [70, 115, 165, 225, 290], '2 × 8–10', []],
-  ['Seated Calf Raise', 'Ülő Vádli Gépen', 'w', 'machine', [40, 70, 105, 145, 190], '2 × 10–12', []],
-  ['Machine Ab Crunch', 'Gépes Hasprés', 'w', 'machine', [35, 55, 80, 110, 145], '2 × 10–15', []],
+  ['Seated Calf Raise', 'Ülő Vádli Gépen', 'w', 'free', [40, 68, 100, 135, 175], '2 × 10–12', []],
+  ['Machine Ab Crunch', 'Gépes Hasprés', 'w', 'machine', [25, 40, 58, 80, 105], '2 × 10–15', []],
   ['Chest-Supported Row', 'Mellkassal Támasztott Evezés', 'w', 'machine', [45, 70, 100, 135, 175], '2 × 6–8', ['T-Bar Row']],
   ['Wide-Grip Lat Pulldown', 'Széles Lehúzás Csigán', 'w', 'machine', [50, 65, 85, 108, 132], '2 × 8–10', ['Lat Pulldown']],
   ['Single-Arm Sagittal Pulldown', 'Szagittális Lehúzás Egy Kézzel Gépen', 'w', 'machine', [20, 30, 42, 56, 72], '2 × 8–10', ['Sagittal Pulldown', 'Sagittal Row', 'Single Arm Sagittal Pulldown']],
   ['Straight-Arm Lat Pulldown', 'Egyeneskaros Lehúzás', 'w', 'machine', [20, 30, 42, 56, 72], '2 × 8–10', ['Straight Arm Pulldown']],
+  ['Cable High Row', 'Magas Evezés Csigán', 'w', 'machine', [35, 50, 68, 88, 110], '2 × 8–10', ['High Cable Row']],
   ['Seated Cable Row', 'Ülő Csigás Evezés', 'w', 'machine', [50, 68, 90, 115, 142], '2 × 8–10', ['Cable Row']],
   ['High Row Machine', 'Gépes Magas Evezés', 'w', 'machine', [50, 75, 105, 140, 180], '2 × 8–10', ['High Row']],
   ['Chest Fly', 'Mell Tárogatás / Pec Deck', 'w', 'machine', [40, 60, 85, 115, 150], '2 × 8–10', ['Pec Deck', 'Pec Deck Machine', 'Machine Fly']],
@@ -920,19 +932,23 @@ function rankScore(id, type) {
 }
 function rankBounds(db, bw) {
   const f = db.type === 'w' ? Math.pow(bw / 80, 0.67) : 1, s = db.std.map(x => x * f);
-  return [0, s[0], s[1], s[2], s[3], s[4], s[4] * 1.2, s[4] * 1.45];
+  return [0, s[0], s[1], s[2], s[3], s[4], s[4] * 1.2, s[4] * 1.45, s[4] * 1.75];
 }
-/* Rang egy pontszámból: 7 rang × 3 fokozat = 0..20 pont. */
+/* Rang egy pontszámból: 8 rang × 3 fokozat = 0..23 pont. A legfelső (Legenda III) fölött „+pontok” gyűlnek. */
 function rankFromScore(score, db, bw) {
-  const B = rankBounds(db, bw);
-  let r = 6; for (let i = 0; i < 7; i++) if (score < B[i + 1]) { r = i; break; }
+  const B = rankBounds(db, bw), R = RANKS.length;
+  if (score >= B[R]) {
+    const step = (B[R] - B[R - 1]) / 3, plus = Math.floor((score - B[R]) / step) + 1;
+    const from = B[R] + (plus - 1) * step, next = B[R] + plus * step;
+    return { r: R - 1, sub: 2, pts: MAX_PTS, plus, label: `${RANKS[R - 1].n} III +${plus}`, color: RANKS[R - 1].c, next, nextLabel: `${RANKS[R - 1].n} III +${plus + 1}`, pct: (score - from) / (next - from), score };
+  }
+  let r = 0; for (let i = 0; i < R; i++) if (score < B[i + 1]) { r = i; break; }
   const lo = B[r], hi = B[r + 1], step = (hi - lo) / 3;
   const sub = Math.min(2, Math.max(0, Math.floor((score - lo) / step)));
-  const pts = r * 3 + sub, maxed = pts >= 20 && score >= hi;
-  const next = maxed ? null : (sub < 2 ? lo + step * (sub + 1) : hi);
-  const nextPts = Math.min(20, pts + 1);
-  const pct = maxed ? 1 : Math.max(0, Math.min(1, (score - (lo + step * sub)) / ((next) - (lo + step * sub))));
-  return { r, sub, pts, label: `${RANKS[r].n} ${ROMAN[sub]}`, color: RANKS[r].c, next, nextLabel: maxed ? '' : `${RANKS[Math.floor(nextPts / 3)].n} ${ROMAN[nextPts % 3]}`, pct, score };
+  const pts = r * 3 + sub, next = sub < 2 ? lo + step * (sub + 1) : hi, nextPts = pts + 1;
+  const nextLabel = nextPts > MAX_PTS ? `${RANKS[R - 1].n} III +1` : `${RANKS[Math.floor(nextPts / 3)].n} ${ROMAN[nextPts % 3]}`;
+  const pct = Math.max(0, Math.min(1, (score - (lo + step * sub)) / (next - (lo + step * sub))));
+  return { r, sub, pts, label: `${RANKS[r].n} ${ROMAN[sub]}`, color: RANKS[r].c, next, nextLabel, pct, score };
 }
 function rankOf(id, st = state) {
   const key = rankKeyFor(id, st); if (!key) return null;
@@ -944,19 +960,19 @@ function rankOf(id, st = state) {
 function withStateIf(st, fn) { return st === state ? fn() : withState(st, fn); }
 function overallRank(st = state) {
   const ids = Object.keys(st.exercises || {}), pts = [];
-  for (const id of ids) { const r = rankOf(id, st); if (r && r.pts !== undefined) pts.push(r.pts); }
+  for (const id of ids) { const r = rankOf(id, st); if (r && r.pts !== undefined) pts.push(r.pts + (r.plus || 0)); }
   if (!pts.length) return null;
   const avg = Math.floor(pts.reduce((a, b) => a + b, 0) / pts.length);
+  if (avg > MAX_PTS) { const plus = avg - MAX_PTS; return { pts: MAX_PTS, plus, label: `${RANKS[RANKS.length - 1].n} III +${plus}`, color: RANKS[RANKS.length - 1].c, n: pts.length }; }
   return { pts: avg, label: `${RANKS[Math.floor(avg / 3)].n} ${ROMAN[avg % 3]}`, color: RANKS[Math.floor(avg / 3)].c, n: pts.length };
 }
 function rankBadge(rk, big = false) {
   if (!rk || rk.pts === undefined) return '';
   const r = Math.floor(rk.pts / 3), sub = rk.pts % 3;
-  return `<span class="rank-badge${big ? ' big' : ''}" style="--rc:${RANKS[r].c}" title="${esc(rk.label)}"><svg viewBox="0 0 40 46" aria-hidden="true"><path d="M20 2 37 9v13c0 11-7.5 18.5-17 22C10.5 40.5 3 33 3 22V9z" class="rb-shield"/><path d="M20 7 32 12v10c0 8-5.3 13.4-12 16-6.7-2.6-12-8-12-16V12z" class="rb-inner"/></svg><b>${ROMAN[sub]}</b></span>`;
+  return `<span class="rank-badge${big ? ' big' : ''}${r === RANKS.length - 1 ? ' legend' : ''}" style="--rc:${RANKS[r].c}" title="${esc(rk.label)}"><svg viewBox="0 0 40 46" aria-hidden="true"><path d="M20 2 37 9v13c0 11-7.5 18.5-17 22C10.5 40.5 3 33 3 22V9z" class="rb-shield"/><path d="M20 7 32 12v10c0 8-5.3 13.4-12 16-6.7-2.6-12-8-12-16V12z" class="rb-inner"/></svg><b>${rk.plus ? '+' + rk.plus : ROMAN[sub]}</b></span>`;
 }
 function rankNeedText(rk) {
   if (!rk || rk.pts === undefined) return '';
-  if (!rk.next) return 'Elérted a legmagasabb rangot! 👑';
   if (rk.db.type === 'r') return `Következő: ${rk.nextLabel} · még +${Math.max(1, Math.ceil(rk.next - rk.score))} ismétlés egy szettben`;
   const reps = rk.reps || 5, w = Math.ceil(rk.next / (1 + reps / 30) * 2) / 2;
   return `Következő: ${rk.nextLabel} · becsült 1RM ${showNum(Math.round(rk.next * 10) / 10)} kg (pl. ${showNum(w)} kg × ${showNum(reps)})`;
@@ -967,7 +983,7 @@ const MACHINE_NOTE = '⚙️ Gépes gyakorlat: a terhelés gépenként és terme
 let rankBoard = null;
 function renderRanks() {
   const bw = bodyWeight(), ov = overallRank();
-  let h = `<div class="eyebrow">RANGOK & RANGLISTA</div><div class="day-name">RANGOK</div><div class="day-meta">A rang a legjobb becsült 1RM-ed alapján számol, a testsúlyodhoz igazítva. 7 rang: ${RANKS.map(r => r.n).join(' → ')}, mindegyik I–III fokozattal.</div>`;
+  let h = `<div class="eyebrow">RANGOK & RANGLISTA</div><div class="day-name">RANGOK</div><div class="day-meta">A rang a legjobb becsült 1RM-ed alapján számol, a testsúlyodhoz igazítva. ${RANKS.length} rang: ${RANKS.map(r => r.n).join(' → ')}, mindegyik I–III fokozattal; a Legenda III fölött minden további fejlődés +1 pont.</div>`;
   h += `<section class="social-card bw-card"><div class="bw-row"><div><div class="eyebrow">TESTSÚLY</div><div class="bw-val">${bw ? showNum(bw) + ' kg' : 'nincs megadva'}</div>${state.body?.updatedAt ? `<div class="bw-date">frissítve: ${esc(fmtDate(state.body.updatedAt))}</div>` : ''}</div><form id="bwForm" class="bw-form"><input id="bwInput" inputmode="decimal" placeholder="pl. 82,5" value="${bw ? esc(showNum(bw)) : ''}"><button class="primary" type="submit">MENTÉS</button></form></div>
     <div class="bw-note">A barátaid is látják. Frissítsd, ha változik – a rangok ehhez igazodnak.</div></section>`;
   if (ov) h += `<section class="overall-card" style="--rc:${ov.color}">${rankBadge(ov, true)}<div><div class="eyebrow">ÖSSZESÍTETT RANG</div><div class="ov-label">${esc(ov.label)}</div><div class="bw-date">${ov.n} rangos gyakorlat átlaga</div></div></section>`;
@@ -1100,7 +1116,7 @@ function persistTimer() { try { if (timerEnd) localStorage.setItem(TIMER_KEY, JS
 function nextStep(ctx) {
   if (!ctx) return null;
   const slots = layoutFor(ctx.c, ctx.w)[ctx.d] || [], steps = [];
-  slots.forEach((slot, e) => { const name = slotName(ctx.c, ctx.w, ctx.d, slot), r = recordFor(ctx.c, ctx.w, ctx.d, name); steps.push({ e, name, kind: 'warmup', s: 0, done: !!r?.warmup?.done }); for (let s = 0; s < Math.max(2, r?.sets?.length || 0); s++) steps.push({ e, name, kind: 'work', s, done: !!r?.sets?.[s]?.done }); });
+  slots.forEach((slot, e) => { const name = slotName(ctx.c, ctx.w, ctx.d, slot), r = recordFor(ctx.c, ctx.w, ctx.d, name); steps.push({ e, name, kind: 'warmup', s: 0, done: !!r?.warmup?.done }); for (let s = 0; s < Math.max(slotSets(slot), r?.sets?.length || 0); s++) steps.push({ e, name, kind: 'work', s, done: !!r?.sets?.[s]?.done }); });
   let cur = steps.findIndex(x => x.e === ctx.e && x.kind === (ctx.kind === 'warmup' ? 'warmup' : 'work') && (ctx.kind === 'warmup' || x.s === ctx.s));
   if (cur < 0) cur = 0;
   for (let i = 1; i <= steps.length; i++) { const st = steps[(cur + i) % steps.length]; if (!st.done) return st; }
@@ -1409,7 +1425,7 @@ function renderFriend() {
       const name = slotName(c, w, fd, slot), id = exId(name), l = lastDone(id), pb = personalBest(id), cur = recordFor(c, w, fd, name);
       const alt = slot.variants.length > 1 ? `<span class="pill">váltakozik: ${esc(slot.variants.map(v => v.name).join(' / '))}</span>` : '';
       const frk = rankOf(id);
-      return `<button class="friend-ex fday-ex" data-fex="${esc(id)}"><b>${frk?.label ? rankBadge(frk) + ' ' : ''}${esc(name)}${frk?.label ? ` <small style="color:${frk.color}">${esc(frk.label)}</small>` : ''}</b><span>${esc(slot.reps)} ${alt}</span>${anyDone(cur) ? `<span class="fx-now">Ezen a héten: ${esc(setsText(cur))}</span>` : ''}<span>${l ? `Legutóbb (${esc(fmtDate(l.t) || l.w + '. hét')}): ${esc(setsText(l))}` : 'Még nincs adat'}</span>${pb ? `<span>🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}</span>` : ''}</button>`;
+      return `<button class="friend-ex fday-ex" data-fex="${esc(id)}"><b>${frk?.label ? rankBadge(frk) + ' ' : ''}${esc(name)}${frk?.label ? ` <small style="color:${frk.color}">${esc(frk.label)}</small>` : ''}</b><span>${esc(showReps(slot))} ${alt}</span>${anyDone(cur) ? `<span class="fx-now">Ezen a héten: ${esc(setsText(cur))}</span>` : ''}<span>${l ? `Legutóbb (${esc(fmtDate(l.t) || l.w + '. hét')}): ${esc(setsText(l))}` : 'Még nincs adat'}</span>${pb ? `<span>🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}</span>` : ''}</button>`;
     }).join('');
   });
   const ids = withState(f.state, () => libraryIds().filter(id => Object.values(state.exercises[id]?.occurrences || {}).some(anyDone)));

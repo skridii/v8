@@ -200,3 +200,8 @@
 .lib-item.db{border-style:dashed}
 select.lib-search{appearance:none;-webkit-appearance:none}
 .fday-ex b small{font-size:10px;margin-left:4px}
+
+/* IRONLOG v16 */
+.rank-badge.legend svg{filter:drop-shadow(0 0 7px color-mix(in srgb,var(--rc) 75%,transparent))}
+.rank-badge b{white-space:nowrap}
+.rank-badge:not(.big) b{font-size:9.5px}
