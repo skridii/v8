@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v10';
+const APP_VERSION = 'v11';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -117,14 +117,26 @@ function libraryIds() {
   return [...ids].sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'hu'));
 }
 function libMeta(id) { const m = state.library?.[id]; return { name: m?.name || nameOf(id), hu: m?.hu || '', reps: m?.reps || '2 × 8–10' }; }
+/* Időrend: az számít, MIKOR csináltad (első készre jelölés ideje), nem a hét/nap sorrendje.
+   Így ha felcserélődik két edzés, a „legutóbbi” mindig a ténylegesen utoljára elvégzett. */
+function sessionTime(r) {
+  if (!r) return 0;
+  if (r.doneAt) return r.doneAt;
+  const ts = [r.warmup, ...(r.sets || [])].filter(x => x?.done && x.ts > 1e12).map(x => x.ts);
+  return ts.length ? Math.min(...ts) : (r.ts > 1e12 ? r.ts : 0);
+}
+const anyDone = r => !!r && (r.warmup?.done || (r.sets || []).some(s => s?.done));
+function sessionsOf(id) {
+  return Object.entries(state.exercises[id]?.occurrences || {}).filter(([, r]) => hasData(r)).map(([k, r]) => {
+    const [c, w, d] = k.split('-').map(Number);
+    return { k, r, c, w, d, p: pos(c, w, d), t: sessionTime(r) };
+  }).sort((a, b) => (a.t - b.t) || (a.p - b.p));
+}
+const later = (a, b) => (a.t - b.t) || (a.p - b.p);
 function lastDone(id) {
-  let best = null, bp = -1;
-  for (const [k, r] of Object.entries(state.exercises[id]?.occurrences || {})) {
-    if (!(r.sets || []).some(s => s?.done) && !r.warmup?.done) continue;
-    const [c, w, d] = k.split('-').map(Number), p = pos(c, w, d);
-    if (p > bp) { bp = p; best = { ...r, c, w, d }; }
-  }
-  return best;
+  const list = sessionsOf(id).filter(x => anyDone(x.r));
+  const x = list[list.length - 1];
+  return x ? { ...x.r, c: x.c, w: x.w, d: x.d, t: x.t } : null;
 }
 function lastSummary(id) {
   const l = lastDone(id); if (!l) return 'Még nincs rögzített adat';
@@ -157,11 +169,11 @@ function variantIndex(c, w, d, slot) {
   if (!slot.variants || slot.variants.length < 2) return 0;
   const ch = state.variantChoice?.[`${c}-${w}-${slot.uid}`];
   if (ch === 0 || ch === 1) return ch;
-  let bestP = -1, bestI = -1;
+  let best = null, bestI = -1;
   slot.variants.forEach((v, i) => {
-    for (const [k, r] of Object.entries(state.exercises[exId(v.name)]?.occurrences || {})) {
-      const [cc, ww, dd] = k.split('-').map(Number), p = pos(cc, ww, dd);
-      if (p < pos(c, w, d) && p > bestP && hasData(r)) { bestP = p; bestI = i; }
+    for (const x of sessionsOf(exId(v.name))) {
+      if (x.k === okey(c, w, d) || !anyDone(x.r)) continue;
+      if (!best || later(x, best) > 0) { best = x; bestI = i; }
     }
   });
   return bestI === -1 ? 0 : 1 - bestI;
@@ -187,14 +199,28 @@ function ensureRecord(c, w, d, name) {
   return r;
 }
 function latestBefore(c, w, d, name) {
-  const obj = state.exercises[exId(name)]; if (!obj) return null;
-  let best = null, bp = -1;
-  for (const [k, v] of Object.entries(obj.occurrences || {})) {
-    const [cc, ww, dd] = k.split('-').map(Number), p = pos(cc, ww, dd);
-    if (p < pos(c, w, d) && p > bp && hasData(v)) { bp = p; best = { ...v, c: cc, w: ww, d: dd }; }
+  const k = okey(c, w, d), list = sessionsOf(exId(name));
+  const cur = list.find(x => x.k === k);
+  // Ha ezt az alkalmat már elkezdted, az ennél korábbi a „legutóbbi”; ha még nem, akkor a legfrissebb.
+  const ref = cur && anyDone(cur.r) ? cur : null;
+  let best = null;
+  for (const x of list) {
+    if (x.k === k || !anyDone(x.r)) continue;
+    if (ref && later(x, ref) >= 0) continue;
+    if (!best || later(x, best) > 0) best = x;
   }
-  return best;
+  return best ? { ...best.r, c: best.c, w: best.w, d: best.d, t: best.t } : null;
 }
+function heavierSet(r) {
+  let b = null;
+  for (const [i, s] of (r?.sets || []).entries()) {
+    if (!s?.done || !positive(s.weight) || !positive(s.reps)) continue;
+    const wt = toNum(s.weight), rp = toNum(s.reps);
+    if (!b || wt > b.weight || (wt === b.weight && rp > b.reps)) b = { weight: wt, reps: rp, i };
+  }
+  return b;
+}
+const fmtDate = t => t > 1e12 ? new Date(t).toLocaleDateString('hu-HU', { month: 'short', day: 'numeric' }) : '';
 function personalBest(id) {
   let best = null;
   for (const [k, r] of Object.entries(state.exercises[id]?.occurrences || {})) {
@@ -431,7 +457,7 @@ function renderWorkout() {
     const vi = variantIndex(c, w, d, slot), v = slot.variants[vi], name = v.name, id = exId(name);
     const rec = recordFor(c, w, d, name), last = latestBefore(c, w, d, name);
     const sets = rec?.sets || [emptySet(), emptySet()], wu = rec?.warmup || emptySet(), pb = personalBest(id);
-    h += `<article class="exercise"><div class="exercise-head"><div><div class="exercise-title">${esc(name)}</div>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(slot.reps)}</div></div><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div>`;
+    h += `<article class="exercise"><div class="exercise-head"><div><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(name)}</button>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(slot.reps)}</div></div><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div>`;
     if (slot.variants.length > 1) {
       const other = slot.variants[1 - vi];
       h += `<div class="variant-row"><span class="variant-tag">VÁLTAKOZÓ</span><button class="variant-btn" data-variant data-e="${e}">↔ Ezen a héten inkább: ${esc(other.name)}</button></div>`;
@@ -479,8 +505,9 @@ function bindInputs() {
     lockVariant(slot);
     const r = ensureRecord(state.cycle, state.week, state.day, name), v = kind === 'warmup' ? r.warmup : r.sets[s];
     v.weight = cleanNum(ins[0].value); v.reps = cleanNum(ins[1].value); v.done = true; v.ts = Date.now(); r.ts = Date.now();
+    if (!r.doneAt) r.doneAt = Date.now();
     save(); renderWorkout(); renderWeeks();
-    startTimer(name, kind === 'warmup' ? 'warmup' : 'work');
+    startTimer(name, kind === 'warmup' ? 'warmup' : 'work', { e: +btn.dataset.e, kind, s });
   });
   workout.querySelectorAll('[data-variant]').forEach(btn => btn.onclick = () => {
     const slot = curSlots()[+btn.dataset.e]; if (!slot) return;
@@ -490,6 +517,7 @@ function bindInputs() {
     toast(`Ezen a héten: ${slot.variants[1 - vi].name}`);
   });
   workout.querySelectorAll('[data-swap]').forEach(btn => btn.onclick = () => openEditor('edit', +btn.dataset.e));
+  workout.querySelectorAll('[data-stats]').forEach(btn => btn.onclick = () => openStats(btn.dataset.stats));
   $('addExBtn').onclick = () => openEditor('add');
 }
 
@@ -609,6 +637,10 @@ function renderHistory() {
   h += `<div class="note">Az alkalmazás minden változást azonnal ment, és naponta külön helyi másolatot is készít. A fájlba mentés külön, letölthető másolatot ad. IRONLOG ${APP_VERSION}</div>`;
   workout.innerHTML = h;
   $('histSearch').oninput = e => { histQuery = e.target.value; filterHistory(); };
+  workout.querySelectorAll('details[data-gid]').forEach(dt => dt.addEventListener('toggle', () => {
+    const box = dt.querySelector('.progress-ex');
+    if (dt.open && !box.dataset.filled) { box.innerHTML = statsHtml(dt.dataset.gid); box.dataset.filled = '1'; bindCharts(box); }
+  }));
   filterHistory();
   $('exportBtn').onclick = () => exportData(state, `ironlog-backup-${today()}.json`);
   $('importInput').onchange = e => importData(e.target.files[0]);
@@ -632,15 +664,82 @@ function snapLabel(k) {
 }
 function historyGroup(id) {
   const pb = personalBest(id);
-  const rows = Object.entries(state.exercises[id]?.occurrences || {}).filter(([, r]) => hasData(r)).map(([k, r]) => { const [c, w, d] = k.split('-').map(Number); return { c, w, d, r, p: pos(c, w, d) }; }).sort((a, b) => a.p - b.p);
-  let h = `<details class="history-group" data-hname="${esc(norm(nameOf(id)) + ' ' + norm(libMeta(id).hu))}"><summary>${esc(nameOf(id))} ${pb ? `<span class="small-record">🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}</span>` : ''}</summary><div class="progress-ex">`;
-  if (!rows.length) h += '<div class="empty">Még nincs adat.</div>';
-  for (const { c, w, d, r } of rows) {
-    const f = s => `${esc(showNum(s?.weight)) || '—'} × ${esc(showNum(s?.reps)) || '—'}`;
-    h += `<div class="progress-row four"><b>${state.maxCycle > 1 ? `C${c} ` : ''}W${w} ${(DAYS[d]?.name || '').replace('UPPER ', 'U').replace('LOWER ', 'L')}</b><span>WU: ${f(r.warmup)}</span><span>S1: ${f(r.sets?.[0])}</span><span>S2: ${f(r.sets?.[1])}</span></div>`;
-  }
-  return h + '</div></details>';
+  let h = `<details class="history-group" data-hname="${esc(norm(nameOf(id)) + ' ' + norm(libMeta(id).hu))}" data-gid="${esc(id)}"><summary>${esc(nameOf(id))} ${pb ? `<span class="small-record">🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}</span>` : ''}</summary><div class="progress-ex"></div></details>`;
+  return h;
 }
+/* Egy gyakorlat teljes statisztikája: görbe + minden alkalom (legújabb felül). */
+function statsHtml(id) {
+  const rows = sessionsOf(id);
+  if (!rows.length) return '<div class="empty">Még nincs adat ehhez a gyakorlathoz.</div>';
+  let h = chartHtml(id);
+  h += '<div class="stats-list">';
+  for (const { c, w, d, r, t } of [...rows].reverse()) {
+    const f = s => s && (s.weight || s.reps) ? `${esc(showNum(s.weight)) || '—'} × ${esc(showNum(s.reps)) || '—'}${s.done ? '' : ' <i>(nincs kész)</i>'}` : '—';
+    const hs = heavierSet(r);
+    h += `<div class="stats-row"><div class="stats-when"><b>${cycLabel(c)}${w}. hét · ${DAYS[d]?.name || ''}</b><span>${fmtDate(t)}</span></div><div class="stats-sets"><span>WU ${f(r.warmup)}</span><span>S1 ${f(r.sets?.[0])}</span><span>S2 ${f(r.sets?.[1])}</span></div>${hs ? `<div class="stats-top">${showNum(hs.weight)} kg</div>` : ''}</div>`;
+  }
+  return h + '</div>';
+}
+function chartPoints(id) {
+  return sessionsOf(id).map(x => ({ x, hs: heavierSet(x.r) })).filter(o => o.hs).map(({ x, hs }) => ({ wt: hs.weight, reps: hs.reps, set: hs.i + 1, lab: `${state.maxCycle > 1 ? 'C' + x.c + ' ' : ''}W${x.w} ${(DAYS[x.d]?.name || '').replace('UPPER ', 'U').replace('LOWER ', 'L')}`, date: fmtDate(x.t) }));
+}
+function chartHtml(id) {
+  const pts = chartPoints(id);
+  if (!pts.length) return '<div class="empty">A görbéhez legalább egy kész munkasorozat kell.</div>';
+  const W = 320, H = 150, L = 36, R = 14, T = 20, B = 24;
+  const ws = pts.map(p => p.wt); let lo = Math.min(...ws), hi = Math.max(...ws);
+  if (hi - lo < 4) { lo -= 2; hi += 2; }
+  const pad = (hi - lo) * 0.12; lo = Math.max(0, Math.floor(lo - pad)); hi = Math.ceil(hi + pad);
+  const X = i => pts.length === 1 ? (L + W - R) / 2 : L + i * (W - L - R) / (pts.length - 1);
+  const Y = v => T + (hi - v) * (H - T - B) / (hi - lo);
+  const grid = [lo, (lo + hi) / 2, hi].map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="ch-grid"/><text x="${L - 6}" y="${(Y(v) + 3).toFixed(1)}" class="ch-axis" text-anchor="end">${showNum(Math.round(v * 10) / 10)}</text>`).join('');
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p.wt).toFixed(1)}`).join(' ');
+  const maxI = ws.indexOf(Math.max(...ws)), lastI = pts.length - 1;
+  const lbl = i => `<text x="${X(i).toFixed(1)}" y="${(Y(pts[i].wt) - 9).toFixed(1)}" class="ch-lbl" text-anchor="${i === 0 && pts.length > 1 ? 'start' : i === lastI && pts.length > 1 ? 'end' : 'middle'}">${showNum(pts[i].wt)}</text>`;
+  const dots = pts.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p.wt).toFixed(1)}" r="4" class="ch-dot"/>`).join('');
+  const first = pts[0].wt, last = pts[lastI].wt, diff = Math.round((last - first) * 10) / 10;
+  return `<div class="chart-wrap" data-pts="${esc(JSON.stringify(pts.map((p, i) => ({ ...p, cx: X(i), cy: Y(p.wt) }))))}">
+  <div class="chart-head"><span>Legnehezebb munkasorozat edzésenként</span><b class="${diff > 0 ? 'up' : ''}">${pts.length > 1 ? (diff > 0 ? '+' : '') + showNum(diff) + ' kg' : ''}</b></div>
+  <div class="chart-read"></div>
+  <svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Súlyfejlődés: ${showNum(first)} kg-tól ${showNum(last)} kg-ig, ${pts.length} edzés">${grid}<line class="ch-cross" y1="${T - 6}" y2="${H - B}" x1="-10" x2="-10"/><path d="${path}" class="ch-line"/>${dots}${lbl(lastI)}${maxI !== lastI ? lbl(maxI) : ''}<text x="${L}" y="${H - 6}" class="ch-axis">${esc(pts[0].lab)}</text>${pts.length > 1 ? `<text x="${W - R}" y="${H - 6}" class="ch-axis" text-anchor="end">${esc(pts[lastI].lab)}</text>` : ''}<rect x="0" y="0" width="${W}" height="${H}" fill="transparent" class="ch-hit"/></svg></div>`;
+}
+function bindCharts(root) {
+  root.querySelectorAll('.chart-wrap').forEach(wrap => {
+    let pts; try { pts = JSON.parse(wrap.dataset.pts); } catch (e) { return; }
+    const svg = wrap.querySelector('svg'), cross = wrap.querySelector('.ch-cross'), read = wrap.querySelector('.chart-read');
+    const show = i => {
+      const p = pts[i]; if (!p) return;
+      cross.setAttribute('x1', p.cx); cross.setAttribute('x2', p.cx);
+      svg.querySelectorAll('.ch-dot').forEach((c, j) => c.classList.toggle('on', j === i));
+      read.textContent = '';
+      const b = document.createElement('b'); b.textContent = `${showNum(p.wt)} kg × ${showNum(p.reps)}`;
+      const sp = document.createElement('span'); sp.textContent = ` · ${p.set}. szett · ${p.lab}${p.date ? ' · ' + p.date : ''}`;
+      read.append(b, sp);
+    };
+    const pick = ev => {
+      const r = svg.getBoundingClientRect(), x = (ev.clientX - r.left) * 320 / r.width;
+      let bi = 0; pts.forEach((p, i) => { if (Math.abs(p.cx - x) < Math.abs(pts[bi].cx - x)) bi = i; });
+      show(bi);
+    };
+    svg.addEventListener('pointerdown', pick); svg.addEventListener('pointermove', ev => { if (ev.buttons || ev.pointerType === 'mouse') pick(ev); });
+    show(pts.length - 1);
+  });
+}
+
+/* ---------- statisztika ablak ---------- */
+function openStats(id) {
+  const pb = personalBest(id), m = libMeta(id);
+  $('statsTitle').textContent = nameOf(id);
+  $('statsHu').textContent = m.hu || '';
+  $('statsPb').textContent = pb ? `🏆 Rekord: ${showNum(pb.weight)} kg × ${showNum(pb.reps)} · ${state.maxCycle > 1 ? pb.c + '. ciklus, ' : ''}${pb.w}. hét` : '';
+  $('statsPb').classList.toggle('hidden', !pb);
+  $('statsBody').innerHTML = statsHtml(id);
+  bindCharts($('statsBody'));
+  $('statsOverlay').classList.remove('hidden');
+  $('statsBody').scrollTop = 0;
+}
+$('statsClose').onclick = () => $('statsOverlay').classList.add('hidden');
+$('statsOverlay').onclick = ev => { if (ev.target.id === 'statsOverlay') $('statsOverlay').classList.add('hidden'); };
 
 /* ---------- export / import ---------- */
 function exportData(obj, filename) {
@@ -684,14 +783,51 @@ function beep() {
 }
 async function requestWake() { try { if ('wakeLock' in navigator && !wakeLock && !document.hidden) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) { wakeLock = null; } }
 function releaseWake() { try { wakeLock?.release(); } catch (e) {} wakeLock = null; }
-function persistTimer() { try { if (timerEnd) localStorage.setItem(TIMER_KEY, JSON.stringify({ end: timerEnd, kind: timerKind, ex: timerEx })); else localStorage.removeItem(TIMER_KEY); } catch (e) {} }
-function startTimer(ex, kind = 'work') {
+let timerCtx = null; // { c, w, d, e, kind, s } – melyik szett után indult a pihenő
+function persistTimer() { try { if (timerEnd) localStorage.setItem(TIMER_KEY, JSON.stringify({ end: timerEnd, kind: timerKind, ex: timerEx, ctx: timerCtx })); else localStorage.removeItem(TIMER_KEY); } catch (e) {} }
+/* A következő elvégzendő szett az adott napon (a most befejezett után, a nap végén körbeér). */
+function nextStep(ctx) {
+  if (!ctx) return null;
+  const slots = layoutFor(ctx.c, ctx.w)[ctx.d] || [], steps = [];
+  slots.forEach((slot, e) => { const name = slotName(ctx.c, ctx.w, ctx.d, slot), r = recordFor(ctx.c, ctx.w, ctx.d, name); steps.push({ e, name, kind: 'warmup', s: 0, done: !!r?.warmup?.done }); [0, 1].forEach(s => steps.push({ e, name, kind: 'work', s, done: !!r?.sets?.[s]?.done })); });
+  const cur = ctx.e * 3 + (ctx.kind === 'warmup' ? 0 : 1 + ctx.s);
+  for (let i = 1; i <= steps.length; i++) { const st = steps[(cur + i) % steps.length]; if (!st.done) return st; }
+  return { finished: true };
+}
+function renderNext() {
+  const box = $('timerNext'); if (!box) return;
+  const st = nextStep(timerCtx);
+  if (!st) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  box.textContent = '';
+  const head = document.createElement('div'); head.className = 'next-head';
+  const main = document.createElement('div'); main.className = 'next-main';
+  const sub = document.createElement('div'); sub.className = 'next-sub';
+  if (st.finished) { head.textContent = 'KÖVETKEZŐ'; main.textContent = 'A mai edzés minden szettje kész! 💪'; box.append(head, main); return; }
+  head.textContent = `KÖVETKEZŐ · ${st.name} · ${st.kind === 'warmup' ? 'BEMELEGÍTÉS' : st.s + 1 + '. SZETT'}`;
+  const last = latestBefore(timerCtx.c, timerCtx.w, timerCtx.d, st.name);
+  if (st.kind === 'warmup') {
+    const wu = last?.warmup;
+    if (wu && (wu.weight || wu.reps)) { main.textContent = `${showNum(wu.weight) || '—'} kg × ${showNum(wu.reps) || '—'}`; sub.textContent = `legutóbbi bemelegítés · ${cycLabel(last.c).toLowerCase()}${last.w}. hét`; }
+    else { main.textContent = 'Még nincs korábbi bemelegítés'; }
+  } else {
+    const hs = heavierSet(last);
+    if (hs) { main.textContent = `${showNum(hs.weight)} kg × ${showNum(hs.reps)}`; sub.textContent = `minimum ennyi · előző edzés legerősebb szettje (${hs.i + 1}. szett, ${cycLabel(last.c).toLowerCase()}${last.w}. hét)`; }
+    else { main.textContent = 'Még nincs korábbi adat'; }
+    const pb = personalBest(exId(st.name));
+    if (pb) sub.textContent += ` · rekord: ${showNum(pb.weight)} kg × ${showNum(pb.reps)}`;
+  }
+  box.append(head, main, sub);
+}
+function startTimer(ex, kind = 'work', at = null) {
+  timerCtx = at ? { c: state.cycle, w: state.week, d: state.day, ...at } : null;
   timerKind = kind; timerEx = ex;
   timerEnd = Date.now() + (kind === 'warmup' ? 60 : 150) * 1000;
   persistTimer(); showTimer();
 }
 function showTimer() {
   timerExercise.textContent = `${timerEx} · ${timerKind === 'warmup' ? 'bemelegítő szett után' : 'következő munkasorozat előtt'}`;
+  try { renderNext(); } catch (e) {}
   timerOverlay.classList.remove('hidden');
   clearInterval(timer); tickTimer(); timer = setInterval(tickTimer, 250);
   requestWake();
@@ -712,7 +848,7 @@ function restoreTimer() {
   try {
     const t = JSON.parse(localStorage.getItem(TIMER_KEY) || 'null');
     if (!t || !t.end) return;
-    if (t.end > Date.now()) { timerEnd = t.end; timerKind = t.kind || 'work'; timerEx = t.ex || ''; showTimer(); }
+    if (t.end > Date.now()) { timerEnd = t.end; timerKind = t.kind || 'work'; timerEx = t.ex || ''; timerCtx = t.ctx || null; showTimer(); }
     else { localStorage.removeItem(TIMER_KEY); if (Date.now() - t.end < 15 * 60 * 1000) toast('A pihenőidő lejárt, amíg nem voltál itt.'); }
   } catch (e) {}
 }

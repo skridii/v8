@@ -40,6 +40,7 @@
     <div class="eyebrow">REST TIMER</div>
     <div id="timerValue">2:30</div>
     <div id="timerExercise">Rest before your next set</div>
+    <div id="timerNext" class="timer-next hidden"></div>
     <div class="timer-actions">
       <button id="skipTimer" class="secondary">SKIP</button>
       <button id="add30" class="secondary">+30 SEC</button>
@@ -69,6 +70,16 @@
     <button type="button" id="editRemove" class="danger-link">Eltávolítás erről a napról</button>
     <button type="button" id="editRemoveAll" class="danger-link">Eltávolítás minden edzésnapról (a listában marad)</button>
   </form>
+</div>
+
+<div id="statsOverlay" class="overlay edit-overlay hidden">
+  <div class="timer-card edit-card stats-card">
+    <div class="stats-top-row"><div class="eyebrow">STATISZTIKA</div><button id="statsClose" class="secondary stats-close" aria-label="Bezárás">✕</button></div>
+    <div class="edit-title" id="statsTitle"></div>
+    <div class="exercise-hu" id="statsHu"></div>
+    <div class="record-badge" id="statsPb"></div>
+    <div id="statsBody"></div>
+  </div>
 </div>
 
 <div id="updateBar" class="update-bar hidden"><span>Új verzió érhető el</span><button id="updateBtn" class="primary">FRISSÍTÉS</button></div>
