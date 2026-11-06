@@ -224,3 +224,10 @@ select.lib-search{appearance:none;-webkit-appearance:none}
 .credit-name{font-size:24px;font-weight:950;margin-top:6px}
 .credit-nick{font-size:13px;color:#9cff57;font-weight:800;margin:2px 0 14px}
 .insta-btn{display:inline-block;text-decoration:none;margin-bottom:10px}
+
+/* IRONLOG v21 – kötelező belépés + testsúly */
+body.gated .week-panel,body.gated #dayTabs,body.gated #navRow,body.gated #cycleBanner{display:none}
+.gate-hero{text-align:center;padding:26px 6px 6px}
+.gate-hero .brand{font-size:40px}
+.gate-title{font-size:22px;font-weight:950;margin:14px 0 8px}
+.gate-hero .day-meta{margin-bottom:6px}

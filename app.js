@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v20';
+const APP_VERSION = 'v21';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -402,8 +402,12 @@ async function load() {
 
 /* ---------- megjelenítés ---------- */
 function render() {
-  renderWeeks(); renderTabs(); renderHistoryBtn(); renderBanner();
-  if (view === 'history') renderHistory(); else if (view === 'social') renderSocial(); else if (view === 'ranks') renderRanks(); else if (view === 'info') renderInfo(); else renderWorkout();
+  // Kötelező regisztráció / belépés és testsúly: amíg nincs meg, csak a belépő képernyő (és az INFÓ) érhető el.
+  const gated = ready && (!auth || !bodyWeight());
+  document.body.classList.toggle('gated', gated);
+  if (!gated) { renderWeeks(); renderTabs(); renderHistoryBtn(); renderBanner(); }
+  if (gated && view !== 'info') renderGate();
+  else if (view === 'history') renderHistory(); else if (view === 'social') renderSocial(); else if (view === 'ranks') renderRanks(); else if (view === 'info') renderInfo(); else renderWorkout();
   const ib = $('infoBtn'); if (ib) { ib.textContent = view === 'info' ? '← EDZÉS' : 'ℹ️ INFÓ'; ib.onclick = () => { if (!ready) return; view = view === 'info' ? 'workout' : 'info'; render(); window.scrollTo(0, 0); }; }
 }
 function renderWeeks() {
@@ -1138,8 +1142,7 @@ function renderRanks() {
     ev.preventDefault();
     const v = toNum($('bwInput').value);
     if (!(v >= 30 && v <= 250)) { $('bwInput').classList.add('invalid'); toast('Adj meg egy valós testsúlyt (30–250 kg).'); return; }
-    state.body = state.body || {}; state.body.weight = Math.round(v * 10) / 10; state.body.updatedAt = Date.now();
-    state.body.history = [...(state.body.history || []), { t: Date.now(), kg: state.body.weight }].slice(-100);
+    setBodyWeight(v);
     save(); renderRanks(); toast('Testsúly elmentve.');
   };
   const bs = $('boardSel'); if (bs) bs.onchange = () => { rankBoard = bs.value; renderRanks(); };
@@ -1371,9 +1374,9 @@ async function signIn(email, password, name, register) {
   await afterLogin(true);
 }
 async function signOut() {
-  if (!confirm('Kijelentkezel? Az edzésnaplód a telefonon marad, csak a feltöltés és a barátok nézete áll le.')) return;
+  if (!confirm('Kijelentkezel? Az edzésnaplód a telefonon marad, de az app használatához újra be kell lépned.')) return;
   try { await sb('/auth/v1/logout', { method: 'POST' }); } catch (e) {}
-  setAuth(null); me = null; friends = null; adminList = null; socialFriend = null;
+  setAuth(null); me = null; friends = null; adminList = null; socialFriend = null; authMode = 'login';
   render();
 }
 /* Belépés után / indításkor: profil + a saját felhőmentés egyeztetése. */
@@ -1451,30 +1454,56 @@ async function loadFriends() {
   if (view === 'social') renderSocial(); else if (view === 'ranks') renderRanks();
 }
 
-function renderSocial() {
-  let h = `<div class="eyebrow">PROFIL & BARÁTOK</div><div class="day-name">BARÁTOK</div>`;
-  if (!auth) {
-    const reg = authMode === 'register';
-    h += `<div class="day-meta">Lépj be, és kövessétek egymás edzéseit. Az edzésnaplód a telefonon marad, a fiókba csak egy másolat kerül.</div>
-    <section class="social-card"><div class="seg"><button class="${reg ? '' : 'on'}" id="modeLogin">BELÉPÉS</button><button class="${reg ? 'on' : ''}" id="modeReg">REGISZTRÁCIÓ</button></div>
+function setBodyWeight(v) {
+  state.body = state.body || {}; state.body.weight = Math.round(v * 10) / 10; state.body.updatedAt = Date.now();
+  state.body.history = [...(state.body.history || []), { t: Date.now(), kg: state.body.weight }].slice(-100);
+}
+const validBw = v => v >= 30 && v <= 250;
+function renderAuth(head, done) {
+  const reg = authMode === 'register', needBw = !bodyWeight();
+  workout.innerHTML = head + `<section class="social-card"><div class="seg"><button class="${reg ? '' : 'on'}" id="modeLogin">BELÉPÉS</button><button class="${reg ? 'on' : ''}" id="modeReg">REGISZTRÁCIÓ</button></div>
     <form id="authForm" autocomplete="on">
       ${reg ? '<label class="field"><span>Név (ezt látják a barátaid)</span><input id="authName" autocomplete="nickname" required></label>' : ''}
       <label class="field"><span>E-mail</span><input id="authEmail" type="email" autocomplete="email" autocapitalize="off" required></label>
       <label class="field"><span>Jelszó${reg ? ' (min. 6 karakter)' : ''}</span><input id="authPass" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" required minlength="6"></label>
+      ${reg && needBw ? '<label class="field"><span>Testsúly (kg) – a rangokhoz kell, a barátaid is látják</span><input id="authBw" inputmode="decimal" placeholder="pl. 78,5" required></label>' : ''}
       <div class="auth-err" id="authErr"></div>
       <button type="submit" class="primary wide" id="authSubmit">${reg ? 'REGISZTRÁCIÓ' : 'BELÉPÉS'}</button>
     </form></section>`;
-    workout.innerHTML = h;
-    $('modeLogin').onclick = () => { authMode = 'login'; renderSocial(); };
-    $('modeReg').onclick = () => { authMode = 'register'; renderSocial(); };
-    $('authForm').onsubmit = async ev => {
+  $('modeLogin').onclick = () => { authMode = 'login'; renderAuth(head, done); };
+  $('modeReg').onclick = () => { authMode = 'register'; renderAuth(head, done); };
+  $('authForm').onsubmit = async ev => {
+    ev.preventDefault();
+    const bwIn = $('authBw'), bwv = bwIn ? toNum(bwIn.value) : 0;
+    if (bwIn && !validBw(bwv)) { bwIn.classList.add('invalid'); $('authErr').textContent = 'Adj meg egy valós testsúlyt (30–250 kg).'; return; }
+    const btn = $('authSubmit'); btn.disabled = true; $('authErr').textContent = '';
+    try {
+      if (bwIn) { setBodyWeight(bwv); save(); }
+      await signIn($('authEmail').value.trim(), $('authPass').value, reg ? $('authName').value.trim() : '', reg);
+      if (bwIn) { setBodyWeight(bwv); save(); }
+      done();
+    } catch (e) { if (auth) { toast(authErrorText(e)); done(); return; } $('authErr').textContent = authErrorText(e); btn.disabled = false; }
+  };
+}
+function renderGate() {
+  if (auth && !bodyWeight()) {
+    // Belépve, de nincs testsúly (pl. régi fiók vagy belépés új telefonon) → kötelező megadni.
+    workout.innerHTML = `<div class="gate-hero"><div class="brand">IRON<span>LOG</span></div><div class="gate-title">Még egy lépés 💪</div><div class="day-meta">Add meg a testsúlyodat – ehhez igazodnak a rangjaid. A barátaid is látják. Később a 🏅 RANGOK fülön bármikor frissítheted.</div></div>
+      <section class="social-card"><form id="gateBwForm"><label class="field"><span>Testsúly (kg)</span><input id="gateBw" inputmode="decimal" placeholder="pl. 78,5" required></label><div class="auth-err" id="gateErr"></div><button class="primary wide" type="submit">TOVÁBB</button></form></section>`;
+    $('gateBwForm').onsubmit = ev => {
       ev.preventDefault();
-      const btn = $('authSubmit'); btn.disabled = true; $('authErr').textContent = '';
-      try { await signIn($('authEmail').value.trim(), $('authPass').value, reg ? $('authName').value.trim() : '', reg); friends = null; renderSocial(); }
-      catch (e) { if (auth) { toast(authErrorText(e)); renderSocial(); return; } $('authErr').textContent = authErrorText(e); btn.disabled = false; }
+      const v = toNum($('gateBw').value);
+      if (!validBw(v)) { $('gateBw').classList.add('invalid'); $('gateErr').textContent = 'Adj meg egy valós testsúlyt (30–250 kg).'; return; }
+      setBodyWeight(v); save(); view = 'workout'; render(); window.scrollTo(0, 0); toast('Testsúly elmentve. Jó edzést!');
     };
     return;
   }
+  renderAuth(`<div class="gate-hero"><div class="brand">IRON<span>LOG</span></div><div class="gate-title">Üdv az IRONLOG-ban! 💪</div><div class="day-meta">Az app használatához regisztrálj, vagy lépj be. Így az edzésnaplód a fiókodban is biztonságban van, és láthatod a barátaid edzéseit és rangjait. A telefonodon lévő adatok megmaradnak.</div></div>`,
+    () => { friends = null; view = 'workout'; render(); window.scrollTo(0, 0); if (bodyWeight()) toast(`Üdv${me?.display_name ? ', ' + me.display_name : ''}! Jó edzést!`); });
+}
+function renderSocial() {
+  let h = `<div class="eyebrow">PROFIL & BARÁTOK</div><div class="day-name">BARÁTOK</div>`;
+  if (!auth) return renderAuth(h + `<div class="day-meta">Lépj be, és kövessétek egymás edzéseit. Az edzésnaplód a telefonon marad, a fiókba csak egy másolat kerül.</div>`, () => { friends = null; renderSocial(); });
   if (socialFriend) return renderFriend();
   if (!me) {
     workout.innerHTML = h + '<div class="note">Profil betöltése…</div>';
