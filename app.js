@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v14';
+const APP_VERSION = 'v15';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -430,8 +430,50 @@ function renderTabs() {
     dayTabs.appendChild(b);
   });
 }
+/* Ádám programjának pontosítása (amit valójában csinál) – csak az admin fióknál jelenik meg, egyszer.
+   Átnevezés MINDEN héten, az eddigi adatok az új név alá kerülnek (ugyanaz a gyakorlat volt, csak más néven). */
+const PROGRAM_FIX = [
+  ['Single-Arm Overhead Cable Triceps Extension', 'Overhead Cable Triceps Extension', 'Fejfeletti Tricepsz Csigán (2 kézzel)'],
+  ['Chest-Supported Row', 'Chest-Supported Row', 'Mellkassal támasztott evezés – csípő felé húzva'],
+  ['Lateral Raise', 'Machine Lateral Raise', 'Gépes Oldalemelés'],
+  ['Scott Bench Preacher Curl', 'Machine Preacher Curl', 'Gépes Scott Bicepsz (csigás)'],
+  ['Seated Hamstring Curl', 'Lying Hamstring Curl', 'Fekvő Combhajlítás'],
+  ['Hanging Leg Raise', 'Hanging Oblique Leg Raise', 'Függeszkedős Oldalsó Lábemelés (oldalanként)']
+];
+function programFixNeeded() {
+  if (!me?.is_admin || state.fixes?.program2026) return false;
+  return Object.values(state.layouts).some(L => L.some(day => day.some(sl => sl.variants.some(v => PROGRAM_FIX.some(f => exId(f[0]) === exId(v.name) && (f[0] !== f[1] || v.hu !== f[2]))))));
+}
+function renameEverywhere(oldName, newName, hu) {
+  const o = exId(oldName), n = exId(newName);
+  for (const L of Object.values(state.layouts)) for (const day of L) for (const sl of day) for (const v of sl.variants) if (exId(v.name) === o) { v.name = newName; v.hu = hu; }
+  if (o !== n) {
+    const src = state.exercises[o];
+    if (src) {
+      const dst = ensureExercise(n);
+      for (const [k, r] of Object.entries(src.occurrences || {})) if (!dst.occurrences[k] || !hasData(dst.occurrences[k])) dst.occurrences[k] = r;
+      delete state.exercises[o];
+    }
+    if (state.rankMap?.[o] !== undefined) { state.rankMap[n] = state.rankMap[n] ?? state.rankMap[o]; delete state.rankMap[o]; }
+    if (state.library?.[o]) delete state.library[o];
+  }
+  state.library = state.library || {};
+  state.library[n] = { ...(state.library[n] || {}), name: newName, hu, reps: state.library[n]?.reps || RANK_DB[n]?.reps || '2 × 8–10' };
+  state.names[n] = newName;
+}
+function applyProgramFix() {
+  const list = PROGRAM_FIX.map(f => f[0] === f[1] ? `• ${f[0]}: ${f[2]}` : `• ${f[0]} → ${f[1]}`).join('\n');
+  if (!confirm(`A programod gyakorlatai átnevezésre kerülnek arra, amit valójában csinálsz:\n\n${list}\n\nAz eddigi adataid az új név alá kerülnek (minden héten), semmi nem vész el. Előtte automatikus helyi másolat készül.\n\nMehet?`)) return;
+  lsSet(PRE_IMPORT_PREFIX + new Date().toISOString().slice(0, 19).replace('T', ' ') + ' program', JSON.stringify(state)); pruneSnaps();
+  for (const [a, b, hu] of PROGRAM_FIX) renameEverywhere(a, b, hu);
+  state.fixes = { ...(state.fixes || {}), program2026: Date.now() };
+  save(); render(); toast('A programod frissítve, az adatok megmaradtak.');
+}
 function renderBanner() {
-  if (ready && view === 'workout' && state.week === 6 && state.cycle === state.maxCycle) {
+  if (ready && view === 'workout' && programFixNeeded()) {
+    cycleBanner.innerHTML = `<div class="cycle-banner"><span>A programod gyakorlatai frissíthetők arra, amit valójában csinálsz (2 kezes fejfeletti tricepsz, gépes oldalemelés, gépes Scott, fekvő combhajlítás, oldalsó lábemelés). Az adatok megmaradnak.</span><button class="primary" id="progFixBtn">FRISSÍTÉS</button></div>`;
+    $('progFixBtn').onclick = applyProgramFix;
+  } else if (ready && view === 'workout' && state.week === 6 && state.cycle === state.maxCycle) {
     cycleBanner.innerHTML = `<div class="cycle-banner"><span>A ${state.cycle}. ciklus utolsó hete. Ha végeztél, indíts újat – az eddigi eredmények megmaradnak.</span><button class="primary" id="newCycleBtn">ÚJ CIKLUS</button></div>`;
     $('newCycleBtn').onclick = startNewCycle;
   } else cycleBanner.innerHTML = '';
@@ -802,52 +844,56 @@ const RANK_DB_RAW = [
   ['Hip Thrust', 'Csípőemelés Rúddal', 'w', 'free', [60, 95, 135, 180, 230], '2 × 8–10', ['Barbell Hip Thrust']],
   ['Barbell Curl', 'Bicepsz Rúddal', 'w', 'free', [22, 30, 40, 52, 64], '2 × 8–10', ['EZ Bar Curl']],
   ['Scott Bench Preacher Curl', 'Scott Pados Bicepsz', 'w', 'free', [18, 26, 35, 46, 57], '2 × 8–10', ['Preacher Curl']],
-  ['Dumbbell Bench Press', 'Fekvenyomás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [16, 22, 30, 40, 50], '2 × 8–10', []],
-  ['Incline Dumbbell Press', 'Ferde Nyomás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [14, 20, 27, 36, 45], '2 × 8–10', []],
-  ['Dumbbell Shoulder Press', 'Vállból Nyomás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [11, 16, 22, 30, 38], '2 × 8–10', []],
-  ['Alternating Dumbbell Biceps Curl', 'Váltott Karú Bicepsz (1 súlyzó)', 'w', 'free', [8, 12, 16, 22, 28], '2 × 8–10', ['Dumbbell Curl', 'Dumbbell Biceps Curl']],
-  ['Hammer Curl', 'Kalapács Bicepsz (1 súlyzó)', 'w', 'free', [9, 13, 18, 24, 30], '2 × 8–10', []],
-  ['Lateral Raise', 'Oldalemelés (1 súlyzó)', 'w', 'free', [5, 8, 11, 15, 19], '2 × 10–12', ['Dumbbell Lateral Raise']],
-  ['Rear Delt Fly', 'Hátsó Váll Tárogatás (1 súlyzó)', 'w', 'free', [4, 7, 10, 14, 18], '2 × 10–12', []],
-  ['Dumbbell Row', 'Egykezes Evezés (1 súlyzó)', 'w', 'free', [16, 24, 34, 46, 58], '2 × 8–10', ['One Arm Dumbbell Row']],
-  ['Dumbbell Fly', 'Tárogatás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [8, 12, 17, 23, 29], '2 × 10–12', []],
-  ['Dumbbell Wrist Curl', 'Csuklóhajlítás (1 súlyzó)', 'w', 'free', [8, 12, 17, 23, 29], '2 × 12–15', []],
-  ['Dumbbell Reverse Wrist Curl', 'Csuklófeszítés (1 súlyzó)', 'w', 'free', [5, 8, 11, 15, 19], '2 × 12–15', []],
-  ['Dumbbell Deadlift', 'Felhúzás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [20, 30, 42, 56, 70], '2 × 8–10', []],
-  ['Goblet Squat', 'Kehely Guggolás', 'w', 'free', [16, 24, 34, 46, 58], '2 × 10–12', []],
-  ['Dumbbell Bulgarian Split Squat', 'Bolgár Guggolás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [10, 16, 24, 34, 44], '2 × 8–10 / láb', []],
-  ['Hack Squat', 'Hack Guggolás Gépen (ráterhelés)', 'w', 'machine', [40, 70, 110, 160, 215], '2 × 6–8', []],
-  ['Leg Press', 'Lábtoló Gép', 'w', 'machine', [80, 130, 190, 260, 340], '2 × 8–10', []],
-  ['Smith Machine Squat', 'Smith Guggolás', 'w', 'machine', [50, 75, 100, 135, 170], '2 × 6–8', []],
-  ['Smith Machine Bulgarian Split Squat', 'Smith Bolgár Guggolás', 'w', 'machine', [20, 35, 55, 80, 105], '2 × 8–10 / láb', []],
-  ['Smith Machine Bench Press', 'Smith Fekvenyomás', 'w', 'machine', [40, 55, 72, 96, 122], '2 × 6–8', []],
-  ['Smith Machine Overhead Shoulder Press', 'Smith Vállból Nyomás', 'w', 'machine', [28, 38, 50, 65, 80], '2 × 6–8', ['Smith Machine Shoulder Press']],
-  ['Leg Extension', 'Láb Extenzió', 'w', 'machine', [35, 50, 70, 95, 120], '2 × 10–12', []],
-  ['Seated Hamstring Curl', 'Ülő Combhajlítás', 'w', 'machine', [30, 42, 57, 75, 95], '2 × 8–10', ['Lying Leg Curl', 'Leg Curl']],
-  ['Machine Hip Adduction', 'Csípő Addukció Gépen', 'w', 'machine', [40, 60, 85, 115, 145], '2 × 10–12', ['Hip Adduction']],
-  ['Machine Hip Abduction', 'Csípő Abdukció Gépen', 'w', 'machine', [40, 60, 85, 115, 145], '2 × 10–12', ['Hip Abduction']],
-  ['Standing Calf Raise', 'Álló Vádli Gépen', 'w', 'machine', [40, 70, 105, 145, 190], '2 × 8–10', []],
-  ['Seated Calf Raise', 'Ülő Vádli Gépen', 'w', 'machine', [25, 45, 70, 100, 130], '2 × 10–12', []],
-  ['Machine Ab Crunch', 'Gépes Hasprés', 'w', 'machine', [20, 32, 48, 68, 90], '2 × 10–15', []],
-  ['Chest-Supported Row', 'Mellkassal Támasztott Evezés', 'w', 'machine', [30, 45, 65, 88, 112], '2 × 6–8', ['T-Bar Row']],
-  ['Wide-Grip Lat Pulldown', 'Széles Lehúzás Csigán', 'w', 'machine', [40, 52, 68, 88, 108], '2 × 8–10', ['Lat Pulldown']],
-  ['Straight-Arm Lat Pulldown', 'Egyeneskaros Lehúzás', 'w', 'machine', [15, 22, 30, 40, 50], '2 × 8–10', ['Straight Arm Pulldown']],
-  ['Seated Cable Row', 'Ülő Csigás Evezés', 'w', 'machine', [40, 54, 72, 92, 115], '2 × 8–10', ['Cable Row']],
-  ['High Row Machine', 'Gépes Magas Evezés', 'w', 'machine', [35, 50, 70, 92, 118], '2 × 8–10', ['High Row']],
-  ['Chest Fly', 'Mell Tárogatás / Pec Deck', 'w', 'machine', [30, 45, 65, 88, 112], '2 × 8–10', ['Pec Deck', 'Pec Deck Machine', 'Machine Fly']],
-  ['Machine Chest Press', 'Gépes Mellnyomás', 'w', 'machine', [40, 60, 85, 112, 140], '2 × 8–10', ['Chest Press']],
-  ['Machine Shoulder Press', 'Gépes Vállnyomás', 'w', 'machine', [30, 42, 58, 76, 96], '2 × 8–10', ['Shoulder Press Machine']],
-  ['Machine Lateral Raise', 'Gépes Oldalemelés', 'w', 'machine', [10, 17, 26, 36, 47], '2 × 10–12', []],
-  ['Reverse Pec Deck', 'Hátsó Váll Gépen', 'w', 'machine', [20, 32, 46, 62, 80], '2 × 10–12', ['Reverse Fly Machine']],
-  ['Cable Face Pull', 'Arcig Húzás Csigán', 'w', 'machine', [15, 22, 32, 43, 55], '2 × 10–12', ['Face Pull']],
-  ['Cable Rope Triceps Pushdown', 'Csigás Kötél Tricepsz', 'w', 'machine', [15, 23, 33, 44, 56], '2 × 8–10', ['Triceps Pushdown', 'Rope Pushdown']],
-  ['Single-Arm Overhead Cable Triceps Extension', '1 Kezes Fejfeletti Tricepsz', 'w', 'machine', [6, 10, 15, 21, 27], '2 × 8–10', []],
-  ['Overhead Cable Triceps Extension', 'Fejfeletti Tricepsz Csigán', 'w', 'machine', [12, 19, 28, 38, 49], '2 × 8–10', []],
-  ['Cable Curl', 'Csigás Bicepsz', 'w', 'machine', [15, 22, 31, 41, 52], '2 × 8–10', []],
+  ['Dumbbell Bench Press', 'Fekvenyomás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [18, 26, 35, 46, 58], '2 × 8–10', []],
+  ['Incline Dumbbell Press', 'Ferde Nyomás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [16, 23, 31, 41, 52], '2 × 8–10', []],
+  ['Dumbbell Shoulder Press', 'Vállból Nyomás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [12, 18, 25, 33, 42], '2 × 8–10', []],
+  ['Alternating Dumbbell Biceps Curl', 'Váltott Karú Bicepsz (1 súlyzó)', 'w', 'free', [10, 15, 20, 27, 34], '2 × 8–10', ['Dumbbell Curl', 'Dumbbell Biceps Curl']],
+  ['Hammer Curl', 'Kalapács Bicepsz (1 súlyzó)', 'w', 'free', [11, 16, 22, 29, 37], '2 × 8–10', []],
+  ['Lateral Raise', 'Oldalemelés (1 súlyzó)', 'w', 'free', [6, 10, 14, 19, 25], '2 × 10–12', ['Dumbbell Lateral Raise']],
+  ['Rear Delt Fly', 'Hátsó Váll Tárogatás (1 súlyzó)', 'w', 'free', [5, 9, 13, 18, 23], '2 × 10–12', []],
+  ['Dumbbell Row', 'Egykezes Evezés (1 súlyzó)', 'w', 'free', [18, 28, 40, 53, 68], '2 × 8–10', ['One Arm Dumbbell Row']],
+  ['Dumbbell Fly', 'Tárogatás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [10, 15, 21, 28, 36], '2 × 10–12', []],
+  ['Dumbbell Wrist Curl', 'Csuklóhajlítás (1 súlyzó)', 'w', 'free', [10, 16, 23, 31, 40], '2 × 12–15', []],
+  ['Dumbbell Reverse Wrist Curl', 'Csuklófeszítés (1 súlyzó)', 'w', 'free', [7, 11, 15, 20, 26], '2 × 12–15', []],
+  ['Dumbbell Deadlift', 'Felhúzás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [22, 34, 48, 64, 82], '2 × 8–10', []],
+  ['Goblet Squat', 'Kehely Guggolás', 'w', 'free', [18, 28, 40, 54, 70], '2 × 10–12', []],
+  ['Dumbbell Bulgarian Split Squat', 'Bolgár Guggolás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [12, 20, 29, 40, 52], '2 × 8–10 / láb', []],
+  ['Hack Squat', 'Hack Guggolás Gépen (ráterhelés)', 'w', 'machine', [60, 110, 170, 240, 320], '2 × 6–8', []],
+  ['Leg Press', 'Lábtoló Gép', 'w', 'machine', [120, 200, 290, 390, 500], '2 × 8–10', []],
+  ['Smith Machine Squat', 'Smith Guggolás', 'w', 'machine', [60, 90, 125, 165, 210], '2 × 6–8', []],
+  ['Smith Machine Bulgarian Split Squat', 'Smith Bolgár Guggolás', 'w', 'machine', [30, 55, 85, 120, 160], '2 × 8–10 / láb', []],
+  ['Smith Machine Bench Press', 'Smith Fekvenyomás', 'w', 'machine', [45, 62, 82, 108, 136], '2 × 6–8', []],
+  ['Smith Machine Overhead Shoulder Press', 'Smith Vállból Nyomás', 'w', 'machine', [30, 42, 56, 72, 90], '2 × 6–8', ['Smith Machine Shoulder Press']],
+  ['Leg Extension', 'Láb Extenzió', 'w', 'machine', [50, 75, 105, 140, 180], '2 × 10–12', []],
+  ['Seated Hamstring Curl', 'Ülő Combhajlítás', 'w', 'machine', [40, 58, 80, 105, 135], '2 × 8–10', ['Leg Curl']],
+  ['Lying Hamstring Curl', 'Fekvő Combhajlítás', 'w', 'machine', [32, 47, 65, 86, 110], '2 × 8–10', ['Lying Leg Curl']],
+  ['Machine Hip Adduction', 'Csípő Addukció Gépen', 'w', 'machine', [60, 90, 125, 165, 210], '2 × 10–12', ['Hip Adduction']],
+  ['Machine Hip Abduction', 'Csípő Abdukció Gépen', 'w', 'machine', [60, 90, 125, 165, 210], '2 × 10–12', ['Hip Abduction']],
+  ['Standing Calf Raise', 'Álló Vádli Gépen', 'w', 'machine', [70, 115, 165, 225, 290], '2 × 8–10', []],
+  ['Seated Calf Raise', 'Ülő Vádli Gépen', 'w', 'machine', [40, 70, 105, 145, 190], '2 × 10–12', []],
+  ['Machine Ab Crunch', 'Gépes Hasprés', 'w', 'machine', [35, 55, 80, 110, 145], '2 × 10–15', []],
+  ['Chest-Supported Row', 'Mellkassal Támasztott Evezés', 'w', 'machine', [45, 70, 100, 135, 175], '2 × 6–8', ['T-Bar Row']],
+  ['Wide-Grip Lat Pulldown', 'Széles Lehúzás Csigán', 'w', 'machine', [50, 65, 85, 108, 132], '2 × 8–10', ['Lat Pulldown']],
+  ['Single-Arm Sagittal Pulldown', 'Szagittális Lehúzás Egy Kézzel Gépen', 'w', 'machine', [20, 30, 42, 56, 72], '2 × 8–10', ['Sagittal Pulldown', 'Sagittal Row', 'Single Arm Sagittal Pulldown']],
+  ['Straight-Arm Lat Pulldown', 'Egyeneskaros Lehúzás', 'w', 'machine', [20, 30, 42, 56, 72], '2 × 8–10', ['Straight Arm Pulldown']],
+  ['Seated Cable Row', 'Ülő Csigás Evezés', 'w', 'machine', [50, 68, 90, 115, 142], '2 × 8–10', ['Cable Row']],
+  ['High Row Machine', 'Gépes Magas Evezés', 'w', 'machine', [50, 75, 105, 140, 180], '2 × 8–10', ['High Row']],
+  ['Chest Fly', 'Mell Tárogatás / Pec Deck', 'w', 'machine', [40, 60, 85, 115, 150], '2 × 8–10', ['Pec Deck', 'Pec Deck Machine', 'Machine Fly']],
+  ['Machine Chest Press', 'Gépes Mellnyomás', 'w', 'machine', [55, 80, 110, 145, 185], '2 × 8–10', ['Chest Press']],
+  ['Machine Shoulder Press', 'Gépes Vállnyomás', 'w', 'machine', [40, 55, 75, 98, 125], '2 × 8–10', ['Shoulder Press Machine']],
+  ['Machine Lateral Raise', 'Gépes Oldalemelés', 'w', 'machine', [15, 25, 37, 52, 70], '2 × 10–12', []],
+  ['Reverse Pec Deck', 'Hátsó Váll Gépen', 'w', 'machine', [30, 45, 64, 86, 112], '2 × 10–12', ['Reverse Fly Machine']],
+  ['Cable Face Pull', 'Arcig Húzás Csigán', 'w', 'machine', [20, 30, 42, 56, 72], '2 × 10–12', ['Face Pull']],
+  ['Cable Rope Triceps Pushdown', 'Csigás Kötél Tricepsz', 'w', 'machine', [22, 32, 45, 60, 78], '2 × 8–10', ['Triceps Pushdown', 'Rope Pushdown']],
+  ['Single-Arm Overhead Cable Triceps Extension', '1 Kezes Fejfeletti Tricepsz', 'w', 'machine', [8, 13, 19, 26, 34], '2 × 8–10', []],
+  ['Overhead Cable Triceps Extension', 'Fejfeletti Tricepsz Csigán', 'w', 'machine', [18, 27, 38, 51, 66], '2 × 8–10', []],
+  ['Machine Preacher Curl', 'Gépes Scott Bicepsz (csigás)', 'w', 'machine', [24, 35, 48, 63, 80], '2 × 8–10', ['Preacher Curl Machine']],
+  ['Cable Curl', 'Csigás Bicepsz', 'w', 'machine', [20, 30, 42, 56, 72], '2 × 8–10', []],
   ['Pull Up', 'Húzódzkodás (ismétlés)', 'r', 'bw', [1, 5, 11, 17, 25], '2 × max', ['Pull-Up', 'Chin Up']],
   ['Dips', 'Tolódzkodás (ismétlés)', 'r', 'bw', [1, 8, 18, 28, 40], '2 × max', ['Dip']],
   ['Push Up', 'Fekvőtámasz (ismétlés)', 'r', 'bw', [5, 18, 35, 55, 75], '2 × max', ['Push-Up']],
-  ['Hanging Leg Raise', 'Függeszkedős Has (ismétlés)', 'r', 'bw', [1, 6, 12, 20, 30], '2 × 10–12', []]
+  ['Hanging Leg Raise', 'Függeszkedős Has (ismétlés)', 'r', 'bw', [1, 6, 12, 20, 30], '2 × 10–12', []],
+  ['Hanging Oblique Leg Raise', 'Függeszkedős Oldalsó Lábemelés (oldalanként)', 'r', 'bw', [1, 5, 10, 16, 24], '2 × 10–12 / oldal', ['Hanging Oblique Raise']]
 ];
 const RANK_DB = {}, RANK_ALIAS = {};
 for (const [name, hu, type, equip, std, reps, aliases] of RANK_DB_RAW) {
@@ -863,8 +909,14 @@ function rankScore(id, type) {
     for (const r of Object.values(state.exercises[id]?.occurrences || {})) for (const x of (r.sets || [])) if (x?.done && positive(x.reps)) best = Math.max(best, toNum(x.reps));
     return best ? { score: best } : null;
   }
-  const pb = personalBest(id);
-  return pb ? { score: pb.score, reps: pb.reps } : null;
+  // A becslés 12 ismétlés fölött túl nagyvonalú, ezért a rangnál legfeljebb 12 ismétléssel számolunk.
+  let best = null;
+  for (const r of Object.values(state.exercises[id]?.occurrences || {})) for (const x of (r.sets || [])) {
+    if (!x?.done || !positive(x.weight) || !positive(x.reps)) continue;
+    const reps = toNum(x.reps), sc = toNum(x.weight) * (1 + Math.min(reps, 12) / 30);
+    if (!best || sc > best.score) best = { score: sc, reps: Math.min(reps, 12) };
+  }
+  return best;
 }
 function rankBounds(db, bw) {
   const f = db.type === 'w' ? Math.pow(bw / 80, 0.67) : 1, s = db.std.map(x => x * f);
@@ -920,7 +972,7 @@ function renderRanks() {
     <div class="bw-note">A barátaid is látják. Frissítsd, ha változik – a rangok ehhez igazodnak.</div></section>`;
   if (ov) h += `<section class="overall-card" style="--rc:${ov.color}">${rankBadge(ov, true)}<div><div class="eyebrow">ÖSSZESÍTETT RANG</div><div class="ov-label">${esc(ov.label)}</div><div class="bw-date">${ov.n} rangos gyakorlat átlaga</div></div></section>`;
   // ranglista
-  h += `<div class="history-section">RANGLISTA A BARÁTOK KÖZÖTT</div>`;
+  h += `<div class="history-section">A BARÁTOK RANGJAI</div>`;
   if (!auth) h += '<div class="note">A ranglistához lépj be a 👥 BARÁTOK fülön.</div>';
   else {
     const keys = rankKeysInPlay();
@@ -974,13 +1026,13 @@ function boardHtml(sel) {
     const rk = sel === '__overall' ? overallRank(p.st) : bestFor(p.st, sel);
     return { ...p, rk, bw: bodyWeight(p.st) };
   }).filter(x => x.rk);
-  rows.sort((a, b) => (b.rk.pts - a.rk.pts) || ((b.rk.score || 0) - (a.rk.score || 0)));
+  rows.sort((a, b) => ((b.mine ? 1 : 0) - (a.mine ? 1 : 0)) || a.name.localeCompare(b.name, 'hu')); // nincs sorrend a rang szerint – nem verseny
   const db = sel === '__overall' ? null : RANK_DB[sel];
   let h = db?.equip === 'machine' ? `<div class="machine-note">${MACHINE_NOTE}</div>` : '';
   if (!rows.length) return h + '<div class="note">Ebben még senkinek nincs rangja.</div>';
   h += rows.map((x, i) => {
     const val = db ? (db.type === 'r' ? `${showNum(x.rk.score)} ismétlés` : `1RM ≈ ${showNum(Math.round(x.rk.score * 10) / 10)} kg`) : `${x.rk.n} gyakorlat`;
-    return `<div class="board-row${x.mine ? ' me' : ''}"><span class="board-pos">${i === 0 ? '👑' : i + 1 + '.'}</span>${rankBadge(x.rk)}<div class="board-main"><b>${esc(x.name)}</b><span>${esc(x.rk.label)} · ${val}${x.bw ? ` · ${showNum(x.bw)} kg testsúly` : ''}</span></div></div>`;
+    return `<div class="board-row${x.mine ? ' me' : ''}">${rankBadge(x.rk)}<div class="board-main"><b>${esc(x.name)}</b><span>${esc(x.rk.label)} · ${val}${x.bw ? ` · ${showNum(x.bw)} kg testsúly` : ''}</span></div></div>`;
   }).join('');
   return h;
 }
@@ -1391,7 +1443,7 @@ if ('serviceWorker' in navigator) {
 }
 $('updateBtn').onclick = () => { save(); setTimeout(() => location.reload(), 150); };
 render();
-load().then(() => { render(); restoreTimer(); if (auth) afterLogin(false).catch(() => {}); }).catch(() => {
+load().then(() => { render(); restoreTimer(); if (auth) afterLogin(false).then(() => renderBanner()).catch(() => {}); }).catch(() => {
   // Ha a betöltés váratlanul elakad, NEM írunk felül semmit (ready=false marad).
   workout.innerHTML = '<div class="note">Az adatok betöltése nem sikerült. Zárd be teljesen az alkalmazást, és nyisd meg újra. Az adataid nem törlődtek.</div>';
 });
