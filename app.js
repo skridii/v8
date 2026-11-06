@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v18';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -221,7 +221,7 @@ function latestBefore(c, w, d, name) {
 function heavierSet(r) {
   let b = null;
   for (const [i, s] of (r?.sets || []).entries()) {
-    if (!s?.done || !positive(s.weight) || !positive(s.reps)) continue;
+    if (!s?.done || !(toNum(s.weight) >= 0) || !positive(s.reps)) continue;
     const wt = toNum(s.weight), rp = toNum(s.reps);
     if (!b || wt > b.weight || (wt === b.weight && rp > b.reps)) b = { weight: wt, reps: rp, i };
   }
@@ -474,10 +474,11 @@ function renameEverywhere(oldName, newName, hu) {
   state.library[n] = { ...(state.library[n] || {}), name: newName, hu, reps: state.library[n]?.reps || RANK_DB[n]?.reps || '2 × 8–10' };
   state.names[n] = newName;
 }
-function applyProgramFix() {
+function applyProgramFix(silent) {
   const fixes = pendingFixes(), items = fixes.flatMap(f => f.items);
+  if (!items.length) return;
   const list = items.map(x => '• ' + fixLabel(x)).join('\n');
-  if (!confirm(`A programod gyakorlatai átnevezésre kerülnek arra, amit valójában csinálsz:\n\n${list}\n\nAz eddigi adataid az új név alá kerülnek (minden héten), semmi nem vész el. Előtte automatikus helyi másolat készül.\n\nMehet?`)) return;
+  if (silent !== true && !confirm(`A programod gyakorlatai átnevezésre kerülnek arra, amit valójában csinálsz:\n\n${list}\n\nAz eddigi adataid az új név alá kerülnek (minden héten), semmi nem vész el. Előtte automatikus helyi másolat készül.\n\nMehet?`)) return;
   lsSet(PRE_IMPORT_PREFIX + new Date().toISOString().slice(0, 19).replace('T', ' ') + ' program', JSON.stringify(state)); pruneSnaps();
   for (const x of items) {
     if (x[0] instanceof RegExp) { for (const nm of [...new Set(allVariants().filter(v => fixMatch(x, v.name)).map(v => v.name))]) renameEverywhere(nm, x[1], x[2]); }
@@ -486,8 +487,20 @@ function applyProgramFix() {
   state.fixes = { ...(state.fixes || {}) }; for (const f of fixes) state.fixes[f.id] = Date.now();
   save(); render(); toast('A programod frissítve, az adatok megmaradtak.');
 }
+function backupDue() {
+  try {
+    let t = Number(localStorage.getItem(LAST_EXPORT_KEY) || 0);
+    if (!t) { localStorage.setItem(LAST_EXPORT_KEY, String(Date.now())); return 0; }
+    const days = Math.floor((Date.now() - t) / 864e5);
+    return days >= 7 && !localHasData(state) === false ? days : 0;
+  } catch (e) { return 0; }
+}
 function renderBanner() {
-  if (ready && view === 'workout' && programFixNeeded()) {
+  const due = ready && view === 'workout' ? backupDue() : 0;
+  if (due && !programFixNeeded()) {
+    cycleBanner.innerHTML = `<div class="cycle-banner"><span>💾 ${due} napja nem készült biztonsági mentés fájlba. Egy koppintás, és megvan.</span><button class="primary" id="backupNowBtn">MENTÉS</button></div>`;
+    $('backupNowBtn').onclick = () => { exportData(state, `ironlog-backup-${today()}.json`); renderBanner(); };
+  } else if (ready && view === 'workout' && programFixNeeded()) {
     cycleBanner.innerHTML = `<div class="cycle-banner"><span>A programod gyakorlatai frissíthetők arra, amit valójában csinálsz (${esc(pendingFixes().flatMap(f => f.items).map(x => x[1]).join(', '))}). Az adatok megmaradnak.</span><button class="primary" id="progFixBtn">FRISSÍTÉS</button></div>`;
     $('progFixBtn').onclick = applyProgramFix;
   } else if (ready && view === 'workout' && state.week === 6 && state.cycle === state.maxCycle) {
@@ -541,9 +554,10 @@ function renderWorkout() {
     if (pb) h += `<div class="record-badge">🏆 SZEMÉLYES REKORD · ${showNum(pb.weight)} kg × ${showNum(pb.reps)} · ${state.maxCycle > 1 ? pb.c + '. ciklus, ' : ''}${pb.w}. hét</div>`;
     if (last) h += `<div class="history"><div>LEGUTÓBBI ALKALOM · ${cycLabel(last.c)}${last.w}. HÉT · ${DAYS[last.d]?.name || ''}</div><strong>Warm-up: ${esc(showNum(last.warmup?.weight)) || '—'} kg × ${esc(showNum(last.warmup?.reps)) || '—'} · ${esc(setsText(last))}</strong></div>`;
     h += `<div class="sets"><div class="set-labels"><span>SET</span><span>KG</span><span>REPS</span><span></span></div>`;
-    h += setRowHtml('W', e, wu, 'warmup');
+    const bwx = isBwExercise(name);
+    h += setRowHtml('W', e, wu, 'warmup', 0, bwx);
     const nSets = Math.max(slotSets(slot), sets.length);
-    for (let s = 0; s < nSets; s++) h += setRowHtml(String(s + 1), e, sets[s] || emptySet(), 'work', s);
+    for (let s = 0; s < nSets; s++) h += setRowHtml(String(s + 1), e, sets[s] || emptySet(), 'work', s, bwx);
     h += `<div class="set-tools"><button class="set-tool" data-addset data-e="${e}">+ SZETT</button>${nSets > 1 ? `<button class="set-tool minus" data-delset data-e="${e}">− SZETT</button>` : ''}</div>`;
     h += `</div><div class="last">Bemelegítő szett után: <strong>1:00</strong> · Munkasorozat után: <strong>2:30</strong></div></article>`;
   });
@@ -553,9 +567,10 @@ function renderWorkout() {
   workout.innerHTML = h;
   bindInputs();
 }
-function setRowHtml(label, e, v, kind, s = 0) {
+function isBwExercise(name) { const k = rankKeyFor(exId(name)); return !!k && RANK_DB[k].type === 'r'; }
+function setRowHtml(label, e, v, kind, s = 0, bw = false) {
   const wu = kind === 'warmup', done = !!v.done;
-  return `<div class="set-row ${wu ? 'warmup-row' : ''}" data-e="${e}" data-s="${s}"><div class="set-num">${label}</div><input inputmode="decimal" data-type="weight" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.weight || ''))}" placeholder="kg" aria-label="${label} súly"><input inputmode="numeric" data-type="reps" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.reps || ''))}" placeholder="reps" aria-label="${label} ismétlés"><button class="complete ${done ? 'checked' : ''}" data-done data-kind="${kind}" data-e="${e}" data-s="${s}">${done ? '✓' : '○'}</button></div>`;
+  return `<div class="set-row ${wu ? 'warmup-row' : ''}" data-e="${e}" data-s="${s}"><div class="set-num">${label}</div><input inputmode="decimal" data-type="weight" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.weight || ''))}" placeholder="${bw ? '0 kg' : 'kg'}" aria-label="${label} súly"><input inputmode="numeric" data-type="reps" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.reps || ''))}" placeholder="reps" aria-label="${label} ismétlés"><button class="complete ${done ? 'checked' : ''}" data-done data-kind="${kind}" data-e="${e}" data-s="${s}">${done ? '✓' : '○'}</button></div>`;
 }
 function bindInputs() {
   workout.querySelectorAll('.set-row input').forEach(inp => inp.oninput = () => {
@@ -578,9 +593,12 @@ function bindInputs() {
     const existing = recordFor(state.cycle, state.week, state.day, name);
     const cur = existing ? (kind === 'warmup' ? existing.warmup : existing.sets[s]) : null;
     if (cur?.done) { cur.done = false; save(); renderWorkout(); return; }
+    // Saját testsúlyos gyakorlatnál (húzódzkodás, lábemelés…) a súly lehet 0 vagy üres.
+    const bw = isBwExercise(name);
+    if (bw && cleanNum(ins[0].value) === '') ins[0].value = '0';
     let invalid = false;
-    ins.forEach(inp => { if (!positive(inp.value)) { inp.classList.add('invalid'); invalid = true; } else inp.classList.remove('invalid'); });
-    if (invalid) { toast('Add meg a súlyt és az ismétlésszámot pozitív számként!'); return; }
+    ins.forEach((inp, j) => { const okv = (bw && j === 0) ? toNum(inp.value) >= 0 : positive(inp.value); if (!okv) { inp.classList.add('invalid'); invalid = true; } else inp.classList.remove('invalid'); });
+    if (invalid) { toast(bw ? 'Add meg az ismétlésszámot (a súly lehet 0)!' : 'Add meg a súlyt és az ismétlésszámot pozitív számként!'); return; }
     lockVariant(slot);
     const r = padSets(ensureRecord(state.cycle, state.week, state.day, name), s + 1), v = kind === 'warmup' ? r.warmup : r.sets[s];
     v.weight = cleanNum(ins[0].value); v.reps = cleanNum(ins[1].value); v.done = true; v.ts = Date.now(); r.ts = Date.now();
@@ -898,14 +916,14 @@ const RANK_DB_RAW = [
   ['Leg Extension', 'Láb Extenzió', 'w', 'machine', [50, 75, 105, 140, 180], '2 × 10–12', []],
   ['Seated Hamstring Curl', 'Ülő Combhajlítás', 'w', 'machine', [40, 58, 80, 105, 135], '2 × 8–10', ['Leg Curl']],
   ['Lying Hamstring Curl', 'Fekvő Combhajlítás', 'w', 'machine', [32, 47, 65, 86, 110], '2 × 8–10', ['Lying Leg Curl']],
-  ['Machine Hip Adduction', 'Csípő Addukció Gépen', 'w', 'machine', [60, 90, 125, 165, 210], '2 × 10–12', ['Hip Adduction']],
-  ['Machine Hip Abduction', 'Csípő Abdukció Gépen', 'w', 'machine', [60, 90, 125, 165, 210], '2 × 10–12', ['Hip Abduction']],
+  ['Machine Hip Adduction', 'Csípő Addukció Gépen', 'w', 'machine', [35, 55, 85, 115, 150], '2 × 10–12', ['Hip Adduction']],
+  ['Machine Hip Abduction', 'Csípő Abdukció Gépen', 'w', 'machine', [35, 55, 85, 115, 150], '2 × 10–12', ['Hip Abduction']],
   ['Standing Calf Raise', 'Álló Vádli Gépen', 'w', 'machine', [70, 115, 165, 225, 290], '2 × 8–10', []],
   ['Seated Calf Raise', 'Ülő Vádli Gépen', 'w', 'free', [32, 55, 82, 112, 145], '2 × 10–12', []],
-  ['Machine Ab Crunch', 'Gépes Hasprés', 'w', 'machine', [25, 40, 58, 80, 105], '2 × 10–15', []],
+  ['Machine Ab Crunch', 'Gépes Hasprés', 'w', 'machine', [15, 26, 40, 54, 72], '2 × 10–15', []],
   ['Chest-Supported Row', 'Mellkassal Támasztott Evezés', 'w', 'machine', [45, 70, 100, 135, 175], '2 × 6–8', ['T-Bar Row']],
   ['Wide-Grip Lat Pulldown', 'Széles Lehúzás Csigán', 'w', 'machine', [50, 65, 85, 108, 132], '2 × 8–10', ['Lat Pulldown']],
-  ['Single-Arm Sagittal Pulldown', 'Szagittális Lehúzás Egy Kézzel Gépen', 'w', 'machine', [20, 30, 42, 56, 72], '2 × 8–10', ['Sagittal Pulldown', 'Sagittal Row', 'Single Arm Sagittal Pulldown', 'Sagital', 'Sagittal', 'Sagital Pulldown', 'Szagitalis', 'Szagitalis Lehuzas', 'Szagitális Lehúzás']],
+  ['Single-Arm Sagittal Pulldown', 'Szagittális Lehúzás Egy Kézzel Gépen', 'w', 'machine', [55, 85, 115, 145, 195], '2 × 8–10', ['Sagittal Pulldown', 'Sagittal Row', 'Single Arm Sagittal Pulldown', 'Sagital', 'Sagittal', 'Sagital Pulldown', 'Szagitalis', 'Szagitalis Lehuzas', 'Szagitális Lehúzás']],
   ['Straight-Arm Lat Pulldown', 'Egyeneskaros Lehúzás', 'w', 'machine', [20, 30, 42, 56, 72], '2 × 8–10', ['Straight Arm Pulldown']],
   ['Cable High Row', 'Magas Evezés Csigán', 'w', 'machine', [35, 50, 68, 88, 110], '2 × 8–10', ['High Cable Row']],
   ['Seated Cable Row', 'Ülő Csigás Evezés', 'w', 'machine', [50, 68, 90, 115, 142], '2 × 8–10', ['Cable Row']],
@@ -913,15 +931,15 @@ const RANK_DB_RAW = [
   ['Chest Fly', 'Mell Tárogatás / Pec Deck', 'w', 'machine', [40, 60, 85, 115, 150], '2 × 8–10', ['Pec Deck', 'Pec Deck Machine', 'Machine Fly']],
   ['Machine Chest Press', 'Gépes Mellnyomás', 'w', 'machine', [55, 80, 110, 145, 185], '2 × 8–10', ['Chest Press']],
   ['Machine Shoulder Press', 'Gépes Vállnyomás', 'w', 'machine', [40, 55, 75, 98, 125], '2 × 8–10', ['Shoulder Press Machine']],
-  ['Machine Lateral Raise', 'Gépes Oldalemelés', 'w', 'machine', [22, 34, 48, 65, 85], '2 × 10–12', []],
-  ['Reverse Pec Deck', 'Hátsó Váll Pec Deck Gépen', 'w', 'machine', [40, 60, 85, 112, 145], '2 × 10–12', ['Reverse Fly Machine']],
+  ['Machine Lateral Raise', 'Gépes Oldalemelés', 'w', 'machine', [32, 50, 72, 100, 130], '2 × 10–12', []],
+  ['Reverse Pec Deck', 'Hátsó Váll Pec Deck Gépen', 'w', 'machine', [40, 60, 85, 115, 150], '2 × 10–12', ['Reverse Fly Machine']],
   ['Cable Face Pull', 'Arcig Húzás Csigán', 'w', 'machine', [20, 30, 42, 56, 72], '2 × 10–12', ['Face Pull']],
   ['Cable Rope Triceps Pushdown', 'Csigás Kötél Tricepsz', 'w', 'machine', [22, 32, 45, 60, 78], '2 × 8–10', ['Triceps Pushdown', 'Rope Pushdown']],
   ['Single-Arm Overhead Cable Triceps Extension', '1 Kezes Fejfeletti Tricepsz', 'w', 'machine', [8, 13, 19, 26, 34], '2 × 8–10', []],
-  ['Overhead Cable Triceps Extension', 'Fejfeletti Tricepsz Csigán', 'w', 'machine', [18, 27, 38, 51, 66], '2 × 8–10', []],
-  ['Machine Preacher Curl', 'Gépes Scott Bicepsz (csigás)', 'w', 'machine', [32, 46, 62, 80, 100], '2 × 8–10', ['Preacher Curl Machine']],
+  ['Overhead Cable Triceps Extension', 'Fejfeletti Tricepsz Csigán', 'w', 'machine', [26, 40, 55, 72, 98], '2 × 8–10', []],
+  ['Machine Preacher Curl', 'Gépes Scott Bicepsz (csigás)', 'w', 'machine', [45, 65, 90, 120, 155], '2 × 8–10', ['Preacher Curl Machine']],
   ['Cable Curl', 'Csigás Bicepsz', 'w', 'machine', [20, 30, 42, 56, 72], '2 × 8–10', []],
-  ['Pull Up', 'Húzódzkodás (ismétlés)', 'r', 'bw', [1, 5, 11, 17, 25], '2 × max', ['Pull-Up', 'Chin Up']],
+  ['Pull Up', 'Húzódzkodás (ismétlés)', 'r', 'bw', [1, 5, 11, 17, 25], '2 × max', ['Pull-Up', 'Pullup', 'Pull Ups', 'Chin Up', 'Húzódzkodás', 'Huzodzkodas']],
   ['Dips', 'Tolódzkodás (ismétlés)', 'r', 'bw', [1, 8, 18, 28, 40], '2 × max', ['Dip']],
   ['Push Up', 'Fekvőtámasz (ismétlés)', 'r', 'bw', [5, 18, 35, 55, 75], '2 × max', ['Push-Up']],
   ['Hanging Leg Raise', 'Függeszkedős Has (ismétlés)', 'r', 'bw', [1, 6, 12, 20, 30], '2 × 10–12', []],
@@ -1104,7 +1122,9 @@ $('statsClose').onclick = () => $('statsOverlay').classList.add('hidden');
 $('statsOverlay').onclick = ev => { if (ev.target.id === 'statsOverlay') $('statsOverlay').classList.add('hidden'); };
 
 /* ---------- export / import ---------- */
+const LAST_EXPORT_KEY = 'ironlog-last-export';
 function exportData(obj, filename) {
+  if (obj === state) try { localStorage.setItem(LAST_EXPORT_KEY, String(Date.now())); } catch (e) {}
   const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' }), url = URL.createObjectURL(blob), a = document.createElement('a');
   a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1500);
@@ -1287,6 +1307,7 @@ async function afterLogin(interactive) {
   me = rows?.[0] || null;
   if (!me) throw new Error('A profil nem található.');
   if (!me.approved) { render(); return; }
+  if (me.is_admin && pendingFixes().length) applyProgramFix(true); // kérésre automatikusan (előtte helyi másolat)
   const srv = (await sb(`/rest/v1/user_state?user_id=eq.${auth.user.id}&select=state,updated_at`))?.[0];
   if (srv?.state && (srv.state.exercises || srv.state.logs)) {
     const srvNewer = (Number(srv.state.savedAt) || 0) > (Number(state.savedAt) || 0) + 5000;
