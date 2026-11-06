@@ -205,3 +205,22 @@ select.lib-search{appearance:none;-webkit-appearance:none}
 .rank-badge.legend svg{filter:drop-shadow(0 0 7px color-mix(in srgb,var(--rc) 75%,transparent))}
 .rank-badge b{white-space:nowrap}
 .rank-badge:not(.big) b{font-size:9.5px}
+
+/* IRONLOG v20 – jegyzet, havi összefoglaló, infó */
+.top-actions{display:flex;gap:8px;align-items:center}
+.info-btn{padding:8px 11px;font-size:11px;white-space:nowrap}
+.ex-note{display:block;width:100%;text-align:left;background:#0a0d10;border:1px solid #22282e;border-radius:10px;padding:8px 10px;margin-top:10px;color:#dbe0e5;font-size:11.5px;line-height:1.4;cursor:pointer}
+.ex-note.empty-note{color:#5f6973;border-style:dashed}
+.month-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.month-nav .summary-title{margin:0;text-align:center;flex:1}
+.month-ups{margin-top:12px}
+.month-ups>b{display:block;font-size:11px;color:#9cff57;margin-bottom:4px}
+.month-ups.muted{font-size:11px;color:#7f8993}
+.invite-link{font-size:20px;font-weight:950;color:#9cff57;margin:8px 0 12px;word-break:break-all}
+.info-card ol{margin:8px 0 0;padding-left:20px;font-size:12.5px;line-height:1.55;color:#c6cdd4}
+.info-card li{margin-bottom:6px}
+.info-card b{color:#fff}
+.credit-card{text-align:center;background:linear-gradient(135deg,#141b10,#0e1115);border:1px solid #3a4b30;border-radius:18px;padding:20px 16px;margin:16px 0 8px}
+.credit-name{font-size:24px;font-weight:950;margin-top:6px}
+.credit-nick{font-size:13px;color:#9cff57;font-weight:800;margin:2px 0 14px}
+.insta-btn{display:inline-block;text-decoration:none;margin-bottom:10px}

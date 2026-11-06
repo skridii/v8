@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v19';
+const APP_VERSION = 'v20';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -403,7 +403,8 @@ async function load() {
 /* ---------- megjelenítés ---------- */
 function render() {
   renderWeeks(); renderTabs(); renderHistoryBtn(); renderBanner();
-  if (view === 'history') renderHistory(); else if (view === 'social') renderSocial(); else if (view === 'ranks') renderRanks(); else renderWorkout();
+  if (view === 'history') renderHistory(); else if (view === 'social') renderSocial(); else if (view === 'ranks') renderRanks(); else if (view === 'info') renderInfo(); else renderWorkout();
+  const ib = $('infoBtn'); if (ib) { ib.textContent = view === 'info' ? '← EDZÉS' : 'ℹ️ INFÓ'; ib.onclick = () => { if (!ready) return; view = view === 'info' ? 'workout' : 'info'; render(); window.scrollTo(0, 0); }; }
 }
 function renderWeeks() {
   weekGrid.innerHTML = '';
@@ -495,6 +496,12 @@ function backupDue() {
     return days >= 7 && !localHasData(state) === false ? days : 0;
   } catch (e) { return 0; }
 }
+function monthBannerDue() {
+  if (new Date().getDate() > 5) return false;
+  const pm = monthKey(Date.now()) - 1;
+  try { if (Number(localStorage.getItem('ironlog-month-seen')) === pm) return false; } catch (e) {}
+  return monthSummary(pm).workouts > 0;
+}
 function renderBanner() {
   const due = ready && view === 'workout' ? backupDue() : 0;
   if (due && !programFixNeeded()) {
@@ -503,6 +510,10 @@ function renderBanner() {
   } else if (ready && view === 'workout' && programFixNeeded()) {
     cycleBanner.innerHTML = `<div class="cycle-banner"><span>A programod gyakorlatai frissíthetők arra, amit valójában csinálsz (${esc(pendingFixes().flatMap(f => f.items).map(x => x[1]).join(', '))}). Az adatok megmaradnak.</span><button class="primary" id="progFixBtn">FRISSÍTÉS</button></div>`;
     $('progFixBtn').onclick = applyProgramFix;
+  } else if (ready && view === 'workout' && monthBannerDue()) {
+    const pm = monthKey(Date.now()) - 1;
+    cycleBanner.innerHTML = `<div class="cycle-banner"><span>📅 Elkészült a ${HU_MONTHS[pm % 12]}i összefoglalód: ${monthSummary(pm).workouts} edzés, ${kg(monthSummary(pm).vol)} kg.</span><button class="primary" id="monthBtn">MEGNÉZEM</button></div>`;
+    $('monthBtn').onclick = () => { try { localStorage.setItem('ironlog-month-seen', String(pm)); } catch (e) {} monthSel = pm; view = 'history'; render(); window.scrollTo(0, 0); };
   } else if (ready && view === 'workout' && state.week === 6 && state.cycle === state.maxCycle) {
     cycleBanner.innerHTML = `<div class="cycle-banner"><span>A ${state.cycle}. ciklus utolsó hete. Ha végeztél, indíts újat – az eddigi eredmények megmaradnak.</span><button class="primary" id="newCycleBtn">ÚJ CIKLUS</button></div>`;
     $('newCycleBtn').onclick = startNewCycle;
@@ -544,6 +555,8 @@ function renderWorkout() {
     const rec = recordFor(c, w, d, name), last = latestBefore(c, w, d, name);
     const sets = rec?.sets || [emptySet(), emptySet()], wu = rec?.warmup || emptySet(), pb = personalBest(id);
     h += `<article class="exercise"><div class="exercise-head"><div><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(name)}</button>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(showReps(slot))}</div></div><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div>`;
+    const note = state.notes?.[id] || '';
+    h += `<button class="ex-note${note ? '' : ' empty-note'}" data-note="${esc(id)}">📝 ${note ? esc(note) : 'Jegyzet a géphez (pl. ülés 4-es, támla 2. lyuk)'}</button>`;
     if (slot.variants.length > 1) {
       const other = slot.variants[1 - vi];
       h += `<div class="variant-row"><span class="variant-tag">VÁLTAKOZÓ</span><button class="variant-btn" data-variant data-e="${e}">↔ Ezen a héten inkább: ${esc(other.name)}</button></div>`;
@@ -633,6 +646,14 @@ function bindInputs() {
     save(); renderWorkout(); toast(`Mostantól ${n} munkasorozat ennél a gyakorlatnál.`);
   });
   workout.querySelectorAll('[data-stats]').forEach(btn => btn.onclick = () => openStats(btn.dataset.stats));
+  workout.querySelectorAll('[data-note]').forEach(btn => btn.onclick = () => {
+    const id = btn.dataset.note, cur = state.notes?.[id] || '';
+    const v = prompt(`Jegyzet – ${nameOf(id)}\n(gépbeállítás, fogás, bármi, ami segít; minden héten látszik)`, cur);
+    if (v === null) return;
+    state.notes = state.notes || {};
+    if (v.trim()) state.notes[id] = v.trim().slice(0, 200); else delete state.notes[id];
+    save(); renderWorkout();
+  });
   $('addExBtn').onclick = () => openEditor('add');
 }
 
@@ -741,6 +762,38 @@ $('editRemoveAll').onclick = () => {
 };
 
 /* ---------- fejlődés ---------- */
+/* Havi összefoglaló: edzések, megmozgatott kg, szettek, és ahol erősödtél (becsült 1RM a hónap előtti legjobbhoz képest). */
+let monthSel = null;
+const HU_MONTHS = ['január', 'február', 'március', 'április', 'május', 'június', 'július', 'augusztus', 'szeptember', 'október', 'november', 'december'];
+function monthKey(t) { const d = new Date(t); return d.getFullYear() * 12 + d.getMonth(); }
+function monthSummary(mk) {
+  const start = new Date(Math.floor(mk / 12), mk % 12, 1).getTime(), end = new Date(Math.floor(mk / 12), mk % 12 + 1, 1).getTime();
+  const sessions = new Map(); let sets = 0;
+  const best = {}, before = {};
+  for (const [id, obj] of Object.entries(state.exercises)) for (const [k, r] of Object.entries(obj.occurrences || {})) {
+    if (!anyDone(r)) continue;
+    const t = sessionTime(r); if (!t) continue;
+    let top = 0;
+    for (const x of (r.sets || [])) if (x?.done && positive(x.weight) && positive(x.reps)) top = Math.max(top, toNum(x.weight) * (1 + Math.min(toNum(x.reps), 12) / 30));
+    if (t < start) { before[id] = Math.max(before[id] || 0, top); continue; }
+    if (t >= end) continue;
+    sessions.set(k, Math.min(sessions.get(k) ?? Infinity, t));
+    sets += (r.sets || []).filter(x => x?.done).length;
+    best[id] = Math.max(best[id] || 0, top);
+  }
+  let vol = 0; for (const k of sessions.keys()) { const [c, w, d] = k.split('-').map(Number); vol += dayVolume(c, w, d).total; }
+  const ups = Object.keys(best).filter(id => before[id] > 0 && best[id] > before[id] * 1.001).map(id => ({ id, pct: (best[id] / before[id] - 1) * 100 })).sort((a, b) => b.pct - a.pct);
+  return { workouts: sessions.size, vol, sets, ups, label: `${Math.floor(mk / 12)}. ${HU_MONTHS[mk % 12]}` };
+}
+function monthHtml() {
+  const now = monthKey(Date.now()), mk = monthSel ?? now, m = monthSummary(mk);
+  let h = `<section class="summary-card month-card"><div class="month-nav"><button class="cycle-btn" id="monthPrev">‹</button><div class="summary-title">HAVI ÖSSZEFOGLALÓ · ${esc(m.label.toUpperCase())}</div><button class="cycle-btn" id="monthNext" ${mk >= now ? 'disabled' : ''}>›</button></div>`;
+  h += `<div class="summary-stats three"><div><strong>${m.workouts}</strong><span>edzés</span></div><div><strong>${m.sets}</strong><span>kész szett</span></div><div><strong>${kg(m.vol)}</strong><span>kg megmozgatva</span></div></div>`;
+  if (m.ups.length) h += `<div class="month-ups"><b>💪 Itt erősödtél (becsült 1RM):</b>${m.ups.slice(0, 5).map(u => `<div class="summary-row"><span>${esc(nameOf(u.id))}</span><b>+${showNum(Math.round(u.pct * 10) / 10)}%</b></div>`).join('')}</div>`;
+  else if (m.workouts) h += '<div class="month-ups muted">Ebben a hónapban nem dőlt meg korábbi csúcs – a következőben jön!</div>';
+  else h += '<div class="month-ups muted">Ebben a hónapban még nincs rögzített edzés.</div>';
+  return h + '</section>';
+}
 function renderHistory() {
   const c = state.cycle, w = state.week, L = layoutFor(c, w);
   let h = `<div class="eyebrow">PROGRESS & WEEKLY SUMMARY</div><div class="day-name">FEJLŐDÉS</div><div class="day-meta">Személyes rekordok, heti teljesítés és gyakorlatonkénti előzmények.</div>`;
@@ -753,6 +806,7 @@ function renderHistory() {
   const doneSets = rows.reduce((a, x) => a + x.done, 0), allSets = rows.reduce((a, x) => a + x.total, 0);
   h += `<section class="summary-card"><div class="summary-title">${cycLabel(c)}${w}. HÉT ÖSSZESÍTŐ</div><div class="summary-stats three"><div><strong>${started}/4</strong><span>edzésnap elkezdve</span></div><div><strong>${finished}/4</strong><span>edzésnap kész</span></div><div><strong>${doneSets}/${allSets}</strong><span>munkasorozat kész</span></div></div><div class="summary-row total"><span>Heti megmozgatott súly</span><b>${kg(rows.reduce((a, x) => a + x.vol, 0))} kg</b></div>${rows.map(x => `<div class="summary-row"><span>${x.name}</span><b>${x.done}/${x.total} szett · ${kg(x.vol)} kg${x.total && x.done >= x.total ? ' ✓' : ''}</b></div>`).join('')}</section>`;
 
+  h += monthHtml();
   const active = [];
   L.forEach(day => day.forEach(slot => slot.variants.forEach(v => { const id = exId(v.name); if (!active.includes(id)) active.push(id); })));
   const archived = Object.keys(state.exercises).filter(id => !active.includes(id) && Object.values(state.exercises[id].occurrences || {}).some(hasData)).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
@@ -770,6 +824,8 @@ function renderHistory() {
   h += `<div class="note">Az alkalmazás minden változást azonnal ment, és naponta külön helyi másolatot is készít. A fájlba mentés külön, letölthető másolatot ad. IRONLOG ${APP_VERSION}</div>`;
   workout.innerHTML = h;
   $('histSearch').oninput = e => { histQuery = e.target.value; filterHistory(); };
+  $('monthPrev').onclick = () => { monthSel = (monthSel ?? monthKey(Date.now())) - 1; renderHistory(); };
+  $('monthNext').onclick = () => { monthSel = Math.min(monthKey(Date.now()), (monthSel ?? monthKey(Date.now())) + 1); renderHistory(); };
   workout.querySelectorAll('details[data-gid]').forEach(dt => dt.addEventListener('toggle', () => {
     const box = dt.querySelector('.progress-ex');
     if (dt.open && !box.dataset.filled) { box.innerHTML = statsHtml(dt.dataset.gid); box.dataset.filled = '1'; bindCharts(box); }
@@ -1514,6 +1570,63 @@ function renderFriend() {
     withState(f.state, () => openStats(b.dataset.fex));
     $('statsTitle').textContent = `${f.display_name || ''} · ${$('statsTitle').textContent}`;
   });
+}
+
+
+/* ---------- INFÓ & MEGHÍVÁS ---------- */
+const APP_URL = 'https://skridii.github.io/v8/';
+const INSTA_URL = 'https://www.instagram.com/skridi_/';
+function renderInfo() {
+  let h = `<div class="eyebrow">INFÓ & MEGHÍVÁS</div><div class="day-name">IRONLOG</div><div class="day-meta">Edzésnapló, rangok és barátok – egy helyen.</div>`;
+  h += `<section class="social-card invite-card"><div class="eyebrow">HÍVD MEG A BARÁTAIDAT</div><div class="invite-link">${esc(APP_URL.replace('https://', ''))}</div>
+    <div class="me-actions"><button class="primary" id="shareBtn">MEGOSZTÁS</button><button class="secondary" id="copyBtn">LINK MÁSOLÁSA</button></div>
+    <div class="bw-note">Küldd el a linket, nyissa meg, tegye ki a kezdőképernyőre, és regisztráljon a 👥 BARÁTOK fülön.</div></section>`;
+  const sec = (t, items) => `<section class="social-card info-card"><div class="eyebrow">${t}</div><ol>${items.map(x => `<li>${x}</li>`).join('')}</ol></section>`;
+  h += sec('📱 IPHONE – KEZDŐKÉPERNYŐRE', [
+    'Nyisd meg a linket a <b>Safari</b> böngészőben.',
+    'Koppints alul a <b>Megosztás</b> gombra (négyzet felfelé nyíllal).',
+    'Válaszd: <b>Főképernyőhöz adás</b> → <b>Hozzáadás</b>.',
+    'Ezután mindig az <b>IRONLOG ikonról</b> indítsd, ne a Safariból.',
+    '⚠️ Az ikont <b>ne töröld</b> és ne add hozzá újra – iPhone-on az ikonhoz tartozik a tárhely, törléskor az adatok elveszhetnek.']);
+  h += sec('🤖 ANDROID – KEZDŐKÉPERNYŐRE', [
+    'Nyisd meg a linket a <b>Chrome</b> böngészőben.',
+    'Jobb fent <b>⋮</b> menü → <b>Hozzáadás a kezdőképernyőhöz</b> (vagy <b>Alkalmazás telepítése</b>).',
+    'Ezután az ikonról indítsd.']);
+  h += sec('🚀 ELSŐ LÉPÉSEK', [
+    '<b>👥 BARÁTOK</b> → <b>REGISZTRÁCIÓ</b>: név, e-mail, jelszó. A naplód innentől a fiókodba is mentődik.',
+    '<b>🏅 RANGOK</b> → add meg a <b>testsúlyodat</b> (ehhez igazodnak a rangok).',
+    'Ha más gyakorlatokat csinálsz, mint a programban: <b>CSERE</b> vagy <b>+ ÚJ GYAKORLAT HOZZÁADÁSA</b>.']);
+  h += sec('🏋️ HOGYAN HASZNÁLD', [
+    'Fent válaszd ki a <b>hetet</b> (1–6) és az <b>edzésnapot</b> (LOWER 1, UPPER 1…).',
+    'Gyakorlatonként: <b>W</b> = bemelegítő szett, <b>1, 2</b> = munkasorozatok. Írd be a súlyt és az ismétlést, majd koppints a <b>○</b> gombra – indul a pihenőidő (1:00 / 2:30).',
+    'Pihenő alatt a <b>KÖVETKEZŐ</b> kártya mutatja, mennyit emeltél legutóbb – minimum annyit tegyél fel.',
+    '<b>+ SZETT / − SZETT</b>: a gyakorlat szettszáma, minden edzésen megmarad.',
+    '<b>CSERE</b>: másik gyakorlat (a gyakorlatlistából vagy a rangos adatbázisból), eltávolítás egy napról vagy mindenhonnan – az adatok megmaradnak.',
+    'A <b>gyakorlat nevére</b> koppintva statisztika és fejlődési görbe.',
+    '<b>📝 Jegyzet</b>: gépbeállítás, fogás – minden héten ott lesz.',
+    'Saját testsúlyos gyakorlatnál (húzódzkodás, lábemelés) a súly lehet <b>0</b>; plusz súlynál írd be a pluszt.',
+    'A 6. hét végén indíts <b>ÚJ CIKLUST</b> – a régi eredmények megmaradnak.']);
+  h += sec('📈 FEJLŐDÉS · 🏅 RANGOK · 👥 BARÁTOK', [
+    '<b>FEJLŐDÉS</b>: heti és havi összefoglaló, rekordok, minden gyakorlat előzménye, biztonsági mentés fájlba.',
+    '<b>RANGOK</b>: Vas → Bronz → Ezüst → Arany → Platina → Gyémánt → Bajnok → Legenda, I–III fokozattal. A jelenlegi programod gyakorlataiból, az utolsó 2 edzés legjobb szettjéből számol, a testsúlyodhoz igazítva.',
+    '<b>BARÁTOK</b>: látod a többiek edzéseit, edzésnapjait és rangjait. A megosztást a profilodban kikapcsolhatod.']);
+  h += sec('🔒 AZ ADATAID', [
+    'Minden a telefonodon tárolódik, internet nélkül is működik.',
+    'Belépve a fiókodba is felkerül egy másolat – új telefonon belépve visszakapod.',
+    'Hetente készíts <b>mentést fájlba</b> (FEJLŐDÉS oldal alja) – az app emlékeztet is.']);
+  h += `<section class="credit-card"><div class="eyebrow">KÉSZÍTETTE</div><div class="credit-name">Sarkadi Ádám</div><div class="credit-nick">„Skridi”</div>
+    <a class="primary insta-btn" href="${INSTA_URL}" target="_blank" rel="noopener">📸 Instagram · @skridi_</a><div class="bw-date">IRONLOG ${APP_VERSION}</div></section>`;
+  workout.innerHTML = h;
+  $('shareBtn').onclick = async () => {
+    const data = { title: 'IRONLOG', text: 'Gyere, vezessük együtt az edzéseinket – IRONLOG edzésnapló:', url: APP_URL };
+    try { if (navigator.share) { await navigator.share(data); return; } } catch (e) { if (e?.name === 'AbortError') return; }
+    copyLink();
+  };
+  $('copyBtn').onclick = copyLink;
+}
+async function copyLink() {
+  try { await navigator.clipboard.writeText(APP_URL); toast('Link kimásolva – illeszd be az üzenetbe.'); }
+  catch (e) { prompt('Másold ki a linket:', APP_URL); }
 }
 
 /* ---------- egyéb ---------- */
