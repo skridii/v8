@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v18';
+const APP_VERSION = 'v19';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -946,6 +946,7 @@ const RANK_DB_RAW = [
   ['Hanging Oblique Leg Raise', 'Függeszkedős Oldalsó Lábemelés (oldalanként)', 'r', 'bw', [1, 5, 10, 16, 24], '2 × 10–12 / oldal', ['Hanging Oblique Raise']]
 ];
 const RANK_DB = {}, RANK_ALIAS = {};
+const BW_LOADED = new Set(['pull_up', 'dips']);
 for (const [name, hu, type, equip, std, reps, aliases] of RANK_DB_RAW) {
   const key = exId(name);
   RANK_DB[key] = { key, name, hu, type, equip, std, reps };
@@ -959,9 +960,18 @@ function recentSessions(id) { return sessionsOf(id).filter(x => (x.r.sets || [])
 function rankScore(id, type) {
   const recent = recentSessions(id);
   if (type === 'r') {
-    let best = 0;
-    for (const x of recent) for (const st of (x.r.sets || [])) if (st?.done && positive(st.reps)) best = Math.max(best, toNum(st.reps));
-    return best ? { score: best } : null;
+    // Húzódzkodás / tolódzkodás plusz súllyal: a teljes terhet (testsúly + plusz súly) átszámoljuk
+    // „saját testsúlyos ismétlés-egyenértékre”, így a +20 kg × 9 többet ér, mint a sima 9 ismétlés.
+    const loaded = BW_LOADED.has(rankKeyFor(id)), bw = bodyWeight();
+    let best = null;
+    for (const x of recent) for (const st of (x.r.sets || [])) {
+      if (!st?.done || !positive(st.reps)) continue;
+      const reps = toNum(st.reps), add = Math.max(0, toNum(st.weight) || 0);
+      let sc = reps;
+      if (loaded && bw && add > 0) sc = Math.max(reps, 30 * ((bw + add) * (1 + Math.min(reps, 12) / 30) / bw - 1));
+      if (!best || sc > best.score) best = { score: sc, weight: add, rawReps: reps };
+    }
+    return best;
   }
   // A becslés 12 ismétlés fölött túl nagyvonalú, ezért a rangnál legfeljebb 12 ismétléssel számolunk.
   let best = null;
@@ -1020,7 +1030,16 @@ function rankBadge(rk, big = false) {
 }
 function rankNeedText(rk) {
   if (!rk || rk.pts === undefined) return '';
-  if (rk.db.type === 'r') return `Következő: ${rk.nextLabel} · még +${Math.max(1, Math.ceil(rk.next - rk.score))} ismétlés egy szettben`;
+  if (rk.db.type === 'r') {
+    const bw = bodyWeight(), w0 = rk.refWeight || 0;
+    if (BW_LOADED.has(rk.key) && bw && w0 > 0) {
+      const r = Math.ceil(30 * (bw * (1 + rk.next / 30) / (bw + w0) - 1));
+      if (r > (rk.refReps || 0) && r <= 12) return `Következő: ${rk.nextLabel} · pl. +${showNum(w0)} kg × ${r}`;
+      const w = Math.ceil((bw * (1 + rk.next / 30) / (1 + Math.min(rk.refReps || 5, 12) / 30) - bw) / 2.5) * 2.5;
+      return `Következő: ${rk.nextLabel} · pl. +${showNum(Math.max(w, w0 + 2.5))} kg × ${rk.refReps}`;
+    }
+    return `Következő: ${rk.nextLabel} · még +${Math.max(1, Math.ceil(rk.next - rk.score))} ismétlés egy szettben`;
+  }
   // Javaslat a legutóbbi legjobb szettedből: ugyanannyi ismétlés több súllyal (2,5 kg-os lépés, mindig több mint amit már emeltél), vagy ugyanaz a súly több ismétléssel.
   const reps = rk.reps || 5, w0 = rk.refWeight || 0;
   let w = Math.ceil(rk.next / (1 + reps / 30) / 2.5) * 2.5; if (w <= w0) w = Math.floor(w0 / 2.5) * 2.5 + 2.5;
