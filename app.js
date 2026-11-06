@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v11';
+const APP_VERSION = 'v12';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -350,13 +350,14 @@ function lsSet(k, v) {
   catch (e) { pruneSnaps(2); try { localStorage.setItem(k, v); return true; } catch (e2) { return false; } }
 }
 function save() {
-  if (!ready) return Promise.resolve(); // betöltés előtt soha nem írunk felül semmit
+  if (!ready || stateSwapped) return Promise.resolve(); // betöltés előtt / barát adatainak nézésekor soha nem írunk
   state.version = 6; state.savedAt = Date.now();
   const raw = JSON.stringify(state);
   let ok = true;
   for (const k of LS_WRITE) ok = lsSet(k, raw) && ok;
   saveChain = saveChain.then(() => db ? writeDB(JSON.parse(raw)) : null).catch(() => { ok = false; warnSave(); });
   if (!ok) warnSave();
+  scheduleSync();
   return saveChain;
 }
 function warnSave() { if (saveWarned) return; saveWarned = true; toast('Figyelem: a mentés nem sikerült. Készíts biztonsági mentést fájlba!'); setTimeout(() => saveWarned = false, 30000); }
@@ -395,7 +396,7 @@ async function load() {
 /* ---------- megjelenítés ---------- */
 function render() {
   renderWeeks(); renderTabs(); renderHistoryBtn(); renderBanner();
-  if (view === 'history') renderHistory(); else renderWorkout();
+  if (view === 'history') renderHistory(); else if (view === 'social') renderSocial(); else renderWorkout();
 }
 function renderWeeks() {
   weekGrid.innerHTML = '';
@@ -432,10 +433,17 @@ function renderBanner() {
   } else cycleBanner.innerHTML = '';
 }
 function renderHistoryBtn() {
-  let b = $('historyBtn');
-  if (!b) { b = document.createElement('button'); b.id = 'historyBtn'; b.className = 'ghost'; dayTabs.after(b); }
+  let row = $('navRow');
+  if (!row) {
+    row = document.createElement('div'); row.id = 'navRow'; row.className = 'nav-row';
+    row.innerHTML = '<button id="historyBtn" class="ghost"></button><button id="socialBtn" class="ghost"></button>';
+    dayTabs.after(row);
+  }
+  const b = $('historyBtn'), sb = $('socialBtn');
   b.textContent = view === 'history' ? '← EDZÉS' : '📈 FEJLŐDÉS';
+  sb.textContent = view === 'social' ? '← EDZÉS' : '👥 BARÁTOK';
   b.onclick = () => { if (!ready) return; view = view === 'history' ? 'workout' : 'history'; render(); window.scrollTo(0, 0); };
+  sb.onclick = () => { if (!ready) return; view = view === 'social' ? 'workout' : 'social'; socialFriend = null; render(); window.scrollTo(0, 0); };
 }
 function startNewCycle() {
   const n = state.maxCycle + 1;
@@ -857,6 +865,244 @@ add30.onclick = () => { if (!timerEnd) return; timerEnd += 30000; persistTimer()
 document.addEventListener('visibilitychange', () => { if (!document.hidden && timerEnd) { unlockAudio(); tickTimer(); if (timerEnd) requestWake(); } });
 window.addEventListener('pageshow', () => { if (timerEnd) tickTimer(); });
 
+
+/* ---------- közösség: fiók, szinkron, barátok, admin ---------- */
+// A telefonon tárolt napló az elsődleges; a fiókba csak másolat kerül. Kapcsolat nélkül minden ugyanúgy működik.
+const SB_URL = 'https://ssjtfvgslmtgjxmnnnou.supabase.co';
+const SB_KEY = 'sb_publishable_fEv3pIvHqF_4DuRTvJ4LTQ_QIPtjC3D';
+const AUTH_KEY = 'ironlog-auth', LASTSYNC_KEY = 'ironlog-lastsync';
+let auth = (() => { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch (e) { return null; } })();
+let me = null, friends = null, friendsErr = '', socialFriend = null, adminList = null, syncTimer = null, syncErr = '', stateSwapped = false, authMode = 'login', socialBusy = false;
+
+function setAuth(j) {
+  auth = j ? { access_token: j.access_token, refresh_token: j.refresh_token, expires_at: j.expires_at || (Math.floor(Date.now() / 1000) + (j.expires_in || 3600)), user: { id: j.user?.id, email: j.user?.email } } : null;
+  try { if (auth) localStorage.setItem(AUTH_KEY, JSON.stringify(auth)); else localStorage.removeItem(AUTH_KEY); } catch (e) {}
+}
+async function sbRaw(path, { method = 'GET', body, headers = {}, token } = {}) {
+  const h = { apikey: SB_KEY, 'Content-Type': 'application/json', ...headers };
+  if (token) h.Authorization = 'Bearer ' + token;
+  const r = await fetch(SB_URL + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
+  const txt = await r.text(); let j = null; try { j = txt ? JSON.parse(txt) : null; } catch (e) {}
+  if (!r.ok) { const e = new Error(j?.msg || j?.message || j?.error_description || j?.error || ('HTTP ' + r.status)); e.status = r.status; e.code = j?.error_code || j?.code; throw e; }
+  return j;
+}
+let refreshing = null; // egyszerre csak egy tokenfrissítés fusson (különben a második érvénytelen tokennel próbálkozna)
+async function accessToken() {
+  if (!auth) return null;
+  if (auth.expires_at * 1000 > Date.now() + 60000) return auth.access_token;
+  if (!refreshing) refreshing = (async () => {
+    const rt = auth.refresh_token;
+    try { setAuth(await sbRaw('/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: { refresh_token: rt } })); }
+    catch (e) { if ((e.status === 400 || e.status === 401) && auth?.refresh_token === rt) { setAuth(null); me = null; } throw e; }
+    finally { refreshing = null; }
+  })();
+  await refreshing;
+  return auth?.access_token || null;
+}
+async function sb(path, opts = {}) { const t = await accessToken(); if (!t) throw new Error('Nincs bejelentkezve'); return sbRaw(path, { ...opts, token: t }); }
+function authErrorText(e) {
+  const m = String(e?.message || e), c = String(e?.code || '');
+  if (/invalid_credentials|Invalid login/i.test(c + m)) return 'Hibás e-mail-cím vagy jelszó.';
+  if (/user_already_exists|already registered/i.test(c + m)) return 'Ezzel az e-mail-címmel már regisztráltak – lépj be.';
+  if (/weak_password|at least 6/i.test(c + m)) return 'A jelszó legyen legalább 6 karakter.';
+  if (/email_not_confirmed/i.test(c + m)) return 'Az e-mail-cím nincs megerősítve.';
+  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'Nincs internetkapcsolat.';
+  return m;
+}
+const localHasData = st => Object.values(st?.exercises || {}).some(x => Object.values(x.occurrences || {}).some(hasData));
+
+async function signIn(email, password, name, register) {
+  const j = register
+    ? await sbRaw('/auth/v1/signup', { method: 'POST', body: { email, password, data: { display_name: name } } })
+    : await sbRaw('/auth/v1/token?grant_type=password', { method: 'POST', body: { email, password } });
+  if (!j?.access_token) throw new Error('A regisztráció megtörtént, de belépni még nem lehet (e-mail megerősítés szükséges).');
+  setAuth(j);
+  await afterLogin(true);
+}
+async function signOut() {
+  if (!confirm('Kijelentkezel? Az edzésnaplód a telefonon marad, csak a feltöltés és a barátok nézete áll le.')) return;
+  try { await sb('/auth/v1/logout', { method: 'POST' }); } catch (e) {}
+  setAuth(null); me = null; friends = null; adminList = null; socialFriend = null;
+  render();
+}
+/* Belépés után / indításkor: profil + a saját felhőmentés egyeztetése. */
+async function afterLogin(interactive) {
+  const rows = await sb('/rest/v1/rpc/my_profile', { method: 'POST', body: {} });
+  me = rows?.[0] || null;
+  if (!me) throw new Error('A profil nem található.');
+  if (!me.approved) { render(); return; }
+  const srv = (await sb(`/rest/v1/user_state?user_id=eq.${auth.user.id}&select=state,updated_at`))?.[0];
+  if (srv?.state && (srv.state.exercises || srv.state.logs)) {
+    const srvNewer = (Number(srv.state.savedAt) || 0) > (Number(state.savedAt) || 0) + 5000;
+    if (!localHasData(state) || (srvNewer && confirm(`A fiókodban újabb mentés van (${new Date(srv.updated_at).toLocaleString('hu-HU')}), mint ezen a telefonon.\n\nBetöltöd a fiókból? (Mégse: a telefonon lévő marad, és az kerül fel a fiókba.)`))) {
+      lsSet(PRE_IMPORT_PREFIX + new Date().toISOString().slice(0, 19).replace('T', ' '), JSON.stringify(state)); pruneSnaps();
+      state = migrate(srv.state); await save(); render();
+      toast('Az edzésnapló betöltve a fiókodból.');
+      return;
+    }
+  }
+  await pushState();
+  if (interactive) toast('Bejelentkezve. Az edzésnaplód feltöltve a fiókodba.');
+}
+function scheduleSync() { if (!auth || !me?.approved || stateSwapped) return; clearTimeout(syncTimer); syncTimer = setTimeout(pushState, 4000); }
+async function pushState() {
+  clearTimeout(syncTimer); syncTimer = null;
+  if (!auth || !ready || !me?.approved) return;
+  try {
+    await sb('/rest/v1/user_state?on_conflict=user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: { user_id: auth.user.id, state, app_version: APP_VERSION, updated_at: new Date().toISOString() } });
+    syncErr = ''; try { localStorage.setItem(LASTSYNC_KEY, String(Date.now())); } catch (e) {}
+  } catch (e) { syncErr = authErrorText(e); }
+  if (view === 'social' && !socialFriend) { const el = $('syncStatus'); if (el) el.textContent = syncStatusText(); }
+}
+function syncStatusText() {
+  if (syncErr) return 'Feltöltés sikertelen: ' + syncErr + ' (később újrapróbálja)';
+  const t = Number(localStorage.getItem(LASTSYNC_KEY) || 0);
+  return t ? 'Utolsó feltöltés: ' + new Date(t).toLocaleString('hu-HU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Még nem volt feltöltés';
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && syncTimer) pushState();
+  if (!document.hidden && auth && ready && !me) afterLogin(false).catch(() => {});
+});
+
+/* Barát adatainak nézése: ideiglenesen az ő állapotával számolunk (mentés ilyenkor tiltva). */
+function withState(st, fn) { const prev = state; state = st; stateSwapped = true; try { return fn(); } finally { state = prev; stateSwapped = false; } }
+function friendSummary(st) {
+  return withState(st, () => {
+    const sessions = {};
+    for (const obj of Object.values(state.exercises)) for (const [k, r] of Object.entries(obj.occurrences || {})) {
+      if (!anyDone(r)) continue;
+      const t = sessionTime(r), x = sessions[k] || (sessions[k] = { k, t: Infinity, n: 0 });
+      x.t = Math.min(x.t, t || Infinity); x.n++;
+    }
+    const list = Object.values(sessions).map(x => { const [c, w, d] = x.k.split('-').map(Number); return { ...x, t: x.t === Infinity ? 0 : x.t, c, w, d, p: pos(c, w, d), vol: dayVolume(c, w, d).total }; }).sort((a, b) => later(b, a));
+    const week = Date.now() - 7 * 864e5;
+    return { list, last: list[0] || null, thisWeek: list.filter(x => x.t > week).length, maxCycle: state.maxCycle };
+  });
+}
+async function loadFriends() {
+  socialBusy = true; friendsErr = '';
+  try {
+    const [profiles, states] = await Promise.all([
+      sb('/rest/v1/profiles?select=id,display_name,approved,share_enabled'),
+      sb('/rest/v1/user_state?select=user_id,state,updated_at')
+    ]);
+    const byId = Object.fromEntries((states || []).map(x => [x.user_id, x]));
+    friends = (profiles || []).filter(p => p.id !== auth.user.id).map(p => {
+      const raw = byId[p.id]; let st = null;
+      try { st = raw?.state ? migrate(raw.state) : null; } catch (e) { st = null; }
+      return { ...p, state: st, updated_at: raw?.updated_at, sum: st ? friendSummary(st) : null };
+    }).sort((a, b) => (b.sum?.last?.t || 0) - (a.sum?.last?.t || 0));
+    if (me?.is_admin) adminList = await sb('/rest/v1/rpc/admin_members', { method: 'POST', body: {} });
+  } catch (e) { friendsErr = authErrorText(e); }
+  socialBusy = false;
+  if (view === 'social') renderSocial();
+}
+
+function renderSocial() {
+  let h = `<div class="eyebrow">PROFIL & BARÁTOK</div><div class="day-name">BARÁTOK</div>`;
+  if (!auth) {
+    const reg = authMode === 'register';
+    h += `<div class="day-meta">Lépj be, és kövessétek egymás edzéseit. Az edzésnaplód a telefonon marad, a fiókba csak egy másolat kerül.</div>
+    <section class="social-card"><div class="seg"><button class="${reg ? '' : 'on'}" id="modeLogin">BELÉPÉS</button><button class="${reg ? 'on' : ''}" id="modeReg">REGISZTRÁCIÓ</button></div>
+    <form id="authForm" autocomplete="on">
+      ${reg ? '<label class="field"><span>Név (ezt látják a barátaid)</span><input id="authName" autocomplete="nickname" required></label>' : ''}
+      <label class="field"><span>E-mail</span><input id="authEmail" type="email" autocomplete="email" autocapitalize="off" required></label>
+      <label class="field"><span>Jelszó${reg ? ' (min. 6 karakter)' : ''}</span><input id="authPass" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" required minlength="6"></label>
+      <div class="auth-err" id="authErr"></div>
+      <button type="submit" class="primary wide" id="authSubmit">${reg ? 'REGISZTRÁCIÓ' : 'BELÉPÉS'}</button>
+    </form></section>`;
+    workout.innerHTML = h;
+    $('modeLogin').onclick = () => { authMode = 'login'; renderSocial(); };
+    $('modeReg').onclick = () => { authMode = 'register'; renderSocial(); };
+    $('authForm').onsubmit = async ev => {
+      ev.preventDefault();
+      const btn = $('authSubmit'); btn.disabled = true; $('authErr').textContent = '';
+      try { await signIn($('authEmail').value.trim(), $('authPass').value, reg ? $('authName').value.trim() : '', reg); friends = null; renderSocial(); }
+      catch (e) { if (auth) { toast(authErrorText(e)); renderSocial(); return; } $('authErr').textContent = authErrorText(e); btn.disabled = false; }
+    };
+    return;
+  }
+  if (socialFriend) return renderFriend();
+  if (!me) {
+    workout.innerHTML = h + '<div class="note">Profil betöltése…</div>';
+    afterLogin(false).then(() => { if (view === 'social') renderSocial(); }).catch(e => { if (view === 'social') workout.innerHTML = h + `<div class="note">${esc(authErrorText(e))}</div><button class="secondary wide" id="retryBtn">ÚJRA</button>`; const b = $('retryBtn'); if (b) b.onclick = renderSocial; });
+    return;
+  }
+  h += `<section class="social-card me-card"><div class="me-top"><div><div class="me-name">${esc(me.display_name || auth.user.email)}${me.is_admin ? ' <span class="admin-tag">ADMIN</span>' : ''}</div><div class="me-mail">${esc(auth.user.email)}</div></div><button class="secondary" id="renameBtn">NÉV</button></div>
+    <div class="sync-line" id="syncStatus">${esc(syncStatusText())}</div>
+    ${me.approved ? `<label class="switch-row"><input type="checkbox" id="shareToggle" ${me.share_enabled ? 'checked' : ''}><span><b>Adataim megosztása a többi taggal</b><small>Ha kikapcsolod, elrejted magad a többi tag elől.</small></span></label>` : '<div class="note warn">A fiókod jelenleg nem aktív, ezért a barátok nézete és a feltöltés szünetel.</div>'}
+    <div class="me-actions"><button class="secondary" id="syncNow">FELTÖLTÉS MOST</button><button class="secondary" id="logoutBtn">KIJELENTKEZÉS</button></div></section>`;
+  if (me.approved) {
+    h += `<div class="history-section">BARÁTOK</div>`;
+    if (friends === null || socialBusy) h += '<div class="note">Barátok betöltése…</div>';
+    else if (friendsErr) h += `<div class="note">${esc(friendsErr)}</div>`;
+    else if (!friends.length) h += '<div class="note">Még nincs más tag, vagy senki nem oszt meg adatot.</div>';
+    else h += friends.map(f => {
+      const s = f.sum, l = s?.last;
+      return `<button class="friend-card" data-friend="${esc(f.id)}"><div class="friend-top"><b>${esc(f.display_name || 'Névtelen')}</b>${me.is_admin && !f.share_enabled ? '<span class="pill">nem oszt meg</span>' : ''}<span class="friend-week">${s ? `${s.thisWeek} edzés / 7 nap` : ''}</span></div>
+        <div class="friend-last">${l ? `Utolsó: ${fmtDate(l.t) || ''} · ${DAYS[l.d]?.name || ''} · ${kg(l.vol)} kg` : 'Még nincs rögzített edzés'}</div></button>`;
+    }).join('');
+    h += '<button class="secondary wide" id="reloadFriends">FRISSÍTÉS</button>';
+    if (me.is_admin) h += adminHtml();
+  }
+  workout.innerHTML = h;
+  $('logoutBtn').onclick = signOut;
+  $('syncNow').onclick = async () => { await pushState(); toast(syncErr ? 'Feltöltés sikertelen.' : 'Feltöltve.'); };
+  $('renameBtn').onclick = async () => {
+    const n = prompt('Milyen néven lássanak a barátaid?', me.display_name || ''); if (n === null || !n.trim()) return;
+    try { await sb(`/rest/v1/profiles?id=eq.${auth.user.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { display_name: n.trim().slice(0, 40) } }); me.display_name = n.trim().slice(0, 40); renderSocial(); }
+    catch (e) { toast(authErrorText(e)); }
+  };
+  const st = $('shareToggle');
+  if (st) st.onchange = async () => {
+    const v = st.checked;
+    try { await sb(`/rest/v1/profiles?id=eq.${auth.user.id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: { share_enabled: v } }); me.share_enabled = v; toast(v ? 'A többi tag látja az edzéseidet.' : 'Elrejtve a többi tag elől.'); }
+    catch (e) { st.checked = !v; toast(authErrorText(e)); }
+  };
+  const rf = $('reloadFriends'); if (rf) rf.onclick = () => { friends = null; renderSocial(); };
+  workout.querySelectorAll('[data-friend]').forEach(b => b.onclick = () => { socialFriend = b.dataset.friend; renderSocial(); window.scrollTo(0, 0); });
+  bindAdmin();
+  if (me.approved && friends === null && !socialBusy) loadFriends();
+}
+function adminHtml() {
+  if (!adminList) return '';
+  return `<div class="history-section">TAGOK · CSAK TE LÁTOD</div>` + adminList.filter(m => m.id !== auth.user.id).map(m => `
+    <div class="admin-row"><div class="admin-info"><b>${esc(m.display_name || '—')}</b><span>${esc(m.email)}</span><span>${m.last_sync ? 'Utolsó feltöltés: ' + esc(new Date(m.last_sync).toLocaleString('hu-HU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })) : 'Még nem töltött fel'}</span>
+      <span class="pills">${!m.approved ? '<span class="pill bad">eltávolítva</span>' : ''}${m.admin_hidden ? '<span class="pill">elrejtve mások elől</span>' : ''}${!m.share_enabled ? '<span class="pill">ő nem oszt meg</span>' : ''}</span></div>
+      <div class="admin-btns">${m.approved ? `<button class="secondary" data-hide="${esc(m.id)}" data-v="${m.admin_hidden ? 0 : 1}">${m.admin_hidden ? 'LÁTHATÓ' : 'ELREJT'}</button>` : ''}<button class="secondary ${m.approved ? 'danger' : ''}" data-approve="${esc(m.id)}" data-v="${m.approved ? 0 : 1}">${m.approved ? 'ELTÁVOLÍT' : 'VISSZAVESZ'}</button></div></div>`).join('');
+}
+function bindAdmin() {
+  const call = async (target, approved, hidden) => {
+    try { await sb('/rest/v1/rpc/admin_set_member', { method: 'POST', body: { target, p_approved: approved, p_hidden: hidden } }); friends = null; adminList = null; renderSocial(); }
+    catch (e) { toast(authErrorText(e)); }
+  };
+  workout.querySelectorAll('[data-hide]').forEach(b => b.onclick = () => call(b.dataset.hide, null, b.dataset.v === '1'));
+  workout.querySelectorAll('[data-approve]').forEach(b => b.onclick = () => {
+    const rm = b.dataset.v === '0';
+    if (rm && !confirm('Eltávolítod ezt a tagot? Nem lát senkit, őt sem látják, és nem tud feltölteni. Később visszaveheted.')) return;
+    call(b.dataset.approve, !rm, null);
+  });
+}
+function renderFriend() {
+  const f = (friends || []).find(x => x.id === socialFriend);
+  if (!f) { socialFriend = null; return renderSocial(); }
+  let h = `<button class="secondary back-btn" id="friendBack">← BARÁTOK</button><div class="eyebrow">BARÁT</div><div class="day-name">${esc(f.display_name || 'Névtelen')}</div>`;
+  if (!f.state || !f.sum) { workout.innerHTML = h + '<div class="note">Még nem töltött fel edzést.</div>'; $('friendBack').onclick = () => { socialFriend = null; renderSocial(); }; return; }
+  const s = f.sum;
+  h += `<div class="day-meta">${s.thisWeek} edzés az elmúlt 7 napban · összesen ${s.list.length} edzés</div>`;
+  h += '<div class="history-section">LEGUTÓBBI EDZÉSEK</div>' + s.list.slice(0, 8).map(x => `<div class="session-row"><b>${esc(fmtDate(x.t) || '—')}</b><span>${DAYS[x.d]?.name || ''} · ${s.maxCycle > 1 ? x.c + '. ciklus ' : ''}${x.w}. hét</span><em>${kg(x.vol)} kg</em></div>`).join('');
+  const ids = withState(f.state, () => libraryIds().filter(id => Object.values(state.exercises[id]?.occurrences || {}).some(anyDone)));
+  h += `<div class="history-section">GYAKORLATOK</div><input id="friendSearch" class="lib-search" placeholder="🔍 Gyakorlat keresése…" autocomplete="off">`;
+  h += withState(f.state, () => ids.map(id => { const pb = personalBest(id), l = lastDone(id), hs = heavierSet(l); return `<button class="friend-ex" data-fex="${esc(id)}" data-hname="${esc(norm(nameOf(id)) + ' ' + norm(libMeta(id).hu))}"><b>${esc(nameOf(id))}</b><span>${hs ? `Legutóbb: ${showNum(hs.weight)} kg × ${showNum(hs.reps)}` : ''}${pb ? ` · 🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}` : ''}</span></button>`; }).join(''));
+  workout.innerHTML = h;
+  $('friendBack').onclick = () => { socialFriend = null; renderSocial(); window.scrollTo(0, 0); };
+  $('friendSearch').oninput = e => { const q = norm(e.target.value); workout.querySelectorAll('[data-fex]').forEach(b => b.classList.toggle('hidden', !!q && !b.dataset.hname.includes(q))); };
+  workout.querySelectorAll('[data-fex]').forEach(b => b.onclick = () => {
+    withState(f.state, () => openStats(b.dataset.fex));
+    $('statsTitle').textContent = `${f.display_name || ''} · ${$('statsTitle').textContent}`;
+  });
+}
+
 /* ---------- egyéb ---------- */
 let toastTimer = null;
 function toast(t) { const x = $('toast'); x.textContent = t; x.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => x.classList.remove('show'), 2600); }
@@ -875,7 +1121,7 @@ if ('serviceWorker' in navigator) {
 }
 $('updateBtn').onclick = () => { save(); setTimeout(() => location.reload(), 150); };
 render();
-load().then(() => { render(); restoreTimer(); }).catch(() => {
+load().then(() => { render(); restoreTimer(); if (auth) afterLogin(false).catch(() => {}); }).catch(() => {
   // Ha a betöltés váratlanul elakad, NEM írunk felül semmit (ready=false marad).
   workout.innerHTML = '<div class="note">Az adatok betöltése nem sikerült. Zárd be teljesen az alkalmazást, és nyisd meg újra. Az adataid nem törlődtek.</div>';
 });

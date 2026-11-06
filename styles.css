@@ -104,3 +104,46 @@
 .stats-sets{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:#aab2ba}
 .stats-sets i{color:#6c7680;font-style:normal;font-size:9.5px}
 .stats-top{font-size:13px;font-weight:900;color:#9cff57;align-self:end}
+
+/* IRONLOG v12 additions – közösség */
+.nav-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 14px}
+.nav-row #historyBtn,.nav-row #socialBtn{width:100%;margin:0}
+.social-card{background:#11151a;border:1px solid #252b31;border-radius:17px;padding:15px;margin:12px 0}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:#0a0d10;border-radius:11px;padding:4px;margin-bottom:14px}
+.seg button{background:none;border:0;color:#87919a;font-weight:900;font-size:11px;padding:9px;border-radius:8px;cursor:pointer}
+.seg button.on{background:#9cff57;color:#081006}
+.wide{width:100%;margin-top:6px;padding:13px}
+.auth-err{color:#ff6b77;font-size:12px;font-weight:700;min-height:16px;margin:2px 0 6px}
+.me-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.me-name{font-size:18px;font-weight:950}
+.me-mail{font-size:11px;color:#7f8993;margin-top:2px}
+.admin-tag{font-size:9px;background:#9cff57;color:#081006;border-radius:5px;padding:2px 5px;vertical-align:middle;letter-spacing:.8px}
+.sync-line{font-size:11px;color:#87919a;margin:10px 0}
+.switch-row{display:flex;gap:11px;align-items:flex-start;background:#0a0d10;border:1px solid #22282e;border-radius:12px;padding:11px;margin:4px 0 12px;cursor:pointer}
+.switch-row input{width:20px;height:20px;accent-color:#9cff57;flex-shrink:0;margin-top:1px}
+.switch-row b{display:block;font-size:13px}
+.switch-row small{display:block;font-size:10.5px;color:#7f8993;margin-top:3px}
+.me-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.me-actions .secondary{min-width:0;padding:10px 6px;font-size:11px}
+.note.warn{color:#ffb86b}
+.friend-card,.friend-ex{display:block;width:100%;text-align:left;background:#11151a;border:1px solid #252b31;border-radius:14px;padding:12px 13px;margin-bottom:8px;color:#f4f6f8;cursor:pointer}
+.friend-top{display:flex;align-items:center;gap:8px}
+.friend-top b{font-size:15px}
+.friend-week{margin-left:auto;font-size:10px;color:#9cff57;font-weight:800}
+.friend-last{font-size:11px;color:#87919a;margin-top:5px}
+.friend-ex b{display:block;font-size:13px}
+.friend-ex span{display:block;font-size:10.5px;color:#87919a;margin-top:3px}
+.pill{font-size:9px;font-weight:800;color:#c6cdd4;background:#22282e;border-radius:6px;padding:2px 6px}
+.pill.bad{background:#3a1519;color:#ff8a94}
+.pills{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+.admin-row{display:flex;justify-content:space-between;gap:10px;background:#0a0d10;border:1px solid #22282e;border-radius:12px;padding:11px;margin-bottom:7px}
+.admin-info{display:flex;flex-direction:column;gap:2px;font-size:10.5px;color:#87919a;min-width:0}
+.admin-info b{font-size:13px;color:#f4f6f8}
+.admin-info span{overflow-wrap:anywhere}
+.admin-btns{display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.admin-btns .secondary{padding:7px 9px;font-size:10px;min-width:0}
+.secondary.danger{color:#ff6b77;border-color:#4a2228}
+.session-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:baseline;padding:9px 2px;border-bottom:1px solid #1e2328;font-size:12px}
+.session-row span{color:#87919a;font-size:11px}
+.session-row em{font-style:normal;font-weight:900;color:#9cff57}
+.back-btn{margin-bottom:14px;padding:8px 12px;font-size:11px}
