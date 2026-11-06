@@ -156,3 +156,47 @@
 .fday-ex span{margin-top:4px}
 .fday-ex .pill{display:inline-block;margin:0 0 0 6px}
 .fx-now{color:#9cff57 !important;font-weight:800}
+
+/* IRONLOG v14 – rangok */
+.nav-row{grid-template-columns:1fr 1fr 1fr}
+.nav-row .ghost{font-size:12px;padding-left:4px;padding-right:4px;white-space:nowrap}
+.rank-badge{position:relative;display:inline-grid;place-items:center;width:30px;height:34px;flex-shrink:0;vertical-align:middle}
+.rank-badge svg{position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 2px 6px color-mix(in srgb,var(--rc) 40%,transparent))}
+.rank-badge .rb-shield{fill:var(--rc)}
+.rank-badge .rb-inner{fill:#0b0d10;opacity:.82}
+.rank-badge b{position:relative;font-size:10px;font-weight:950;color:var(--rc);margin-top:-2px}
+.rank-badge.big{width:54px;height:62px}
+.rank-badge.big b{font-size:16px}
+.rank-line{display:flex;gap:10px;align-items:center;background:#0a0d10;border:1px solid #22282e;border-radius:12px;padding:9px 11px;margin-top:10px}
+.rank-line>div{flex:1;min-width:0}
+.rank-line b{font-size:13px}
+.rank-line span{display:block;font-size:10px;color:#87919a;margin-top:4px}
+.rank-line.muted{font-size:11px;color:#87919a}
+.rr-bar{height:5px;border-radius:5px;background:#22282e;overflow:hidden;margin-top:5px}
+.rr-bar i{display:block;height:100%;border-radius:5px}
+.bw-row{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+.bw-val{font-size:24px;font-weight:950;margin-top:4px}
+.bw-date{font-size:10px;color:#7f8993;margin-top:2px}
+.bw-form{display:flex;gap:6px}
+.bw-form input{width:86px;background:#0a0d10;border:1px solid #2a3037;border-radius:9px;color:#fff;padding:10px;font-size:16px;outline:none}
+.bw-form input.invalid{border-color:#ff4f5e}
+.bw-note{font-size:10.5px;color:#7f8993;margin-top:10px}
+.overall-card{display:flex;gap:14px;align-items:center;background:linear-gradient(135deg,color-mix(in srgb,var(--rc) 16%,#11151a),#0e1115);border:1px solid color-mix(in srgb,var(--rc) 45%,#252b31);border-radius:17px;padding:14px 16px;margin:12px 0}
+.ov-label{font-size:24px;font-weight:950;color:var(--rc);margin-top:3px}
+.board-sel{margin-bottom:10px}
+.machine-note{font-size:11px;color:#ffb86b;background:#1c1610;border:1px solid #3d2f1c;border-radius:11px;padding:9px 11px;margin-bottom:9px;line-height:1.45}
+.board-row{display:flex;gap:10px;align-items:center;background:#11151a;border:1px solid #252b31;border-radius:13px;padding:10px 12px;margin-bottom:7px}
+.board-row.me{border-color:#4b5b2d;background:#141b10}
+.board-pos{width:24px;font-weight:950;font-size:14px;text-align:center;color:#dbe0e5}
+.board-main b{display:block;font-size:14px}
+.board-main span{display:block;font-size:10.5px;color:#87919a;margin-top:2px}
+.rank-row{display:flex;gap:11px;align-items:center;width:100%;text-align:left;background:#11151a;border:1px solid #252b31;border-radius:14px;padding:11px 12px;margin-bottom:8px;color:#f4f6f8;cursor:pointer}
+.rr-main{flex:1;min-width:0}
+.rr-main b{display:block;font-size:13px}
+.rr-label{font-size:12px;font-weight:900}
+.rr-need{display:block;font-size:10px;color:#87919a;margin-top:5px}
+.rr-machine{display:block;font-size:9.5px;color:#ffb86b;margin-top:3px}
+.lib-sub{font-size:9.5px;font-weight:900;letter-spacing:1px;color:#7e8791;margin:6px 0 2px}
+.lib-item.db{border-style:dashed}
+select.lib-search{appearance:none;-webkit-appearance:none}
+.fday-ex b small{font-size:10px;margin-left:4px}
