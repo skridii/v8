@@ -147,3 +147,12 @@
 .session-row span{color:#87919a;font-size:11px}
 .session-row em{font-style:normal;font-weight:900;color:#9cff57}
 .back-btn{margin-bottom:14px;padding:8px 12px;font-size:11px}
+
+/* IRONLOG v13 additions */
+.set-tools{display:flex;gap:8px;margin-top:8px}
+.set-tool{flex:1;background:rgba(156,255,87,.05);border:1px dashed #3a4b30;color:#9cff57;border-radius:10px;padding:9px;font-weight:900;font-size:11px;letter-spacing:.5px;cursor:pointer}
+.set-tool.minus{flex:0 0 auto;color:#ff8a94;border-color:#4a2228;background:none}
+.friend-tabs{margin-bottom:10px}
+.fday-ex span{margin-top:4px}
+.fday-ex .pill{display:inline-block;margin:0 0 0 6px}
+.fx-now{color:#9cff57 !important;font-weight:800}

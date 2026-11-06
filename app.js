@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v12';
+const APP_VERSION = 'v13';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -138,10 +138,14 @@ function lastDone(id) {
   const x = list[list.length - 1];
   return x ? { ...x.r, c: x.c, w: x.w, d: x.d, t: x.t } : null;
 }
+function setsText(r, sep = ' · ', withKg = true) {
+  const f = s => s && (s.weight || s.reps) ? `${showNum(s.weight) || '—'}${withKg ? ' kg' : ''} × ${showNum(s.reps) || '—'}` : '—';
+  return (r?.sets || []).map((x, i) => `S${i + 1} ${f(x)}`).join(sep);
+}
 function lastSummary(id) {
   const l = lastDone(id); if (!l) return 'Még nincs rögzített adat';
   const f = s => s?.done ? `${showNum(s.weight)} kg × ${showNum(s.reps)}` : '—';
-  return `Legutóbb (${cycLabel(l.c).toLowerCase()}${l.w}. hét): S1 ${f(l.sets?.[0])} · S2 ${f(l.sets?.[1])}`;
+  return `Legutóbb (${cycLabel(l.c).toLowerCase()}${l.w}. hét): ${(l.sets || []).map((x, i) => `S${i + 1} ${f(x)}`).join(' · ')}`;
 }
 function daysWith(id, c, w) { return layoutFor(c, w).map((day, d) => day.some(s => s.variants.some(v => exId(v.name) === id)) ? DAYS[d].name : null).filter(Boolean); }
 /* Napi megmozgatott súly: minden kész szett súly × ismétlés az adott edzésnapon. */
@@ -471,10 +475,12 @@ function renderWorkout() {
       h += `<div class="variant-row"><span class="variant-tag">VÁLTAKOZÓ</span><button class="variant-btn" data-variant data-e="${e}">↔ Ezen a héten inkább: ${esc(other.name)}</button></div>`;
     }
     if (pb) h += `<div class="record-badge">🏆 SZEMÉLYES REKORD · ${showNum(pb.weight)} kg × ${showNum(pb.reps)} · ${state.maxCycle > 1 ? pb.c + '. ciklus, ' : ''}${pb.w}. hét</div>`;
-    if (last) h += `<div class="history"><div>LEGUTÓBBI ALKALOM · ${cycLabel(last.c)}${last.w}. HÉT · ${DAYS[last.d]?.name || ''}</div><strong>Warm-up: ${esc(showNum(last.warmup?.weight)) || '—'} kg × ${esc(showNum(last.warmup?.reps)) || '—'} · S1: ${esc(showNum(last.sets?.[0]?.weight)) || '—'} kg × ${esc(showNum(last.sets?.[0]?.reps)) || '—'} · S2: ${esc(showNum(last.sets?.[1]?.weight)) || '—'} kg × ${esc(showNum(last.sets?.[1]?.reps)) || '—'}</strong></div>`;
+    if (last) h += `<div class="history"><div>LEGUTÓBBI ALKALOM · ${cycLabel(last.c)}${last.w}. HÉT · ${DAYS[last.d]?.name || ''}</div><strong>Warm-up: ${esc(showNum(last.warmup?.weight)) || '—'} kg × ${esc(showNum(last.warmup?.reps)) || '—'} · ${esc(setsText(last))}</strong></div>`;
     h += `<div class="sets"><div class="set-labels"><span>SET</span><span>KG</span><span>REPS</span><span></span></div>`;
     h += setRowHtml('W', e, wu, 'warmup');
-    for (let s = 0; s < 2; s++) h += setRowHtml(String(s + 1), e, sets[s] || emptySet(), 'work', s);
+    const nSets = Math.max(2, sets.length);
+    for (let s = 0; s < nSets; s++) h += setRowHtml(String(s + 1), e, sets[s] || emptySet(), 'work', s);
+    h += `<div class="set-tools"><button class="set-tool" data-addset data-e="${e}">+ SZETT</button>${nSets > 2 ? `<button class="set-tool minus" data-delset data-e="${e}">− UTOLSÓ SZETT</button>` : ''}</div>`;
     h += `</div><div class="last">Bemelegítő szett után: <strong>1:00</strong> · Munkasorozat után: <strong>2:30</strong></div></article>`;
   });
   if (!slots.length) h += '<div class="note">Ezen a napon nincs gyakorlat. Adj hozzá egyet!</div>';
@@ -525,6 +531,21 @@ function bindInputs() {
     toast(`Ezen a héten: ${slot.variants[1 - vi].name}`);
   });
   workout.querySelectorAll('[data-swap]').forEach(btn => btn.onclick = () => openEditor('edit', +btn.dataset.e));
+  workout.querySelectorAll('[data-addset]').forEach(btn => btn.onclick = () => {
+    const slot = curSlots()[+btn.dataset.e]; if (!slot) return;
+    lockVariant(slot);
+    const r = ensureRecord(state.cycle, state.week, state.day, slotName(state.cycle, state.week, state.day, slot));
+    r.sets.push(emptySet()); r.ts = Date.now();
+    save(); renderWorkout();
+  });
+  workout.querySelectorAll('[data-delset]').forEach(btn => btn.onclick = () => {
+    const slot = curSlots()[+btn.dataset.e]; if (!slot) return;
+    const r = recordFor(state.cycle, state.week, state.day, slotName(state.cycle, state.week, state.day, slot));
+    if (!r || r.sets.length <= 2) return;
+    const last = r.sets[r.sets.length - 1];
+    if ((last.done || last.weight || last.reps) && !confirm(`Törlöd a ${r.sets.length}. szettet (${showNum(last.weight) || '—'} kg × ${showNum(last.reps) || '—'})?`)) return;
+    r.sets.pop(); save(); renderWorkout();
+  });
   workout.querySelectorAll('[data-stats]').forEach(btn => btn.onclick = () => openStats(btn.dataset.stats));
   $('addExBtn').onclick = () => openEditor('add');
 }
@@ -620,8 +641,8 @@ function renderHistory() {
   const c = state.cycle, w = state.week, L = layoutFor(c, w);
   let h = `<div class="eyebrow">PROGRESS & WEEKLY SUMMARY</div><div class="day-name">FEJLŐDÉS</div><div class="day-meta">Személyes rekordok, heti teljesítés és gyakorlatonkénti előzmények.</div>`;
   const rows = DAYS.map((day, d) => {
-    let done = 0; const total = (L[d] || []).length * 2;
-    for (const slot of (L[d] || [])) { const r = recordFor(c, w, d, slotName(c, w, d, slot)); done += (r?.sets || []).slice(0, 2).filter(s => s?.done).length; }
+    let done = 0, total = 0;
+    for (const slot of (L[d] || [])) { const r = recordFor(c, w, d, slotName(c, w, d, slot)); total += Math.max(2, r?.sets?.length || 0); done += (r?.sets || []).filter(s => s?.done).length; }
     return { name: day.name, done, total, vol: dayVolume(c, w, d).total };
   });
   const started = rows.filter(x => x.done > 0).length, finished = rows.filter(x => x.total > 0 && x.done >= x.total).length;
@@ -684,7 +705,7 @@ function statsHtml(id) {
   for (const { c, w, d, r, t } of [...rows].reverse()) {
     const f = s => s && (s.weight || s.reps) ? `${esc(showNum(s.weight)) || '—'} × ${esc(showNum(s.reps)) || '—'}${s.done ? '' : ' <i>(nincs kész)</i>'}` : '—';
     const hs = heavierSet(r);
-    h += `<div class="stats-row"><div class="stats-when"><b>${cycLabel(c)}${w}. hét · ${DAYS[d]?.name || ''}</b><span>${fmtDate(t)}</span></div><div class="stats-sets"><span>WU ${f(r.warmup)}</span><span>S1 ${f(r.sets?.[0])}</span><span>S2 ${f(r.sets?.[1])}</span></div>${hs ? `<div class="stats-top">${showNum(hs.weight)} kg</div>` : ''}</div>`;
+    h += `<div class="stats-row"><div class="stats-when"><b>${cycLabel(c)}${w}. hét · ${DAYS[d]?.name || ''}</b><span>${fmtDate(t)}</span></div><div class="stats-sets"><span>WU ${f(r.warmup)}</span>${(r.sets || []).map((x, i) => `<span>S${i + 1} ${f(x)}</span>`).join('')}</div>${hs ? `<div class="stats-top">${showNum(hs.weight)} kg</div>` : ''}</div>`;
   }
   return h + '</div>';
 }
@@ -797,8 +818,9 @@ function persistTimer() { try { if (timerEnd) localStorage.setItem(TIMER_KEY, JS
 function nextStep(ctx) {
   if (!ctx) return null;
   const slots = layoutFor(ctx.c, ctx.w)[ctx.d] || [], steps = [];
-  slots.forEach((slot, e) => { const name = slotName(ctx.c, ctx.w, ctx.d, slot), r = recordFor(ctx.c, ctx.w, ctx.d, name); steps.push({ e, name, kind: 'warmup', s: 0, done: !!r?.warmup?.done }); [0, 1].forEach(s => steps.push({ e, name, kind: 'work', s, done: !!r?.sets?.[s]?.done })); });
-  const cur = ctx.e * 3 + (ctx.kind === 'warmup' ? 0 : 1 + ctx.s);
+  slots.forEach((slot, e) => { const name = slotName(ctx.c, ctx.w, ctx.d, slot), r = recordFor(ctx.c, ctx.w, ctx.d, name); steps.push({ e, name, kind: 'warmup', s: 0, done: !!r?.warmup?.done }); for (let s = 0; s < Math.max(2, r?.sets?.length || 0); s++) steps.push({ e, name, kind: 'work', s, done: !!r?.sets?.[s]?.done }); });
+  let cur = steps.findIndex(x => x.e === ctx.e && x.kind === (ctx.kind === 'warmup' ? 'warmup' : 'work') && (ctx.kind === 'warmup' || x.s === ctx.s));
+  if (cur < 0) cur = 0;
   for (let i = 1; i <= steps.length; i++) { const st = steps[(cur + i) % steps.length]; if (!st.done) return st; }
   return { finished: true };
 }
@@ -872,6 +894,7 @@ const SB_URL = 'https://ssjtfvgslmtgjxmnnnou.supabase.co';
 const SB_KEY = 'sb_publishable_fEv3pIvHqF_4DuRTvJ4LTQ_QIPtjC3D';
 const AUTH_KEY = 'ironlog-auth', LASTSYNC_KEY = 'ironlog-lastsync';
 let auth = (() => { try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); } catch (e) { return null; } })();
+let friendDay = null;
 let me = null, friends = null, friendsErr = '', socialFriend = null, adminList = null, syncTimer = null, syncErr = '', stateSwapped = false, authMode = 'login', socialBusy = false;
 
 function setAuth(j) {
@@ -1060,7 +1083,7 @@ function renderSocial() {
     catch (e) { st.checked = !v; toast(authErrorText(e)); }
   };
   const rf = $('reloadFriends'); if (rf) rf.onclick = () => { friends = null; renderSocial(); };
-  workout.querySelectorAll('[data-friend]').forEach(b => b.onclick = () => { socialFriend = b.dataset.friend; renderSocial(); window.scrollTo(0, 0); });
+  workout.querySelectorAll('[data-friend]').forEach(b => b.onclick = () => { socialFriend = b.dataset.friend; friendDay = null; renderSocial(); window.scrollTo(0, 0); });
   bindAdmin();
   if (me.approved && friends === null && !socialBusy) loadFriends();
 }
@@ -1091,12 +1114,25 @@ function renderFriend() {
   const s = f.sum;
   h += `<div class="day-meta">${s.thisWeek} edzés az elmúlt 7 napban · összesen ${s.list.length} edzés</div>`;
   h += '<div class="history-section">LEGUTÓBBI EDZÉSEK</div>' + s.list.slice(0, 8).map(x => `<div class="session-row"><b>${esc(fmtDate(x.t) || '—')}</b><span>${DAYS[x.d]?.name || ''} · ${s.maxCycle > 1 ? x.c + '. ciklus ' : ''}${x.w}. hét</span><em>${kg(x.vol)} kg</em></div>`).join('');
+  // Edzésnapok: a barát aktuális programja (az általa hozzáadott / cserélt gyakorlatokkal együtt)
+  const fd = friendDay ?? f.state.day ?? 0;
+  h += `<div class="history-section">EDZÉSNAPOK · ${f.state.maxCycle > 1 ? f.state.cycle + '. ciklus, ' : ''}${f.state.week}. hét</div><nav class="tabs friend-tabs">${DAYS.map((d, i) => `<button class="tab${i === fd ? ' active' : ''}" data-fday="${i}">${d.name}</button>`).join('')}</nav>`;
+  h += withState(f.state, () => {
+    const c = state.cycle, w = state.week, slots = layoutFor(c, w)[fd] || [];
+    if (!slots.length) return '<div class="note">Ezen a napon nincs gyakorlat.</div>';
+    return slots.map(slot => {
+      const name = slotName(c, w, fd, slot), id = exId(name), l = lastDone(id), pb = personalBest(id), cur = recordFor(c, w, fd, name);
+      const alt = slot.variants.length > 1 ? `<span class="pill">váltakozik: ${esc(slot.variants.map(v => v.name).join(' / '))}</span>` : '';
+      return `<button class="friend-ex fday-ex" data-fex="${esc(id)}"><b>${esc(name)}</b><span>${esc(slot.reps)} ${alt}</span>${anyDone(cur) ? `<span class="fx-now">Ezen a héten: ${esc(setsText(cur))}</span>` : ''}<span>${l ? `Legutóbb (${esc(fmtDate(l.t) || l.w + '. hét')}): ${esc(setsText(l))}` : 'Még nincs adat'}</span>${pb ? `<span>🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}</span>` : ''}</button>`;
+    }).join('');
+  });
   const ids = withState(f.state, () => libraryIds().filter(id => Object.values(state.exercises[id]?.occurrences || {}).some(anyDone)));
-  h += `<div class="history-section">GYAKORLATOK</div><input id="friendSearch" class="lib-search" placeholder="🔍 Gyakorlat keresése…" autocomplete="off">`;
+  h += `<div class="history-section">ÖSSZES GYAKORLATA</div><input id="friendSearch" class="lib-search" placeholder="🔍 Gyakorlat keresése…" autocomplete="off">`;
   h += withState(f.state, () => ids.map(id => { const pb = personalBest(id), l = lastDone(id), hs = heavierSet(l); return `<button class="friend-ex" data-fex="${esc(id)}" data-hname="${esc(norm(nameOf(id)) + ' ' + norm(libMeta(id).hu))}"><b>${esc(nameOf(id))}</b><span>${hs ? `Legutóbb: ${showNum(hs.weight)} kg × ${showNum(hs.reps)}` : ''}${pb ? ` · 🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}` : ''}</span></button>`; }).join(''));
   workout.innerHTML = h;
-  $('friendBack').onclick = () => { socialFriend = null; renderSocial(); window.scrollTo(0, 0); };
-  $('friendSearch').oninput = e => { const q = norm(e.target.value); workout.querySelectorAll('[data-fex]').forEach(b => b.classList.toggle('hidden', !!q && !b.dataset.hname.includes(q))); };
+  $('friendBack').onclick = () => { socialFriend = null; friendDay = null; renderSocial(); window.scrollTo(0, 0); };
+  workout.querySelectorAll('[data-fday]').forEach(b => b.onclick = () => { friendDay = +b.dataset.fday; renderFriend(); });
+  $('friendSearch').oninput = e => { const q = norm(e.target.value); workout.querySelectorAll('[data-fex][data-hname]').forEach(b => b.classList.toggle('hidden', !!q && !b.dataset.hname.includes(q))); };
   workout.querySelectorAll('[data-fex]').forEach(b => b.onclick = () => {
     withState(f.state, () => openStats(b.dataset.fex));
     $('statsTitle').textContent = `${f.display_name || ''} · ${$('statsTitle').textContent}`;
