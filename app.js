@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v22';
+const APP_VERSION = 'v23';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -1502,8 +1502,9 @@ function renderGate() {
     };
     return;
   }
-  renderAuth(`<div class="gate-hero"><div class="brand">IRON<span>LOG</span></div><div class="gate-title">Üdv az IRONLOG-ban! 💪</div><div class="day-meta">Az app használatához regisztrálj, vagy lépj be. Így az edzésnaplód a fiókodban is biztonságban van, és láthatod a barátaid edzéseit és rangjait. A telefonodon lévő adatok megmaradnak.</div></div>`,
+  renderAuth(inAppWarning() + `<div class="gate-hero"><div class="brand">IRON<span>LOG</span></div><div class="gate-title">Üdv az IRONLOG-ban! 💪</div><div class="day-meta">Az app használatához regisztrálj, vagy lépj be. Így az edzésnaplód a fiókodban is biztonságban van, és láthatod a barátaid edzéseit és rangjait. A telefonodon lévő adatok megmaradnak.</div></div>`,
     () => { friends = null; view = 'workout'; render(); window.scrollTo(0, 0); if (bodyWeight()) toast(`Üdv${me?.display_name ? ', ' + me.display_name : ''}! Jó edzést!`); });
+  const c2 = $('copyBtn2'); if (c2) c2.onclick = copyLink;
 }
 function renderSocial() {
   let h = `<div class="eyebrow">PROFIL & BARÁTOK</div><div class="day-name">BARÁTOK</div>`;
@@ -1610,6 +1611,13 @@ function renderFriend() {
 const APP_URL = 'https://skridii.github.io/v8/';
 const INSTA_URL = 'https://www.instagram.com/skridi_/';
 const INFO_KEY = 'ironlog-info-read';
+// Instagram / Facebook / Messenger beépített böngészője nem tud appot telepíteni és tárhelye sem tartós.
+const IN_APP_BROWSER = /Instagram|FBAN|FBAV|FB_IAB|Messenger|Line\/|TikTok|Snapchat/i.test(navigator.userAgent);
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+function inAppWarning() {
+  if (!IN_APP_BROWSER) return '';
+  return `<section class="inapp-warn"><b>⚠️ Az Instagram (vagy Facebook) beépített böngészőjében vagy.</b><span>Innen nem lehet az appot telepíteni, és az adataid sem maradnak meg biztonságosan.</span><span>${IS_ANDROID ? 'Koppints jobb fent a <b>⋮</b> menüre → <b>Megnyitás Chrome-ban</b> (vagy „Megnyitás böngészőben”).' : 'Koppints jobb fent a <b>•••</b> menüre → <b>Megnyitás külső böngészőben</b> / <b>Megnyitás Safariban</b>.'}</span><button class="secondary" id="copyBtn2">LINK MÁSOLÁSA</button><span class="muted">…vagy másold ki a linket, és illeszd be a ${IS_ANDROID ? 'Chrome' : 'Safari'} címsorába.</span></section>`;
+}
 function infoRead() { try { return !!localStorage.getItem(INFO_KEY); } catch (e) { return true; } }
 function renderInfo() {
   const first = !infoRead();
@@ -1621,14 +1629,15 @@ function renderInfo() {
     <div class="bw-note">Küldd el a linket, nyissa meg, tegye ki a kezdőképernyőre, és regisztráljon a 👥 BARÁTOK fülön.</div></section>`;
   const sec = (t, items) => `<section class="social-card info-card"><div class="eyebrow">${t}</div><ol>${items.map(x => `<li>${x}</li>`).join('')}</ol></section>`;
   h += sec('📱 IPHONE – KEZDŐKÉPERNYŐRE', [
-    'Nyisd meg a linket a <b>Safari</b> böngészőben.',
+    'Nyisd meg a linket a <b>Safari</b> böngészőben (ha Instagramon kaptad: ••• → Megnyitás külső böngészőben).',
     'Koppints alul a <b>Megosztás</b> gombra (négyzet felfelé nyíllal).',
     'Válaszd: <b>Főképernyőhöz adás</b> → <b>Hozzáadás</b>.',
     'Ezután mindig az <b>IRONLOG ikonról</b> indítsd, ne a Safariból.',
     '⚠️ Az ikont <b>ne töröld</b> és ne add hozzá újra – iPhone-on az ikonhoz tartozik a tárhely, törléskor az adatok elveszhetnek.']);
+  if (deferredPrompt) h += `<button class="primary wide" id="installNow">📲 TELEPÍTÉS MOST</button>`;
   h += sec('🤖 ANDROID – KEZDŐKÉPERNYŐRE', [
-    'Nyisd meg a linket a <b>Chrome</b> böngészőben.',
-    'Jobb fent <b>⋮</b> menü → <b>Hozzáadás a kezdőképernyőhöz</b> (vagy <b>Alkalmazás telepítése</b>).',
+    'Nyisd meg a linket a <b>Chrome</b> böngészőben – <b>ne</b> az Instagram / Messenger beépített böngészőjében (ott: ⋮ → Megnyitás Chrome-ban).',
+    'Jobb fent <b>⋮</b> menü → <b>Alkalmazás telepítése</b> (vagy <b>Hozzáadás a kezdőképernyőhöz</b> → <b>Telepítés</b>).',
     'Ezután az ikonról indítsd.']);
   h += sec('🚀 ELSŐ LÉPÉSEK', [
     '<b>👥 BARÁTOK</b> → <b>REGISZTRÁCIÓ</b>: név, e-mail, jelszó. A naplód innentől a fiókodba is mentődik.',
@@ -1655,7 +1664,9 @@ function renderInfo() {
   h += `<section class="credit-card"><div class="eyebrow">KÉSZÍTETTE</div><div class="credit-name">Sarkadi Ádám</div><div class="credit-nick">„Skridi”</div>
     <a class="primary insta-btn" href="${INSTA_URL}" target="_blank" rel="noopener">📸 Instagram · @skridi_</a><div class="bw-date">IRONLOG ${APP_VERSION}</div></section>`;
   if (first) h += `<button class="primary wide read-btn" id="infoDoneBtn">✓ ELOLVASTAM – TOVÁBB</button>`;
-  workout.innerHTML = h;
+  workout.innerHTML = inAppWarning() + h;
+  const c2 = $('copyBtn2'); if (c2) c2.onclick = copyLink;
+  const ia = $('installNow'); if (ia) ia.onclick = async () => { if (deferredPrompt) { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; renderInfo(); } };
   const done = $('infoDoneBtn');
   if (done) done.onclick = () => { try { localStorage.setItem(INFO_KEY, String(Date.now())); } catch (e) {} view = 'workout'; render(); window.scrollTo(0, 0); };
   $('shareBtn').onclick = async () => {
@@ -1674,7 +1685,7 @@ async function copyLink() {
 let toastTimer = null;
 function toast(t) { const x = $('toast'); x.textContent = t; x.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => x.classList.remove('show'), 2600); }
 let deferredPrompt;
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; installBtn.classList.remove('hidden'); });
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; installBtn.classList.remove('hidden'); installBtn.textContent = '📲 TELEPÍTÉS'; if (view === 'info' && ready) renderInfo(); });
 installBtn.onclick = async () => { if (deferredPrompt) { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; installBtn.classList.add('hidden'); } };
 window.addEventListener('error', () => { try { toast('Hiba történt. Ha valami nem jelenik meg, indítsd újra az alkalmazást.'); } catch (e) {} });
 

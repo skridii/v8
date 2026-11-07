@@ -235,3 +235,9 @@ body.gated .week-panel,body.gated #dayTabs,body.gated #navRow,body.gated #cycleB
 /* IRONLOG v22 – kötelező infó */
 body.must-read #infoBtn{display:none}
 .read-btn{margin:6px 0 24px;padding:16px;font-size:14px}
+
+/* IRONLOG v23 – beépített böngésző figyelmeztetés */
+.inapp-warn{display:flex;flex-direction:column;gap:8px;background:#2a1a0c;border:1px solid #8a5a22;border-radius:15px;padding:14px;margin:12px 0;font-size:12.5px;line-height:1.45;color:#ffd9a8}
+.inapp-warn b{color:#fff}
+.inapp-warn .muted{font-size:11px;color:#c9a57a}
+.inapp-warn .secondary{align-self:flex-start}
