@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v24';
+const APP_VERSION = 'v25';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -809,6 +809,7 @@ function monthHtml() {
 function renderHistory() {
   const c = state.cycle, w = state.week, L = layoutFor(c, w);
   let h = `<div class="eyebrow">PROGRESS & WEEKLY SUMMARY</div><div class="day-name">FEJLŐDÉS</div><div class="day-meta">Személyes rekordok, heti teljesítés és gyakorlatonkénti előzmények.</div>`;
+  h += `<section class="social-card hevy-card"><div class="eyebrow">📥 ADATOK ÁTHOZÁSA A HEVY (HEAVY) APPBÓL</div><div class="bw-note">Ha eddig a Hevy (kiejtve „heavy”) appban vezetted az edzéseidet, itt áthozhatod őket. A Hevy-ben: <b>Profile → Settings → Export & Import Data → Export Data → Export Workouts</b>. A kapott CSV-fájlt töltsd be itt – az edzéseid dátummal bekerülnek az előzményekbe, a rangok és a görbék is számolnak velük.${state.hevyImported ? ` Eddig importálva: ${Object.keys(state.hevyImported).length} edzés.` : ''}</div><label class="primary import-label hevy-btn">HEVY (HEAVY) ADATOK BETÖLTÉSE<input id="hevyInput" type="file" accept=".csv,text/csv,text/plain" hidden></label></section>`;
   const rows = DAYS.map((day, d) => {
     let done = 0, total = 0;
     for (const slot of (L[d] || [])) { const r = recordFor(c, w, d, slotName(c, w, d, slot)); total += Math.max(slotSets(slot), r?.sets?.length || 0); done += (r?.sets || []).filter(s => s?.done).length; }
@@ -829,7 +830,7 @@ function renderHistory() {
 
   h += `<div class="history-section">CIKLUS</div><div class="cycle-banner"><span>${state.maxCycle > 1 ? `${state.maxCycle} ciklus rögzítve. Váltás a fenti ‹ › nyilakkal.` : 'Új 6 hetes ciklus indításakor a mostani eredmények megmaradnak.'}</span><button class="primary" id="newCycleBtn2">ÚJ CIKLUS</button></div>`;
   h += '<div class="history-actions"><button id="exportBtn" class="secondary">BIZTONSÁGI MENTÉS FÁJLBA</button><label class="secondary import-label">MENTÉS BETÖLTÉSE<input id="importInput" type="file" accept=".json,application/json" hidden></label></div>';
-  h += `<section class="social-card hevy-card"><div class="eyebrow">HEVY-BŐL ÁTJÖSSZ?</div><div class="bw-note">A Hevy-ben: <b>Profile → Settings → Export & Import Data → Export Data → Export Workouts</b>. A kapott CSV-fájlt töltsd be itt – az edzéseid dátummal bekerülnek az előzményekbe, a rangok és a görbék is számolnak velük.${state.hevyImported ? ` Eddig importálva: ${Object.keys(state.hevyImported).length} edzés.` : ''}</div><label class="primary import-label hevy-btn">HEVY CSV BETÖLTÉSE<input id="hevyInput" type="file" accept=".csv,text/csv,text/plain" hidden></label></section>`;
+
   const snaps = snapKeys();
   if (snaps.length) {
     h += `<details class="history-group"><summary>Automatikus helyi másolatok (${snaps.length})</summary><div class="progress-ex">${snaps.map(k => `<div class="snap-row"><span>${esc(snapLabel(k))}</span><button class="secondary" data-snap="${esc(k)}">LETÖLTÉS</button></div>`).join('')}<div class="empty">A letöltött fájl a MENTÉS BETÖLTÉSE gombbal visszatölthető.</div></div></details>`;
@@ -1763,7 +1764,7 @@ function renderInfo() {
     '<b>👥 BARÁTOK</b> → <b>REGISZTRÁCIÓ</b>: név, e-mail, jelszó. A naplód innentől a fiókodba is mentődik.',
     '<b>🏅 RANGOK</b> → add meg a <b>testsúlyodat</b> (ehhez igazodnak a rangok).',
     'Ha más gyakorlatokat csinálsz, mint a programban: <b>CSERE</b> vagy <b>+ ÚJ GYAKORLAT HOZZÁADÁSA</b>.',
-    'Eddig <b>Hevy</b>-t használtál? A Hevy-ben: Profile → Settings → Export & Import Data → Export Data → <b>Export Workouts</b>, majd itt: <b>📈 FEJLŐDÉS → HEVY CSV BETÖLTÉSE</b>. Az előzményeid átjönnek.']);
+    'Eddig a <b>Hevy (Heavy)</b> appot használtad? A Hevy-ben: Profile → Settings → Export & Import Data → Export Data → <b>Export Workouts</b>, majd itt: <b>📈 FEJLŐDÉS</b> → legfelül <b>HEVY (HEAVY) ADATOK BETÖLTÉSE</b>. Az előzményeid átjönnek.']);
   h += sec('🏋️ HOGYAN HASZNÁLD', [
     'Fent válaszd ki a <b>hetet</b> (1–6) és az <b>edzésnapot</b> (LOWER 1, UPPER 1…).',
     'Gyakorlatonként: <b>W</b> = bemelegítő szett, <b>1, 2</b> = munkasorozatok. Írd be a súlyt és az ismétlést, majd koppints a <b>○</b> gombra – indul a pihenőidő (1:00 / 2:30).',
