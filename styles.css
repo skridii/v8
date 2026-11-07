@@ -231,3 +231,7 @@ body.gated .week-panel,body.gated #dayTabs,body.gated #navRow,body.gated #cycleB
 .gate-hero .brand{font-size:40px}
 .gate-title{font-size:22px;font-weight:950;margin:14px 0 8px}
 .gate-hero .day-meta{margin-bottom:6px}
+
+/* IRONLOG v22 – kötelező infó */
+body.must-read #infoBtn{display:none}
+.read-btn{margin:6px 0 24px;padding:16px;font-size:14px}

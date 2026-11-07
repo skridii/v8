@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v21';
+const APP_VERSION = 'v22';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -403,8 +403,12 @@ async function load() {
 /* ---------- megjelenítés ---------- */
 function render() {
   // Kötelező regisztráció / belépés és testsúly: amíg nincs meg, csak a belépő képernyő (és az INFÓ) érhető el.
-  const gated = ready && (!auth || !bodyWeight());
+  // Első indításkor kötelező az INFÓ elolvasása (eszközönként egyszer), utána belépés + testsúly.
+  const mustRead = ready && !infoRead();
+  const gated = ready && (mustRead || !auth || !bodyWeight());
   document.body.classList.toggle('gated', gated);
+  document.body.classList.toggle('must-read', mustRead);
+  if (mustRead) view = 'info';
   if (!gated) { renderWeeks(); renderTabs(); renderHistoryBtn(); renderBanner(); }
   if (gated && view !== 'info') renderGate();
   else if (view === 'history') renderHistory(); else if (view === 'social') renderSocial(); else if (view === 'ranks') renderRanks(); else if (view === 'info') renderInfo(); else renderWorkout();
@@ -1605,8 +1609,13 @@ function renderFriend() {
 /* ---------- INFÓ & MEGHÍVÁS ---------- */
 const APP_URL = 'https://skridii.github.io/v8/';
 const INSTA_URL = 'https://www.instagram.com/skridi_/';
+const INFO_KEY = 'ironlog-info-read';
+function infoRead() { try { return !!localStorage.getItem(INFO_KEY); } catch (e) { return true; } }
 function renderInfo() {
-  let h = `<div class="eyebrow">INFÓ & MEGHÍVÁS</div><div class="day-name">IRONLOG</div><div class="day-meta">Edzésnapló, rangok és barátok – egy helyen.</div>`;
+  const first = !infoRead();
+  let h = first
+    ? `<div class="eyebrow">ÜDV AZ IRONLOG-BAN</div><div class="day-name">Mielőtt kezdenéd 👋</div><div class="day-meta">Olvasd végig ezt a rövid útmutatót – a lap alján tudsz továbblépni a regisztrációhoz.</div>`
+    : `<div class="eyebrow">INFÓ & MEGHÍVÁS</div><div class="day-name">IRONLOG</div><div class="day-meta">Edzésnapló, rangok és barátok – egy helyen.</div>`;
   h += `<section class="social-card invite-card"><div class="eyebrow">HÍVD MEG A BARÁTAIDAT</div><div class="invite-link">${esc(APP_URL.replace('https://', ''))}</div>
     <div class="me-actions"><button class="primary" id="shareBtn">MEGOSZTÁS</button><button class="secondary" id="copyBtn">LINK MÁSOLÁSA</button></div>
     <div class="bw-note">Küldd el a linket, nyissa meg, tegye ki a kezdőképernyőre, és regisztráljon a 👥 BARÁTOK fülön.</div></section>`;
@@ -1645,7 +1654,10 @@ function renderInfo() {
     'Hetente készíts <b>mentést fájlba</b> (FEJLŐDÉS oldal alja) – az app emlékeztet is.']);
   h += `<section class="credit-card"><div class="eyebrow">KÉSZÍTETTE</div><div class="credit-name">Sarkadi Ádám</div><div class="credit-nick">„Skridi”</div>
     <a class="primary insta-btn" href="${INSTA_URL}" target="_blank" rel="noopener">📸 Instagram · @skridi_</a><div class="bw-date">IRONLOG ${APP_VERSION}</div></section>`;
+  if (first) h += `<button class="primary wide read-btn" id="infoDoneBtn">✓ ELOLVASTAM – TOVÁBB</button>`;
   workout.innerHTML = h;
+  const done = $('infoDoneBtn');
+  if (done) done.onclick = () => { try { localStorage.setItem(INFO_KEY, String(Date.now())); } catch (e) {} view = 'workout'; render(); window.scrollTo(0, 0); };
   $('shareBtn').onclick = async () => {
     const data = { title: 'IRONLOG', text: 'Gyere, vezessük együtt az edzéseinket – IRONLOG edzésnapló:', url: APP_URL };
     try { if (navigator.share) { await navigator.share(data); return; } } catch (e) { if (e?.name === 'AbortError') return; }
