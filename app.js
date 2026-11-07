@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v23';
+const APP_VERSION = 'v24';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -141,6 +141,10 @@ function lastDone(id) {
   const x = list[list.length - 1];
   return x ? { ...x.r, c: x.c, w: x.w, d: x.d, t: x.t } : null;
 }
+/* Hevy-ből importált edzések a 0. „ciklusban” vannak (kulcs: 0-sorszám-0) – ezeket dátummal jelöljük, nem héttel. */
+const isImported = c => Number(c) === 0;
+function weekShort(c, w, t) { return isImported(c) ? `Hevy${t ? ', ' + fmtDate(t) : ''}` : `${cycLabel(c).toLowerCase()}${w}. hét`; }
+function sessLabel(c, w, d, r) { return isImported(c) ? `HEVY${r?.title ? ' · ' + r.title : ''}` : `${cycLabel(c)}${w}. HÉT · ${DAYS[d]?.name || ''}`; }
 function setsText(r, sep = ' · ', withKg = true) {
   const f = s => s && (s.weight || s.reps) ? `${showNum(s.weight) || '—'}${withKg ? ' kg' : ''} × ${showNum(s.reps) || '—'}` : '—';
   return (r?.sets || []).map((x, i) => `S${i + 1} ${f(x)}`).join(sep);
@@ -148,7 +152,7 @@ function setsText(r, sep = ' · ', withKg = true) {
 function lastSummary(id) {
   const l = lastDone(id); if (!l) return 'Még nincs rögzített adat';
   const f = s => s?.done ? `${showNum(s.weight)} kg × ${showNum(s.reps)}` : '—';
-  return `Legutóbb (${cycLabel(l.c).toLowerCase()}${l.w}. hét): ${(l.sets || []).map((x, i) => `S${i + 1} ${f(x)}`).join(' · ')}`;
+  return `Legutóbb (${weekShort(l.c, l.w, l.t)}): ${(l.sets || []).map((x, i) => `S${i + 1} ${f(x)}`).join(' · ')}`;
 }
 function daysWith(id, c, w) { return layoutFor(c, w).map((day, d) => day.some(s => s.variants.some(v => exId(v.name) === id)) ? DAYS[d].name : null).filter(Boolean); }
 /* Napi megmozgatott súly: minden kész szett súly × ismétlés az adott edzésnapon. */
@@ -572,8 +576,8 @@ function renderWorkout() {
     const rk = rankOf(id);
     if (rk && rk.pts !== undefined) h += `<div class="rank-line">${rankBadge(rk)}<div><b style="color:${rk.color}">${esc(rk.label)}</b><div class="rr-bar"><i style="width:${Math.round(rk.pct * 100)}%;background:${rk.color}"></i></div><span>${esc(rankNeedText(rk))}</span></div></div>`;
     else if (rk?.needBw) h += `<div class="rank-line muted">🏅 Add meg a testsúlyodat a RANGOK fülön, és itt látod a rangodat.</div>`;
-    if (pb) h += `<div class="record-badge">🏆 SZEMÉLYES REKORD · ${showNum(pb.weight)} kg × ${showNum(pb.reps)} · ${state.maxCycle > 1 ? pb.c + '. ciklus, ' : ''}${pb.w}. hét</div>`;
-    if (last) h += `<div class="history"><div>LEGUTÓBBI ALKALOM · ${cycLabel(last.c)}${last.w}. HÉT · ${DAYS[last.d]?.name || ''}</div><strong>Warm-up: ${esc(showNum(last.warmup?.weight)) || '—'} kg × ${esc(showNum(last.warmup?.reps)) || '—'} · ${esc(setsText(last))}</strong></div>`;
+    if (pb) h += `<div class="record-badge">🏆 SZEMÉLYES REKORD · ${showNum(pb.weight)} kg × ${showNum(pb.reps)} · ${isImported(pb.c) ? 'Hevy' : (state.maxCycle > 1 ? pb.c + '. ciklus, ' : '') + pb.w + '. hét'}</div>`;
+    if (last) h += `<div class="history"><div>LEGUTÓBBI ALKALOM · ${esc(sessLabel(last.c, last.w, last.d, last))}${isImported(last.c) && last.t ? ' · ' + esc(fmtDate(last.t)) : ''}</div><strong>Warm-up: ${esc(showNum(last.warmup?.weight)) || '—'} kg × ${esc(showNum(last.warmup?.reps)) || '—'} · ${esc(setsText(last))}</strong></div>`;
     h += `<div class="sets"><div class="set-labels"><span>SET</span><span>KG</span><span>REPS</span><span></span></div>`;
     const bwx = isBwExercise(name);
     h += setRowHtml('W', e, wu, 'warmup', 0, bwx);
@@ -825,6 +829,7 @@ function renderHistory() {
 
   h += `<div class="history-section">CIKLUS</div><div class="cycle-banner"><span>${state.maxCycle > 1 ? `${state.maxCycle} ciklus rögzítve. Váltás a fenti ‹ › nyilakkal.` : 'Új 6 hetes ciklus indításakor a mostani eredmények megmaradnak.'}</span><button class="primary" id="newCycleBtn2">ÚJ CIKLUS</button></div>`;
   h += '<div class="history-actions"><button id="exportBtn" class="secondary">BIZTONSÁGI MENTÉS FÁJLBA</button><label class="secondary import-label">MENTÉS BETÖLTÉSE<input id="importInput" type="file" accept=".json,application/json" hidden></label></div>';
+  h += `<section class="social-card hevy-card"><div class="eyebrow">HEVY-BŐL ÁTJÖSSZ?</div><div class="bw-note">A Hevy-ben: <b>Profile → Settings → Export & Import Data → Export Data → Export Workouts</b>. A kapott CSV-fájlt töltsd be itt – az edzéseid dátummal bekerülnek az előzményekbe, a rangok és a görbék is számolnak velük.${state.hevyImported ? ` Eddig importálva: ${Object.keys(state.hevyImported).length} edzés.` : ''}</div><label class="primary import-label hevy-btn">HEVY CSV BETÖLTÉSE<input id="hevyInput" type="file" accept=".csv,text/csv,text/plain" hidden></label></section>`;
   const snaps = snapKeys();
   if (snaps.length) {
     h += `<details class="history-group"><summary>Automatikus helyi másolatok (${snaps.length})</summary><div class="progress-ex">${snaps.map(k => `<div class="snap-row"><span>${esc(snapLabel(k))}</span><button class="secondary" data-snap="${esc(k)}">LETÖLTÉS</button></div>`).join('')}<div class="empty">A letöltött fájl a MENTÉS BETÖLTÉSE gombbal visszatölthető.</div></div></details>`;
@@ -841,6 +846,7 @@ function renderHistory() {
   filterHistory();
   $('exportBtn').onclick = () => exportData(state, `ironlog-backup-${today()}.json`);
   $('importInput').onchange = e => importData(e.target.files[0]);
+  $('hevyInput').onchange = e => { importHevy(e.target.files[0]); e.target.value = ''; };
   $('newCycleBtn2').onclick = startNewCycle;
   workout.querySelectorAll('[data-snap]').forEach(b => b.onclick = () => { try { const raw = localStorage.getItem(b.dataset.snap); if (raw) exportData(JSON.parse(raw), `${b.dataset.snap}.json`); } catch (e) { toast('A másolat nem olvasható.'); } });
 }
@@ -873,12 +879,12 @@ function statsHtml(id) {
   for (const { c, w, d, r, t } of [...rows].reverse()) {
     const f = s => s && (s.weight || s.reps) ? `${esc(showNum(s.weight)) || '—'} × ${esc(showNum(s.reps)) || '—'}${s.done ? '' : ' <i>(nincs kész)</i>'}` : '—';
     const hs = heavierSet(r);
-    h += `<div class="stats-row"><div class="stats-when"><b>${cycLabel(c)}${w}. hét · ${DAYS[d]?.name || ''}</b><span>${fmtDate(t)}</span></div><div class="stats-sets"><span>WU ${f(r.warmup)}</span>${(r.sets || []).map((x, i) => `<span>S${i + 1} ${f(x)}</span>`).join('')}</div>${hs ? `<div class="stats-top">${showNum(hs.weight)} kg</div>` : ''}</div>`;
+    h += `<div class="stats-row"><div class="stats-when"><b>${isImported(c) ? esc('Hevy' + (r.title ? ' · ' + r.title : '')) : `${cycLabel(c)}${w}. hét · ${DAYS[d]?.name || ''}`}</b><span>${fmtDate(t)}</span></div><div class="stats-sets"><span>WU ${f(r.warmup)}</span>${(r.sets || []).map((x, i) => `<span>S${i + 1} ${f(x)}</span>`).join('')}</div>${hs ? `<div class="stats-top">${showNum(hs.weight)} kg</div>` : ''}</div>`;
   }
   return h + '</div>';
 }
 function chartPoints(id) {
-  return sessionsOf(id).map(x => ({ x, hs: heavierSet(x.r) })).filter(o => o.hs).map(({ x, hs }) => ({ wt: hs.weight, reps: hs.reps, set: hs.i + 1, lab: `${state.maxCycle > 1 ? 'C' + x.c + ' ' : ''}W${x.w} ${(DAYS[x.d]?.name || '').replace('UPPER ', 'U').replace('LOWER ', 'L')}`, date: fmtDate(x.t) }));
+  return sessionsOf(id).map(x => ({ x, hs: heavierSet(x.r) })).filter(o => o.hs).map(({ x, hs }) => ({ wt: hs.weight, reps: hs.reps, set: hs.i + 1, lab: isImported(x.c) ? 'Hevy' : `${state.maxCycle > 1 ? 'C' + x.c + ' ' : ''}W${x.w} ${(DAYS[x.d]?.name || '').replace('UPPER ', 'U').replace('LOWER ', 'L')}`, date: fmtDate(x.t) }));
 }
 function chartHtml(id) {
   const pts = chartPoints(id).map(p => ({ ...p, read: [`${showNum(p.wt)} kg × ${showNum(p.reps)}`, ` · ${p.set}. szett · ${p.lab}${p.date ? ' · ' + p.date : ''}`] }));
@@ -1212,6 +1218,120 @@ function exportData(obj, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1500);
   toast('Biztonsági mentés letöltése elindult.');
 }
+
+/* ---------- HEVY IMPORT ----------
+   Hevy → Profile → Settings → Export & Import Data → Export Data → Export Workouts (CSV, soronként egy szett).
+   Oszlopok: title, start_time, end_time, description, exercise_title, superset_id, exercise_notes, set_index, set_type, weight_kg | weight_lbs, reps, …
+   Minden Hevy-edzés külön alkalom lesz a 0. „ciklusban” (kulcs: 0-sorszám-0), a valódi dátumával – így az időrendi
+   „legutóbbi”, a statisztika, a görbe, a havi összefoglaló és a rang is látja, de a heti nézetet nem keveri össze. */
+function parseCSV(text) {
+  const rows = []; let row = [], cur = '', q = false;
+  text = text.replace(/^﻿/, '');
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cur); cur = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+    else cur += ch;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter(r => r.length > 1 || (r[0] || '').trim());
+}
+const MONTHS_EN = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+const MONTHS_HU = { jan: 0, febr: 1, feb: 1, marc: 2, mar: 2, apr: 3, maj: 4, jun: 5, jul: 6, aug: 7, szept: 8, szep: 8, okt: 9, nov: 10, dec: 11 };
+function parseHevyDate(s) {
+  s = String(s || '').trim(); if (!s) return 0;
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime();
+  m = s.match(/^(\d{1,2})\s+([A-Za-zÀ-ž]+)\.?\s+(\d{4}),?\s+(\d{1,2}):(\d{2})/);   // „15 Jan 2024, 10:00”
+  if (m) { const k = norm(m[2]).slice(0, 5); const mo = MONTHS_EN[k.slice(0, 3)] ?? MONTHS_HU[k] ?? MONTHS_HU[k.slice(0, 4)] ?? MONTHS_HU[k.slice(0, 3)]; if (mo !== undefined) return new Date(+m[3], mo, +m[1], +m[4], +m[5]).getTime(); }
+  m = s.match(/^(\d{4})\.\s*([A-Za-zÀ-ž]+)\.?\s*(\d{1,2})\.?,?\s+(\d{1,2}):(\d{2})/);   // „2024. jan. 15. 10:00”
+  if (m) { const k = norm(m[2]); const mo = MONTHS_HU[k] ?? MONTHS_HU[k.slice(0, 4)] ?? MONTHS_HU[k.slice(0, 3)]; if (mo !== undefined) return new Date(+m[1], mo, +m[3], +m[4], +m[5]).getTime(); }
+  const t = Date.parse(s); return Number.isFinite(t) ? t : 0;
+}
+// Hevy gyakorlatnév → IRONLOG gyakorlat (ugyanaz a gyakorlat → közös előzmény és rang)
+const HEVY_MAP = {
+  'bench press (barbell)': 'Bench Press', 'incline bench press (barbell)': 'Incline Bench Press', 'deadlift (barbell)': 'Conventional Deadlift',
+  'squat (barbell)': 'Back Squat', 'front squat (barbell)': 'Front Squat', 'romanian deadlift (barbell)': 'Romanian Deadlift', 'romanian deadlift (dumbbell)': 'Dumbbell Deadlift',
+  'overhead press (barbell)': 'Overhead Press', 'bent over row (barbell)': 'Barbell Row', 'hip thrust (barbell)': 'Hip Thrust', 'bicep curl (barbell)': 'Barbell Curl',
+  'ez bar biceps curl': 'Barbell Curl', 'preacher curl (barbell)': 'Scott Bench Preacher Curl', 'preacher curl (ez bar)': 'Scott Bench Preacher Curl', 'preacher curl (dumbbell)': 'Scott Bench Preacher Curl',
+  'preacher curl (machine)': 'Machine Preacher Curl', 'bench press (dumbbell)': 'Dumbbell Bench Press', 'incline bench press (dumbbell)': 'Incline Dumbbell Press',
+  'shoulder press (dumbbell)': 'Dumbbell Shoulder Press', 'seated overhead press (dumbbell)': 'Dumbbell Shoulder Press', 'bicep curl (dumbbell)': 'Alternating Dumbbell Biceps Curl',
+  'hammer curl (dumbbell)': 'Hammer Curl', 'lateral raise (dumbbell)': 'Lateral Raise', 'lateral raise (machine)': 'Machine Lateral Raise',
+  'rear delt reverse fly (dumbbell)': 'Rear Delt Fly', 'rear delt reverse fly (machine)': 'Reverse Pec Deck', 'dumbbell row': 'Dumbbell Row', 'chest fly (dumbbell)': 'Dumbbell Fly',
+  'chest fly (machine)': 'Chest Fly', 'butterfly (pec deck)': 'Chest Fly', 'chest press (machine)': 'Machine Chest Press', 'shoulder press (machine)': 'Machine Shoulder Press',
+  'shoulder press (machine plates)': 'Machine Shoulder Press', 'lat pulldown (cable)': 'Wide-Grip Lat Pulldown', 'lat pulldown (machine)': 'Wide-Grip Lat Pulldown',
+  'lat pulldown - close grip (cable)': 'Wide-Grip Lat Pulldown', 'seated cable row - v grip (cable)': 'Seated Cable Row', 'seated cable row - bar grip': 'Seated Cable Row',
+  'straight arm lat pulldown (cable)': 'Straight-Arm Lat Pulldown', 'face pull': 'Cable Face Pull', 'triceps pushdown': 'Cable Rope Triceps Pushdown',
+  'triceps rope pushdown': 'Cable Rope Triceps Pushdown', 'triceps extension (cable)': 'Overhead Cable Triceps Extension', 'overhead triceps extension (cable)': 'Overhead Cable Triceps Extension',
+  'single arm triceps pushdown (cable)': 'Single-Arm Overhead Cable Triceps Extension', 'bicep curl (cable)': 'Cable Curl', 'leg press (machine)': 'Leg Press', 'leg press horizontal (machine)': 'Leg Press',
+  'hack squat (machine)': 'Hack Squat', 'leg extension (machine)': 'Leg Extension', 'seated leg curl (machine)': 'Seated Hamstring Curl', 'lying leg curl (machine)': 'Lying Hamstring Curl',
+  'hip adduction (machine)': 'Machine Hip Adduction', 'hip abduction (machine)': 'Machine Hip Abduction', 'standing calf raise (machine)': 'Standing Calf Raise',
+  'seated calf raise': 'Seated Calf Raise', 'crunch (machine)': 'Machine Ab Crunch', 'pull up': 'Pull Up', 'pull up (weighted)': 'Pull Up', 'chin up': 'Pull Up',
+  'chest dip': 'Dips', 'triceps dip': 'Dips', 'chest dip (weighted)': 'Dips', 'push up': 'Push Up', 'hanging leg raise': 'Hanging Leg Raise', 'goblet squat': 'Goblet Squat',
+  'bulgarian split squat': 'Dumbbell Bulgarian Split Squat', 'smith machine squat': 'Smith Machine Squat', 'smith machine bench press': 'Smith Machine Bench Press',
+  't bar row': 'Chest-Supported Row', 'chest supported incline row (dumbbell)': 'Chest-Supported Row', 'wrist curl (dumbbell)': 'Dumbbell Wrist Curl', 'reverse wrist curl (dumbbell)': 'Dumbbell Reverse Wrist Curl'
+};
+function hevyName(title) {
+  const t = String(title || '').trim(), k = t.toLowerCase();
+  if (HEVY_MAP[k]) return HEVY_MAP[k];
+  if (RANK_ALIAS[exId(t)]) return RANK_DB[RANK_ALIAS[exId(t)]].name;
+  return t; // ismeretlen: saját néven kerül be (CSERE ablakban rang rendelhető hozzá)
+}
+function parseHevy(text) {
+  const rows = parseCSV(text); if (rows.length < 2) throw new Error('Üres fájl.');
+  const head = rows[0].map(h => h.trim().toLowerCase()), col = n => head.indexOf(n);
+  const iT = col('title'), iS = col('start_time'), iE = col('exercise_title'), iTy = col('set_type'), iKg = col('weight_kg'), iLb = col('weight_lbs'), iR = col('reps'), iIdx = col('set_index');
+  if (iS < 0 || iE < 0 || iR < 0 || (iKg < 0 && iLb < 0)) throw new Error('Ez nem Hevy edzés-export (hiányzó oszlopok). A Hevy-ben az „Export Workouts” fájlt válaszd.');
+  const sessions = new Map(); let skipped = 0;
+  for (const r of rows.slice(1)) {
+    const reps = toNum(r[iR]); if (!(reps > 0)) { skipped++; continue; } // kardió / időre mért sor
+    let w = iKg >= 0 ? toNum(r[iKg]) : toNum(r[iLb]) * 0.45359237; if (!Number.isFinite(w) || w < 0) w = 0;
+    w = Math.round(w * 4) / 4;
+    const t = parseHevyDate(r[iS]); if (!t) { skipped++; continue; }
+    const title = (iT >= 0 ? r[iT] : '') || 'Hevy edzés', key = `${t}|${title}`;
+    const ss = sessions.get(key) || { t, title, ex: new Map() }; sessions.set(key, ss);
+    const name = hevyName(r[iE]), e = ss.ex.get(name) || { orig: r[iE], warm: null, sets: [] }; ss.ex.set(name, e);
+    const set = { weight: String(w), reps: String(Math.round(reps)), done: true, ts: t, idx: iIdx >= 0 ? toNum(r[iIdx]) : 0 };
+    if ((iTy >= 0 ? r[iTy] : '').toLowerCase() === 'warmup') { if (!e.warm || w >= toNum(e.warm.weight)) e.warm = set; }
+    else e.sets.push(set);
+  }
+  return { sessions: [...sessions.values()].sort((a, b) => a.t - b.t), skipped };
+}
+function importHevy(file) {
+  if (!file) return;
+  const fr = new FileReader();
+  fr.onload = async () => {
+    let parsed; try { parsed = parseHevy(String(fr.result)); } catch (e) { toast(e.message || 'Nem sikerült beolvasni.'); return; }
+    state.hevyImported = state.hevyImported || {};
+    const fresh = parsed.sessions.filter(s => !state.hevyImported[`${s.t}|${s.title}`]);
+    if (!fresh.length) { toast(parsed.sessions.length ? 'Ezek az edzések már be vannak importálva.' : 'Nem találtam edzést a fájlban.'); return; }
+    const names = new Map(); let sets = 0;
+    for (const s of fresh) for (const [n, e] of s.ex) { names.set(e.orig, n); sets += e.sets.length; }
+    const mapped = [...names].filter(([o, n]) => o !== n).slice(0, 12).map(([o, n]) => `  ${o} → ${n}`).join('\n');
+    const first = new Date(fresh[0].t).toLocaleDateString('hu-HU'), last = new Date(fresh[fresh.length - 1].t).toLocaleDateString('hu-HU');
+    if (!confirm(`Hevy import\n\n${fresh.length} edzés (${first} – ${last}), ${sets} munkasorozat, ${names.size} gyakorlat.\n${mapped ? '\nÖsszepárosítva az IRONLOG gyakorlataival:\n' + mapped + (names.size > 12 ? '\n  …' : '') + '\n' : ''}\nAz eddigi IRONLOG-adataid nem változnak, a Hevy-edzések az előzményekhez kerülnek (dátummal). Előtte automatikus helyi másolat készül.\n\nMehet?`)) return;
+    lsSet(PRE_IMPORT_PREFIX + new Date().toISOString().slice(0, 19).replace('T', ' ') + ' hevy', JSON.stringify(state)); pruneSnaps();
+    let seq = Math.max(0, ...Object.values(state.exercises).flatMap(x => Object.keys(x.occurrences || {})).filter(k => k.startsWith('0-')).map(k => Number(k.split('-')[1]) || 0));
+    for (const s of fresh) {
+      seq++;
+      for (const [n, e] of s.ex) {
+        const id = exId(n); if (!id) continue;
+        const obj = ensureExercise(id);
+        if (!state.names[id]) state.names[id] = n;
+        state.library = state.library || {};
+        if (!state.library[id]) state.library[id] = { name: n, hu: RANK_DB[rankKeyFor(id)]?.hu || '', reps: RANK_DB[rankKeyFor(id)]?.reps || '2 × 8–10' };
+        e.sets.sort((a, b) => a.idx - b.idx);
+        obj.occurrences[`0-${seq}-0`] = { warmup: e.warm ? { weight: e.warm.weight, reps: e.warm.reps, done: true, ts: s.t } : emptySet(), sets: e.sets.length ? e.sets.map(x => ({ weight: x.weight, reps: x.reps, done: true, ts: s.t })) : [emptySet(), emptySet()], ts: s.t, doneAt: s.t, src: 'hevy', title: s.title };
+      }
+      state.hevyImported[`${s.t}|${s.title}`] = seq;
+    }
+    await save(); render();
+    toast(`Kész: ${fresh.length} Hevy-edzés importálva.`);
+  };
+  fr.readAsText(file);
+}
 function importData(file) {
   if (!file) return;
   const r = new FileReader();
@@ -1273,11 +1393,11 @@ function renderNext() {
   const last = latestBefore(timerCtx.c, timerCtx.w, timerCtx.d, st.name);
   if (st.kind === 'warmup') {
     const wu = last?.warmup;
-    if (wu && (wu.weight || wu.reps)) { main.textContent = `${showNum(wu.weight) || '—'} kg × ${showNum(wu.reps) || '—'}`; sub.textContent = `legutóbbi bemelegítés · ${cycLabel(last.c).toLowerCase()}${last.w}. hét`; }
+    if (wu && (wu.weight || wu.reps)) { main.textContent = `${showNum(wu.weight) || '—'} kg × ${showNum(wu.reps) || '—'}`; sub.textContent = `legutóbbi bemelegítés · ${weekShort(last.c, last.w, last.t)}`; }
     else { main.textContent = 'Még nincs korábbi bemelegítés'; }
   } else {
     const hs = heavierSet(last);
-    if (hs) { main.textContent = `${showNum(hs.weight)} kg × ${showNum(hs.reps)}`; sub.textContent = `minimum ennyi · előző edzés legerősebb szettje (${hs.i + 1}. szett, ${cycLabel(last.c).toLowerCase()}${last.w}. hét)`; }
+    if (hs) { main.textContent = `${showNum(hs.weight)} kg × ${showNum(hs.reps)}`; sub.textContent = `minimum ennyi · előző edzés legerősebb szettje (${hs.i + 1}. szett, ${weekShort(last.c, last.w, last.t)})`; }
     else { main.textContent = 'Még nincs korábbi adat'; }
     const pb = personalBest(exId(st.name));
     if (pb) sub.textContent += ` · rekord: ${showNum(pb.weight)} kg × ${showNum(pb.reps)}`;
@@ -1579,7 +1699,7 @@ function renderFriend() {
   h += `<div class="day-meta">${s.thisWeek} edzés az elmúlt 7 napban · összesen ${s.list.length} edzés${bodyWeight(f.state) ? ` · testsúly: ${showNum(bodyWeight(f.state))} kg` : ''}</div>`;
   const fov = overallRank(f.state);
   if (fov) h += `<section class="overall-card" style="--rc:${fov.color}">${rankBadge(fov, true)}<div><div class="eyebrow">ÖSSZESÍTETT RANG</div><div class="ov-label">${esc(fov.label)}</div></div></section>`;
-  h += '<div class="history-section">LEGUTÓBBI EDZÉSEK</div>' + s.list.slice(0, 8).map(x => `<div class="session-row"><b>${esc(fmtDate(x.t) || '—')}</b><span>${DAYS[x.d]?.name || ''} · ${s.maxCycle > 1 ? x.c + '. ciklus ' : ''}${x.w}. hét</span><em>${kg(x.vol)} kg</em></div>`).join('');
+  h += '<div class="history-section">LEGUTÓBBI EDZÉSEK</div>' + s.list.slice(0, 8).map(x => `<div class="session-row"><b>${esc(fmtDate(x.t) || '—')}</b><span>${isImported(x.c) ? 'Hevy-ből importálva' : `${DAYS[x.d]?.name || ''} · ${s.maxCycle > 1 ? x.c + '. ciklus ' : ''}${x.w}. hét`}</span><em>${kg(x.vol)} kg</em></div>`).join('');
   // Edzésnapok: a barát aktuális programja (az általa hozzáadott / cserélt gyakorlatokkal együtt)
   const fd = friendDay ?? f.state.day ?? 0;
   h += `<div class="history-section">EDZÉSNAPOK · ${f.state.maxCycle > 1 ? f.state.cycle + '. ciklus, ' : ''}${f.state.week}. hét</div><nav class="tabs friend-tabs">${DAYS.map((d, i) => `<button class="tab${i === fd ? ' active' : ''}" data-fday="${i}">${d.name}</button>`).join('')}</nav>`;
@@ -1642,7 +1762,8 @@ function renderInfo() {
   h += sec('🚀 ELSŐ LÉPÉSEK', [
     '<b>👥 BARÁTOK</b> → <b>REGISZTRÁCIÓ</b>: név, e-mail, jelszó. A naplód innentől a fiókodba is mentődik.',
     '<b>🏅 RANGOK</b> → add meg a <b>testsúlyodat</b> (ehhez igazodnak a rangok).',
-    'Ha más gyakorlatokat csinálsz, mint a programban: <b>CSERE</b> vagy <b>+ ÚJ GYAKORLAT HOZZÁADÁSA</b>.']);
+    'Ha más gyakorlatokat csinálsz, mint a programban: <b>CSERE</b> vagy <b>+ ÚJ GYAKORLAT HOZZÁADÁSA</b>.',
+    'Eddig <b>Hevy</b>-t használtál? A Hevy-ben: Profile → Settings → Export & Import Data → Export Data → <b>Export Workouts</b>, majd itt: <b>📈 FEJLŐDÉS → HEVY CSV BETÖLTÉSE</b>. Az előzményeid átjönnek.']);
   h += sec('🏋️ HOGYAN HASZNÁLD', [
     'Fent válaszd ki a <b>hetet</b> (1–6) és az <b>edzésnapot</b> (LOWER 1, UPPER 1…).',
     'Gyakorlatonként: <b>W</b> = bemelegítő szett, <b>1, 2</b> = munkasorozatok. Írd be a súlyt és az ismétlést, majd koppints a <b>○</b> gombra – indul a pihenőidő (1:00 / 2:30).',

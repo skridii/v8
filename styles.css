@@ -241,3 +241,8 @@ body.must-read #infoBtn{display:none}
 .inapp-warn b{color:#fff}
 .inapp-warn .muted{font-size:11px;color:#c9a57a}
 .inapp-warn .secondary{align-self:flex-start}
+
+/* IRONLOG v24 – Hevy import */
+.hevy-card{margin-top:14px}
+.hevy-btn{display:block;text-align:center;margin-top:12px;padding:12px;cursor:pointer}
+.hevy-card b{color:#fff}
