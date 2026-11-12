@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v26';
+const APP_VERSION = 'v27';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -946,8 +946,9 @@ function bindCharts(root) {
    más testsúlynál (testsúly/80)^0,67 arányban skálázódnak – így a könnyebb és nehezebb lifterek igazságosan összemérhetők.
    Ismétlés alapú (saját testsúlyos) gyakorlatoknál a legtöbb ismétlés számít. */
 const RANKS = [
-  { n: 'Vas', c: '#8b939c' }, { n: 'Bronz', c: '#cd7f32' }, { n: 'Ezüst', c: '#c9d1d9' }, { n: 'Arany', c: '#f2c94c' },
-  { n: 'Platina', c: '#56d6c9' }, { n: 'Gyémánt', c: '#7cc4ff' }, { n: 'Bajnok', c: '#ff5fa2' }, { n: 'Legenda', c: '#b98cff' }
+  // Vicces magyar rangnevek (a színek és a számítás változatlan; régi nevek: Vas, Bronz, Ezüst, Arany, Platina, Gyémánt, Bajnok, Legenda)
+  { n: '🍮 Puding', c: '#8b939c' }, { n: '🥣 Menzás főzelék', c: '#cd7f32' }, { n: '🦵 Lábnap-kerülő', c: '#c9d1d9' }, { n: '🥤 Tápos shake-ivó', c: '#f2c94c' },
+  { n: '🗣️ Mennyit nyomsz, tesó?', c: '#56d6c9' }, { n: '🚪 Szekrény', c: '#7cc4ff' }, { n: '🚪🚪 Kétajtós szekrény', c: '#ff5fa2' }, { n: '🏛️ Görög isten', c: '#b98cff' }
 ];
 const MAX_PTS = RANKS.length * 3 - 1;
 const ROMAN = ['I', 'II', 'III'];
@@ -1124,7 +1125,7 @@ const MACHINE_NOTE = '⚙️ Gépes gyakorlat: a terhelés gépenként és terme
 let rankBoard = null;
 function renderRanks() {
   const bw = bodyWeight(), ov = overallRank();
-  let h = `<div class="eyebrow">RANGOK & RANGLISTA</div><div class="day-name">RANGOK</div><div class="day-meta">A rang a jelenlegi programod gyakorlataiból, az utolsó 2 edzés legjobb szettjéből számol (becsült 1RM), a testsúlyodhoz igazítva. ${RANKS.length} rang: ${RANKS.map(r => r.n).join(' → ')}, mindegyik I–III fokozattal; a Legenda III fölött minden további fejlődés +1 pont.</div>`;
+  let h = `<div class="eyebrow">RANGOK & RANGLISTA</div><div class="day-name">RANGOK</div><div class="day-meta">A rang a jelenlegi programod gyakorlataiból, az utolsó 2 edzés legjobb szettjéből számol (becsült 1RM), a testsúlyodhoz igazítva. ${RANKS.length} rang: ${RANKS.map(r => r.n).join(' → ')}, mindegyik I–III fokozattal; a ${RANKS[RANKS.length - 1].n} III fölött minden további fejlődés +1 pont.</div>`;
   h += `<section class="social-card bw-card"><div class="bw-row"><div><div class="eyebrow">TESTSÚLY</div><div class="bw-val">${bw ? showNum(bw) + ' kg' : 'nincs megadva'}</div>${state.body?.updatedAt ? `<div class="bw-date">frissítve: ${esc(fmtDate(state.body.updatedAt))}</div>` : ''}</div><form id="bwForm" class="bw-form"><input id="bwInput" inputmode="decimal" placeholder="pl. 82,5" value="${bw ? esc(showNum(bw)) : ''}"><button class="primary" type="submit">MENTÉS</button></form></div>
     <div class="bw-note">A barátaid is látják. Frissítsd, ha változik – a rangok ehhez igazodnak. Minden mentés megmarad, a görbe mutatja a változást.</div>${bwChartHtml()}</section>`;
   if (ov) h += `<section class="overall-card" style="--rc:${ov.color}">${rankBadge(ov, true)}<div><div class="eyebrow">ÖSSZESÍTETT RANG</div><div class="ov-label">${esc(ov.label)}</div><div class="bw-date">${ov.n} rangos gyakorlat átlaga</div></div></section>`;
@@ -1777,7 +1778,7 @@ function renderInfo() {
     'A 6. hét végén indíts <b>ÚJ CIKLUST</b> – a régi eredmények megmaradnak.']);
   h += sec('📈 FEJLŐDÉS · 🏅 RANGOK · 👥 BARÁTOK', [
     '<b>FEJLŐDÉS</b>: heti és havi összefoglaló, rekordok, minden gyakorlat előzménye, biztonsági mentés fájlba.',
-    '<b>RANGOK</b>: Vas → Bronz → Ezüst → Arany → Platina → Gyémánt → Bajnok → Legenda, I–III fokozattal. A jelenlegi programod gyakorlataiból, az utolsó 2 edzés legjobb szettjéből számol, a testsúlyodhoz igazítva.',
+    `<b>RANGOK</b>: ${RANKS.map(r => r.n).join(' → ')}, I–III fokozattal.`+' A jelenlegi programod gyakorlataiból, az utolsó 2 edzés legjobb szettjéből számol, a testsúlyodhoz igazítva.',
     '<b>BARÁTOK</b>: látod a többiek edzéseit, edzésnapjait és rangjait. A megosztást a profilodban kikapcsolhatod.']);
   h += sec('🔒 AZ ADATAID', [
     'Minden a telefonodon tárolódik, internet nélkül is működik.',
