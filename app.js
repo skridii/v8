@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v28';
+const APP_VERSION = 'v29';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -959,7 +959,7 @@ function bindCharts(root) {
 const RANKS = [
   // Vicces magyar rangnevek (a színek és a számítás változatlan; régi nevek: Vas, Bronz, Ezüst, Arany, Platina, Gyémánt, Bajnok, Legenda)
   { n: '🍮 Puding', c: '#8b939c' }, { n: '🥣 Menzás főzelék', c: '#cd7f32' }, { n: '🦵 Lábnap-kerülő', c: '#c9d1d9' }, { n: '🥤 Tápos shake-ivó', c: '#f2c94c' },
-  { n: '🗣️ Mennyit nyomsz, tesó?', c: '#56d6c9' }, { n: '🚪 Szekrény', c: '#7cc4ff' }, { n: '🚪🚪 Kétajtós szekrény', c: '#ff5fa2' }, { n: '🏛️ Görög isten', c: '#b98cff' }
+  { n: '💥 Bedurranás-maxoló', c: '#56d6c9' }, { n: '🚪 Szekrény', c: '#7cc4ff' }, { n: '🚪🚪 Kétajtós szekrény', c: '#ff5fa2' }, { n: '🏛️ Görög isten', c: '#b98cff' }
 ];
 const MAX_PTS = RANKS.length * 3 - 1;
 const ROMAN = ['I', 'II', 'III'];
