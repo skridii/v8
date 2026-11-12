@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v29';
+const APP_VERSION = 'v30';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -61,6 +61,10 @@ const pos = (c, w, d = 0) => ((c - 1) * 6 + (w - 1)) * 4 + d;
 const clone = o => JSON.parse(JSON.stringify(o));
 const emptySet = () => ({ weight: '', reps: '', done: false });
 const slotSets = slot => Math.max(1, Number(slot?.sets) || 2);
+/* Hány munkasorozat látszik/számít: a beállított szám, vagy több, ha ténylegesen beírtál több szettet.
+   Az üres (csak kitöltő) szettek nem számítanak – így a „− SZETT” újraindítás után is megmarad. */
+const setFilled = x => !!x && (x.done || cleanNum(x.weight ?? '') !== '' || cleanNum(x.reps ?? '') !== '');
+function setCount(slot, r) { let n = 0; (r?.sets || []).forEach((x, i) => { if (setFilled(x)) n = i + 1; }); return Math.max(slotSets(slot), n); }
 const showReps = slot => String(slot?.reps || '').replace(/^\s*\d+\s*×/, `${slotSets(slot)} ×`);
 function padSets(r, n) { while (r.sets.length < n) r.sets.push(emptySet()); return r; }
 const cleanNum = v => String(v ?? '').trim().replace(/\s+/g, '').replace(',', '.');
@@ -147,12 +151,12 @@ function weekShort(c, w, t) { return isImported(c) ? `Hevy${t ? ', ' + fmtDate(t
 function sessLabel(c, w, d, r) { return isImported(c) ? `HEVY${r?.title ? ' · ' + r.title : ''}` : `${cycLabel(c)}${w}. HÉT · ${DAYS[d]?.name || ''}`; }
 function setsText(r, sep = ' · ', withKg = true) {
   const f = s => s && (s.weight || s.reps) ? `${showNum(s.weight) || '—'}${withKg ? ' kg' : ''} × ${showNum(s.reps) || '—'}` : '—';
-  return (r?.sets || []).map((x, i) => `S${i + 1} ${f(x)}`).join(sep);
+  return (r?.sets || []).map((x, i) => [x, i]).filter(([x]) => setFilled(x)).map(([x, i]) => `S${i + 1} ${f(x)}`).join(sep) || '—';
 }
 function lastSummary(id) {
   const l = lastDone(id); if (!l) return 'Még nincs rögzített adat';
   const f = s => s?.done ? `${showNum(s.weight)} kg × ${showNum(s.reps)}` : '—';
-  return `Legutóbb (${weekShort(l.c, l.w, l.t)}): ${(l.sets || []).map((x, i) => `S${i + 1} ${f(x)}`).join(' · ')}`;
+  return `Legutóbb (${weekShort(l.c, l.w, l.t)}): ${(l.sets || []).map((x, i) => [x, i]).filter(([x]) => setFilled(x)).map(([x, i]) => `S${i + 1} ${f(x)}`).join(' · ') || '—'}`;
 }
 function daysWith(id, c, w) { return layoutFor(c, w).map((day, d) => day.some(s => s.variants.some(v => exId(v.name) === id)) ? DAYS[d].name : null).filter(Boolean); }
 /* Napi megmozgatott súly: minden kész szett súly × ismétlés az adott edzésnapon. */
@@ -581,7 +585,7 @@ function renderWorkout() {
     h += `<div class="sets"><div class="set-labels"><span>SET</span><span>KG</span><span>REPS</span><span></span></div>`;
     const bwx = isBwExercise(name);
     h += setRowHtml('W', e, wu, 'warmup', 0, bwx);
-    const nSets = Math.max(slotSets(slot), sets.length);
+    const nSets = setCount(slot, rec);
     for (let s = 0; s < nSets; s++) h += setRowHtml(String(s + 1), e, sets[s] || emptySet(), 'work', s, bwx);
     h += `<div class="set-tools"><button class="set-tool" data-addset data-e="${e}">+ SZETT</button>${nSets > 1 ? `<button class="set-tool minus" data-delset data-e="${e}">− SZETT</button>` : ''}</div>`;
     h += `</div><div class="last">Bemelegítő szett után: <strong>1:00</strong> · Munkasorozat után: <strong>2:30</strong></div></article>`;
@@ -654,10 +658,11 @@ function bindInputs() {
   workout.querySelectorAll('[data-delset]').forEach(btn => btn.onclick = () => {
     const slot = curSlots()[+btn.dataset.e]; if (!slot) return;
     const r = recordFor(state.cycle, state.week, state.day, slotName(state.cycle, state.week, state.day, slot));
-    const cur = Math.max(slotSets(slot), r?.sets?.length || 0); if (cur <= 1) return;
+    const cur = setCount(slot, r); if (cur <= 1) return;
     const last = r?.sets?.[cur - 1];
     if (last && (last.done || last.weight || last.reps) && !confirm(`Törlöd a ${cur}. szettet (${showNum(last.weight) || '—'} kg × ${showNum(last.reps) || '—'})?`)) return;
     if (r && r.sets.length >= cur) r.sets.length = Math.max(1, cur - 1);
+    if (r) r.ts = Date.now();
     const n = Math.max(1, cur - 1), uid = slot.uid;
     applyFrom(state.cycle, state.week, L => { for (const day of L) for (const sl of day) if (sl.uid === uid) sl.sets = n; });
     save(); renderWorkout(); toast(`Mostantól ${n} munkasorozat ennél a gyakorlatnál.`);
@@ -817,7 +822,7 @@ function renderHistory() {
   h += `<section class="social-card hevy-card"><div class="eyebrow">📥 ADATOK ÁTHOZÁSA A HEVY APPBÓL</div><div class="bw-note">Ha eddig a Hevy appban vezetted az edzéseidet, itt áthozhatod őket. A Hevy-ben: <b>Profile → Settings → Export & Import Data → Export Data → Export Workouts</b>. A kapott CSV-fájlt töltsd be itt – az edzéseid dátummal bekerülnek az előzményekbe, a rangok és a görbék is számolnak velük.${state.hevyImported ? ` Eddig importálva: ${Object.keys(state.hevyImported).length} edzés.` : ''}</div><label class="primary import-label hevy-btn">HEVY ADATOK BETÖLTÉSE<input id="hevyInput" type="file" accept=".csv,text/csv,text/plain" hidden></label></section>`;
   const rows = DAYS.map((day, d) => {
     let done = 0, total = 0;
-    for (const slot of (L[d] || [])) { const r = recordFor(c, w, d, slotName(c, w, d, slot)); total += Math.max(slotSets(slot), r?.sets?.length || 0); done += (r?.sets || []).filter(s => s?.done).length; }
+    for (const slot of (L[d] || [])) { const r = recordFor(c, w, d, slotName(c, w, d, slot)); total += setCount(slot, r); done += (r?.sets || []).filter(s => s?.done).length; }
     return { name: day.name, done, total, vol: dayVolume(c, w, d).total };
   });
   const started = rows.filter(x => x.done > 0).length, finished = rows.filter(x => x.total > 0 && x.done >= x.total).length;
@@ -891,7 +896,7 @@ function statsHtml(id) {
     const rx = rh[k];
     const f = s => s && (s.weight || s.reps) ? `${esc(showNum(s.weight)) || '—'} × ${esc(showNum(s.reps)) || '—'}${s.done ? '' : ' <i>(nincs kész)</i>'}` : '—';
     const hs = heavierSet(r);
-    h += `<div class="stats-row"><div class="stats-when"><b>${isImported(c) ? esc('Hevy' + (r.title ? ' · ' + r.title : '')) : `${cycLabel(c)}${w}. hét · ${DAYS[d]?.name || ''}`}</b><span>${fmtDate(t)}</span></div><div class="stats-sets"><span>WU ${f(r.warmup)}</span>${(r.sets || []).map((x, i) => `<span>S${i + 1} ${f(x)}</span>`).join('')}</div>${hs ? `<div class="stats-top">${showNum(hs.weight)} kg</div>` : ''}${rx ? `<div class="stats-rk${rx.up ? ' up' : ''}" style="--rc:${rx.rk.color}">${rx.up ? '⬆ RANGLÉPÉS: ' : ''}${esc(rx.rk.label)} · ${esc(oneRmText(rx.rk))}</div>` : ''}</div>`;
+    h += `<div class="stats-row"><div class="stats-when"><b>${isImported(c) ? esc('Hevy' + (r.title ? ' · ' + r.title : '')) : `${cycLabel(c)}${w}. hét · ${DAYS[d]?.name || ''}`}</b><span>${fmtDate(t)}</span></div><div class="stats-sets"><span>WU ${f(r.warmup)}</span>${(r.sets || []).map((x, i) => [x, i]).filter(([x]) => setFilled(x)).map(([x, i]) => `<span>S${i + 1} ${f(x)}</span>`).join('')}</div>${hs ? `<div class="stats-top">${showNum(hs.weight)} kg</div>` : ''}${rx ? `<div class="stats-rk${rx.up ? ' up' : ''}" style="--rc:${rx.rk.color}">${rx.up ? '⬆ RANGLÉPÉS: ' : ''}${esc(rx.rk.label)} · ${esc(oneRmText(rx.rk))}</div>` : ''}</div>`;
   }
   return h + '</div>';
 }
@@ -1491,9 +1496,11 @@ function persistTimer() { try { if (timerEnd) localStorage.setItem(TIMER_KEY, JS
 function nextStep(ctx) {
   if (!ctx) return null;
   const slots = layoutFor(ctx.c, ctx.w)[ctx.d] || [], steps = [];
-  slots.forEach((slot, e) => { const name = slotName(ctx.c, ctx.w, ctx.d, slot), r = recordFor(ctx.c, ctx.w, ctx.d, name); steps.push({ e, name, kind: 'warmup', s: 0, done: !!r?.warmup?.done }); for (let s = 0; s < Math.max(slotSets(slot), r?.sets?.length || 0); s++) steps.push({ e, name, kind: 'work', s, done: !!r?.sets?.[s]?.done }); });
+  slots.forEach((slot, e) => { const name = slotName(ctx.c, ctx.w, ctx.d, slot), r = recordFor(ctx.c, ctx.w, ctx.d, name); steps.push({ e, name, kind: 'warmup', s: 0, done: !!r?.warmup?.done || (r?.sets || []).some(x => x?.done) }); for (let s = 0; s < setCount(slot, r); s++) steps.push({ e, name, kind: 'work', s, done: !!r?.sets?.[s]?.done }); });
   let cur = steps.findIndex(x => x.e === ctx.e && x.kind === (ctx.kind === 'warmup' ? 'warmup' : 'work') && (ctx.kind === 'warmup' || x.s === ctx.s));
   if (cur < 0) cur = 0;
+  // A bemelegítés nem kötelező: ha minden munkasorozat kész, az edzés kész.
+  if (steps.every(x => x.kind === 'warmup' || x.done)) return { finished: true };
   for (let i = 1; i <= steps.length; i++) { const st = steps[(cur + i) % steps.length]; if (!st.done) return st; }
   return { finished: true };
 }
