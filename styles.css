@@ -246,3 +246,77 @@ body.must-read #infoBtn{display:none}
 .hevy-card{margin:14px 0 4px;border-color:#4b5b2d}
 .hevy-btn{display:block;text-align:center;margin-top:12px;padding:12px;cursor:pointer}
 .hevy-card b{color:#fff}
+/* v28: rangok – 1RM, rangtörténet, ranglétra, ranglépés-animáció */
+button.rank-line{width:100%;text-align:left;color:#f4f6f8;cursor:pointer;font:inherit}
+.rl-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.rl-top em{font-style:normal;font-size:11px;font-weight:900;color:#dbe0e5;white-space:nowrap}
+.rank-line.flash{animation:rlFlash 1.6s ease-out 2;border-color:var(--rc)}
+@keyframes rlFlash{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--rc) 70%,transparent)}100%{box-shadow:0 0 0 14px transparent}}
+.rr-1rm{display:inline-block;margin-left:8px;font-size:11px;font-weight:800;color:#dbe0e5}
+.all-ranks{background:#11151a;border:1px solid #252b31;border-radius:17px;padding:13px 12px 6px;margin:12px 0}
+.all-ranks>.eyebrow{margin:0 2px 9px}
+.ar-row{display:flex;gap:10px;align-items:flex-start;padding:9px 6px;border-top:1px solid #1f252b;border-radius:10px}
+.ar-row.me{background:color-mix(in srgb,var(--rc) 12%,transparent);border-top-color:transparent}
+.ar-main{flex:1;min-width:0}
+.ar-name{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:6px}
+.ar-name b{font-size:14px;color:var(--rc)}
+.ar-name span{font-size:9.5px;color:#7f8993;font-weight:800;white-space:nowrap}
+.ar-row.me .ar-name span{color:var(--rc)}
+.ar-ex{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.ar-chip{background:#0a0d10;border:1px solid color-mix(in srgb,var(--rc) 40%,#252b31);color:#dbe0e5;border-radius:999px;padding:4px 9px;font-size:10.5px;font-weight:800;cursor:pointer}
+.ar-chip i{font-style:normal;color:var(--rc);margin-left:3px}
+.rk-dot{fill:var(--dc)}
+.ch-dot.rk-dot.on{fill:#fff}
+.rk-ring{fill:none;stroke:var(--dc);stroke-width:2;opacity:.7}
+.rk-line{stroke:#dbe0e5;stroke-width:1.6}
+.rk-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:6px 0 4px}
+.rk-sum div{background:#11151a;border-radius:9px;padding:7px 8px;min-width:0}
+.rk-sum span{display:block;font-size:8.5px;letter-spacing:1px;font-weight:900;color:#6c7680}
+.rk-sum b{display:block;font-size:11px;margin-top:3px;line-height:1.25}
+.ladder-card{background:#0a0d10;border:1px solid #22282e;border-radius:13px;padding:11px 10px 9px;margin:4px 0 12px}
+.ladder-grid{display:grid;grid-template-columns:1fr 46px 46px 46px;gap:4px;margin-top:9px;align-items:center}
+.ladder-grid>span:nth-child(-n+4){font-size:9px;color:#6c7680;font-weight:900;text-align:center}
+.ld-name{font-size:11px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ld-cell{text-align:center;font-size:11px;font-weight:800;color:#aab2ba;background:#11151a;border-radius:7px;padding:5px 0}
+.ld-cell.past{color:#6c7680}
+.ld-cell.on{background:var(--rc);color:#0a0d10;box-shadow:0 0 12px color-mix(in srgb,var(--rc) 60%,transparent)}
+.ld-note{font-size:9.5px;color:#6c7680;margin-top:8px;line-height:1.4}
+.stats-rank{display:flex;gap:12px;align-items:center;background:linear-gradient(135deg,color-mix(in srgb,var(--rc) 15%,#0a0d10),#0a0d10);border:1px solid color-mix(in srgb,var(--rc) 40%,#22282e);border-radius:13px;padding:11px 12px;margin:10px 0 12px}
+.stats-rank b{display:block;font-size:17px;font-weight:950;margin-top:2px}
+.stats-rank span{display:block;font-size:10.5px;color:#aab2ba;margin-top:3px}
+.stats-rk{grid-column:1/-1;font-size:10px;font-weight:800;color:var(--rc);opacity:.85}
+.stats-rk.up{opacity:1;font-weight:950}
+.history-group summary .rank-badge{margin:-6px 4px -6px 0}
+.rankups-card .ru-row{display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:none;border:0;border-top:1px solid #242a30;padding:9px 0;color:#f4f6f8;cursor:pointer}
+.ru-row b{display:block;font-size:12.5px}
+.ru-row span{display:block;font-size:10.5px;color:#87919a;margin-top:2px}
+.ru-row s{color:#6c7680}
+.ru-row em{font-style:normal;font-weight:900}
+.rankup-overlay{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.82);backdrop-filter:blur(6px);animation:ruFade .25s ease-out}
+.rankup-overlay.out{animation:ruOut .3s ease-in forwards}
+@keyframes ruFade{from{opacity:0}}
+@keyframes ruOut{to{opacity:0;transform:scale(1.04)}}
+.rankup-card{position:relative;width:min(360px,100%);text-align:center;padding:34px 20px 22px;border-radius:26px;background:radial-gradient(circle at 50% 22%,color-mix(in srgb,var(--rc) 30%,#11151a),#0e1115 70%);border:1px solid color-mix(in srgb,var(--rc) 55%,#30373f);box-shadow:0 0 60px color-mix(in srgb,var(--rc) 35%,transparent),0 20px 80px #000;overflow:hidden;animation:ruPop .55s cubic-bezier(.2,1.5,.4,1)}
+@keyframes ruPop{from{transform:scale(.6) translateY(30px);opacity:0}}
+.rankup-rays{position:absolute;left:50%;top:84px;width:520px;height:520px;margin:-260px 0 0 -260px;background:repeating-conic-gradient(color-mix(in srgb,var(--rc) 22%,transparent) 0 10deg,transparent 10deg 24deg);border-radius:50%;-webkit-mask:radial-gradient(circle,#000 0,transparent 62%);mask:radial-gradient(circle,#000 0,transparent 62%);animation:ruSpin 9s linear infinite;pointer-events:none}
+@keyframes ruSpin{to{transform:rotate(360deg)}}
+.rankup-burst{position:absolute;left:50%;top:84px;width:0;height:0;pointer-events:none}
+.rankup-burst i{position:absolute;width:7px;height:12px;border-radius:2px;background:var(--c);opacity:0;transform:rotate(var(--a)) translateY(0);animation:ruConf var(--t) cubic-bezier(.1,.8,.3,1) .25s forwards}
+@keyframes ruConf{0%{opacity:1;transform:rotate(var(--a)) translateY(0) scale(1)}100%{opacity:0;transform:rotate(var(--a)) translateY(calc(var(--d) * -1)) rotate(260deg) scale(.6)}}
+.rankup-badge{position:relative;display:inline-block;animation:ruBadge 1s cubic-bezier(.2,1.6,.4,1) .1s both}
+.rankup-badge .rank-badge.big{width:96px;height:110px}
+.rankup-badge .rank-badge.big b{font-size:28px}
+.rankup-badge .rank-badge svg{filter:drop-shadow(0 0 18px var(--rc))}
+@keyframes ruBadge{0%{transform:scale(0) rotate(-200deg)}70%{transform:scale(1.15) rotate(8deg)}100%{transform:scale(1) rotate(0)}}
+.rankup-eyebrow{position:relative;margin-top:14px;font-size:12px;letter-spacing:3px;font-weight:950;color:#9cff57;animation:ruUp .5s ease-out .45s both}
+.rankup-ex{position:relative;font-size:13px;color:#aab2ba;font-weight:800;margin-top:6px;animation:ruUp .5s ease-out .5s both}
+.rankup-old{position:relative;margin-top:14px;font-size:13px;color:#6c7680;text-decoration:line-through;animation:ruUp .5s ease-out .6s both}
+.rankup-arrow{position:relative;color:var(--rc);font-size:12px;margin:3px 0;animation:ruUp .5s ease-out .7s both}
+.rankup-new{position:relative;font-size:26px;line-height:1.15;font-weight:950;color:var(--rc);text-shadow:0 0 22px color-mix(in srgb,var(--rc) 55%,transparent);animation:ruNew .7s cubic-bezier(.2,1.6,.4,1) .8s both}
+.rankup-old+.rankup-arrow+.rankup-new,.rankup-ex+.rankup-new{margin-top:6px}
+@keyframes ruNew{from{transform:scale(.4);opacity:0}}
+@keyframes ruUp{from{transform:translateY(12px);opacity:0}}
+.rankup-1rm{position:relative;margin-top:8px;font-size:14px;font-weight:900;color:#f4f6f8;animation:ruUp .5s ease-out 1s both}
+.rankup-ov{position:relative;margin-top:12px;padding:8px 10px;border-radius:10px;background:#0a0d10;font-size:11.5px;color:#aab2ba;animation:ruUp .5s ease-out 1.15s both}
+.rankup-tap{position:relative;margin-top:16px;font-size:10px;color:#6c7680;animation:ruUp .5s ease-out 1.4s both}
+@media (prefers-reduced-motion:reduce){.rankup-rays,.rankup-burst{display:none}.rankup-card,.rankup-badge,.rankup-new{animation:none}}
