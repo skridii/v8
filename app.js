@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v31';
+const APP_VERSION = 'v32';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -586,7 +586,7 @@ function renderWorkout() {
     const vi = variantIndex(c, w, d, slot), v = slot.variants[vi], name = v.name, id = exId(name);
     const rec = recordFor(c, w, d, name), last = latestBefore(c, w, d, name);
     const sets = rec?.sets || [emptySet(), emptySet()], wu = rec?.warmup || emptySet(), pb = personalBest(id);
-    h += `<article class="exercise"><div class="exercise-head"><div><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(name)}</button>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(showReps(slot))}</div></div><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div>`;
+    h += `<article class="exercise"><div class="exercise-head"><div><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(name)}</button>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(showReps(slot))}</div></div><div class="head-btns"><button class="info-btn" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="Útmutató: hogyan csináld, milyen izmokat dolgoztat">?</button><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div></div>`;
     const note = state.notes?.[id] || '';
     h += `<button class="ex-note${note ? '' : ' empty-note'}" data-note="${esc(id)}">📝 ${note ? esc(note) : 'Jegyzet a géphez (pl. ülés 4-es, támla 2. lyuk)'}</button>`;
     if (slot.variants.length > 1) {
@@ -684,6 +684,7 @@ function bindInputs() {
     save(); renderWorkout(); toast(`Mostantól ${n} munkasorozat ennél a gyakorlatnál.`);
   });
   workout.querySelectorAll('[data-stats]').forEach(btn => btn.onclick = () => openStats(btn.dataset.stats));
+  workout.querySelectorAll('[data-info]').forEach(btn => btn.onclick = () => openExInfo(btn.dataset.info, btn.dataset.iname, btn.dataset.ihu));
   workout.querySelectorAll('[data-note]').forEach(btn => btn.onclick = () => {
     const id = btn.dataset.note, cur = state.notes?.[id] || '';
     const v = prompt(`Jegyzet – ${nameOf(id)}\n(gépbeállítás, fogás, bármi, ami segít; minden héten látszik)`, cur);
@@ -1242,6 +1243,135 @@ function recentRankUpsHtml() {
   ups.sort((a, b) => later(b.x, a.x));
   return `<section class="summary-card rankups-card"><div class="summary-title">⬆ LEGUTÓBBI RANGLÉPÉSEK</div>${ups.slice(0, 6).map(u => `<button class="ru-row" data-rstats="${esc(u.id)}">${rankBadge(u.rk)}<div><b>${esc(nameOf(u.id))}</b><span><s>${esc(u.from.label)}</s> → <em style="color:${u.rk.color}">${esc(u.rk.label)}</em></span><span>${esc(oneRmText(u.rk))} · ${esc(sessLab(u.x))}${fmtDate(u.x.t) ? ' · ' + esc(fmtDate(u.x.t)) : ''}</span></div></button>`).join('')}</section>`;
 }
+
+/* ---------- v32: gyakorlat-útmutató (izomtérkép + kivitelezés) ----------
+   m: izom:erősség (3 = fő célizom, 2 = másodlagos, 1 = segít/stabilizál) · s: lépések (|) · t: tipp / gyakori hiba */
+const MUSCLES = {
+  chest: 'Mellizom', delt_f: 'Elülső váll', delt_s: 'Oldalsó váll', delt_r: 'Hátsó váll', biceps: 'Bicepsz', triceps: 'Tricepsz',
+  forearm: 'Alkar', abs: 'Egyenes hasizom', obl: 'Ferde hasizom', traps: 'Csuklyásizom', upback: 'Felső hát (rombusz)',
+  lats: 'Széles hátizom', lowback: 'Gerincfeszítő (derék)', glutes: 'Farizom', quads: 'Combfeszítő (négyfejű)',
+  hams: 'Combhajlító', adduct: 'Combközelítő (belső comb)', calves: 'Vádli'
+};
+const EX_INFO = {
+  conventional_deadlift: ['glutes:3,hams:3,lowback:3,quads:2,traps:2,lats:1,forearm:2,upback:1', 'Állj a rúdhoz, a rúd a lábközép fölött legyen; vállszélességben fogd meg.|Csípő hátra, egyenes hát, mellkas fel; feszítsd meg a hátad, mielőtt húzol.|Lábbal told el a földet, a rúd végig a lábadhoz közel csússzon; fent csípőt előre, ne dőlj hátra.|Visszafelé csípő hátra, a rúd a combodon csúszik le.', 'A derék ne görbüljön be. Ha görbül, csökkentsd a súlyt.'],
+  romanian_deadlift: ['hams:3,glutes:3,lowback:2,forearm:1,upback:1', 'Állj egyenesen, a rúd a combod előtt, térd enyhén hajlítva.|Csípőt told hátra, a rúd a combodon csúszik lefelé, amíg nyúlást érzel a comb hátsó részén.|Csípő előre tolásával gyere vissza.', 'Nem guggolás: a térd szöge végig alig változik, a mozgás a csípőből jön.'],
+  back_squat: ['quads:3,glutes:3,adduct:2,lowback:2,hams:1,abs:1', 'Rúd a csuklyásizmon, lábak vállszélességben, lábujjak kicsit kifelé.|Vegyél levegőt, feszítsd a hasad, és ülj le csípő hátra–térd előre mozgással.|Legalább combpárhuzamosig menj, majd talpközépen told fel magad.', 'A térd a lábujjak irányába mutasson, ne essen befelé.'],
+  front_squat: ['quads:3,glutes:2,abs:2,upback:2,adduct:1', 'Rúd az elülső vállakon, könyök magasan előre.|Egyenes törzzsel ülj le mélyre.|Talpközépről told fel, a könyök végig maradjon fent.', 'Ha előre dől a törzsed, a könyöködet emeld feljebb.'],
+  bench_press: ['chest:3,delt_f:2,triceps:2', 'Feküdj a padra, a szemed a rúd alatt; lapockákat húzd hátra-le, talp a földön.|Vállszélességnél kicsit szélesebben fogd, a rudat engedd le kontrolláltan az alsó mellkasodra.|Told fel enyhén ív alakban a vállad fölé.', 'A könyök ne álljon 90°-ban oldalra, kb. 45–70°-ban legyen a törzshöz képest.'],
+  incline_bench_press: ['chest:3,delt_f:3,triceps:2', 'Pad 30–45°-ban, lapockák hátra-le.|A rudat a felső mellkasodra engedd le.|Told fel függőlegesen.', 'Túl meredek pad (60° fölött) már inkább vállgyakorlat.'],
+  overhead_press: ['delt_f:3,delt_s:2,triceps:2,traps:1,abs:1', 'Állva, rúd a vállad előtt, fogás vállszélesség.|Feszítsd a farizmod és a hasad, told a rudat egyenesen fel, a fejed hátrébb húzva.|Fent told át a fejed a rúd alá, majd engedd vissza.', 'Ne homoríts nagyot a derékkal.'],
+  barbell_row: ['lats:3,upback:3,delt_r:2,biceps:2,lowback:2,forearm:1', 'Döntsd előre a törzsed kb. 45°-ra, egyenes háttal.|Húzd a rudat a hasad felé, a könyök hátra menjen.|Lassan engedd vissza.', 'Ne rántsd a törzsedet fel minden ismétlésnél.'],
+  hip_thrust: ['glutes:3,hams:2,quads:1', 'Hát a padnak, rúd (párnával) a csípőn.|Sarokkal told fel a csípőd, amíg a törzs és a comb egy vonalba kerül.|Fent szorítsd meg a farizmod 1 mp-ig.', 'Az áll maradjon behúzva, a bordák lent.'],
+  barbell_curl: ['biceps:3,forearm:2', 'Állj egyenesen, alsó fogással fogd a rudat.|Könyököd a törzsed mellett marad, csak az alkar mozog felfelé.|Lassan engedd le teljesen.', 'Ne lendítsd a törzseddel.'],
+  scott_bench_preacher_curl: ['biceps:3,forearm:1', 'A felkarod feküdjön végig a Scott-padon.|Hajlítsd fel a súlyt, fent szorítsd.|Lassan engedd le majdnem teljesen nyújtott karig.', 'Alul ne ejtsd le, ott a legnagyobb a terhelés.'],
+  dumbbell_bench_press: ['chest:3,delt_f:2,triceps:2', 'Feküdj a padra, súlyzók a mellkasod mellett, lapockák hátra-le.|Told fel a súlyzókat, fent kicsit közelítsenek.|Engedd le mélyen, amíg nyúlást érzel a mellben.', 'Kontrolláltan engedd le, ne essenek a súlyzók.'],
+  incline_dumbbell_press: ['chest:3,delt_f:3,triceps:2', 'Pad 30–45°-ban, súlyzók a felső mellkas mellett.|Told fel őket a vállad fölé.|Lassan engedd vissza.', 'A könyök ne nyíljon teljesen oldalra.'],
+  dumbbell_shoulder_press: ['delt_f:3,delt_s:2,triceps:2,traps:1', 'Ülj egyenes háttal, súlyzók fülmagasságban.|Told fel őket a fejed fölé.|Engedd vissza fülmagasságig.', 'Ne homoríts, a hátad maradjon a támlán.'],
+  alternating_dumbbell_biceps_curl: ['biceps:3,forearm:2', 'Állj egyenesen, súlyzók a tested mellett.|Felváltva hajlítsd fel, közben fordítsd a tenyered felfelé.|Lassan engedd le.', 'A könyököd ne vándoroljon előre, ne lendíts.'],
+  hammer_curl: ['biceps:3,forearm:3', 'Súlyzók a tested mellett, tenyér befelé (kalapácsfogás).|Hajlítsd fel úgy, hogy a tenyér végig befelé néz.|Lassan engedd le.', 'Az alkart és a karizmot (brachialis) is erősen dolgoztatja.'],
+  lateral_raise: ['delt_s:3,delt_f:1,traps:1', 'Állj, súlyzók a tested mellett, könyök enyhén hajlítva.|Emeld oldalra vállmagasságig, a könyök vezessen.|Lassan engedd le.', 'Ne vond fel a vállad a füledhez, és ne lendíts.'],
+  rear_delt_fly: ['delt_r:3,upback:2,traps:1', 'Dőlj előre egyenes háttal, súlyzók lógnak.|Tárd szét oldalra enyhén hajlított karral.|Lassan engedd vissza.', 'Ne a lapockákat húzd össze, a hátsó vállal emelj.'],
+  dumbbell_row: ['lats:3,upback:2,delt_r:2,biceps:2,forearm:1', 'Egyik kéz és térd a padon, hát egyenes.|Húzd a súlyzót a csípőd felé, a könyök a test mellett hátra.|Engedd le, érezd a nyúlást.', 'Ne fordítsd ki a törzsed felfelé.'],
+  dumbbell_fly: ['chest:3,delt_f:1', 'Feküdj a padra, súlyzók a mellkas fölött, könyök enyhén hajlítva.|Ív alakban engedd szét őket, amíg nyúlást érzel.|Ugyanazon az íven hozd vissza, mintha egy fát ölelnél.', 'Ne nyomd, hanem öleld; a könyök szöge ne változzon.'],
+  dumbbell_wrist_curl: ['forearm:3', 'Ülj, az alkarod a combodon vagy padon, tenyér felfelé.|Csak a csuklóddal hajlítsd fel a súlyzót.|Lassan engedd le, akár az ujjakig gördítve.', 'Az alkar ne mozogjon, csak a csukló.'],
+  dumbbell_reverse_wrist_curl: ['forearm:3', 'Alkar a combon/padon, tenyér lefelé.|Emeld fel a kézfejed csak a csuklóból.|Lassan engedd le.', 'Könnyebb súllyal megy, mint a csuklóhajlítás. Ez normális.'],
+  dumbbell_deadlift: ['glutes:3,hams:3,quads:2,lowback:2,forearm:2,traps:1', 'Súlyzók a lábad mellett/előtt, egyenes hát.|Csípő hátra, majd lábbal told fel magad.|Fent csípő előre, lefelé ugyanígy vissza.', 'A hát ne görbüljön.'],
+  goblet_squat: ['quads:3,glutes:2,adduct:2,abs:1', 'Fogd a súlyzót a mellkasod előtt.|Ülj le mélyre, a könyök a térdek között.|Told fel talpközépről.', 'A törzs maradjon egyenes, a sarok a földön.'],
+  dumbbell_bulgarian_split_squat: ['quads:3,glutes:3,adduct:2,hams:1', 'Hátsó lábfej a padon, elöl a láb kb. egy nagy lépésre.|Ereszkedj le függőlegesen, amíg az első comb majdnem vízszintes.|Az első lábbal told fel magad.', 'Az első térd ne essen befelé; előredőlve több a farizom.'],
+  hack_squat: ['quads:3,glutes:2,adduct:1', 'Hát és váll a párnának, lábak vállszélességben a platformon.|Engedd le mélyre kontrolláltan.|Told fel, fent ne zárd teljesen a térdet.', 'Lejjebb tett láb = több comb eleje, feljebb = több farizom.'],
+  leg_press: ['quads:3,glutes:2,adduct:2,hams:1', 'Ülj be, láb csípőszélességben a platform közepén.|Engedd le, amíg a térd kb. 90° vagy mélyebb, a derék nem emelkedik el.|Told ki, a térd ne záródjon be teljesen.', 'Alul ne gördüljön fel a derekad.'],
+  smith_machine_squat: ['quads:3,glutes:2,adduct:1,abs:1', 'Rúd a csuklyán, lábak kicsit a rúd előtt.|Ülj le mélyre egyenes törzzsel.|Told fel talpközépről.', 'A lábak elhelyezése dönti el, mennyi a comb vs. far.'],
+  smith_machine_bulgarian_split_squat: ['quads:3,glutes:3,adduct:2,hams:1', 'Rúd a vállon, hátsó lábfej a padon.|Ereszkedj le függőlegesen.|Az első lábbal told fel.', 'Lábanként külön végezd, a gyengébb lábbal kezdj.'],
+  smith_machine_bench_press: ['chest:3,delt_f:2,triceps:2', 'Pad a rúd alá, hogy a rúd az alsó mellkasra érkezzen.|Lapockák hátra-le, engedd le a rudat.|Told fel.', 'Ugyanaz, mint a fekvenyomás, csak a gép vezeti a rudat.'],
+  smith_machine_overhead_shoulder_press: ['delt_f:3,delt_s:2,triceps:2,traps:1', 'Ülj a pad elejére, a rúd az állad előtt menjen.|Told fel a fejed fölé.|Engedd le állmagasságig.', 'Ne homoríts erősen.'],
+  leg_extension: ['quads:3', 'Ülj be, a térd a gép forgáspontjánál, a párna a boka fölött.|Nyújtsd ki a lábad, fent 1 mp szorítás.|Lassan engedd vissza.', 'Ne lendítsd, fogd meg a kapaszkodót.'],
+  seated_hamstring_curl: ['hams:3,calves:1', 'Ülj be, a párna a boka fölött, a combot rögzítsd.|Hajlítsd be a térded, amennyire tudod.|Lassan engedd vissza.', 'Ülve, előredőlve még jobban nyújtja a combhajlítót.'],
+  lying_hamstring_curl: ['hams:3,calves:1', 'Feküdj hasra, a párna a boka fölött.|Hajlítsd be a térded a fenekedig.|Lassan engedd vissza.', 'A csípőd ne emelkedjen fel a padról.'],
+  machine_hip_adduction: ['adduct:3', 'Ülj be, a párnák a térdek belső oldalán.|Zárd össze a lábaidat.|Lassan engedd szét.', 'Lassú, kontrollált visszaengedés.'],
+  machine_hip_abduction: ['glutes:3', 'Ülj be, a párnák a térdek külső oldalán.|Told szét a lábaidat.|Lassan engedd vissza.', 'Kicsit előredőlve még jobban a farizmot dolgoztatja.'],
+  standing_calf_raise: ['calves:3', 'Állj a gépbe, a lábujjpárnák a lépcső szélén.|Engedd le a sarkad mélyre.|Emelkedj lábujjhegyre, fent 1 mp szorítás.', 'Ne rugózz, alul tarts egy kis szünetet.'],
+  seated_calf_raise: ['calves:3', 'Ülj be, a párna a térd fölött, a lábujjpárnák a lépcsőn.|Engedd le a sarkad mélyre.|Emelkedj fel, fent szorítsd.', 'Ülve a mélyebb vádliizom (soleus) dolgozik jobban.'],
+  machine_ab_crunch: ['abs:3,obl:1', 'Ülj be, fogd a fogantyúkat, a lábad akassz be.|A hasad összehúzásával görbülj előre.|Lassan engedd vissza.', 'Ne a karoddal húzd, a hasaddal „tekerj”.'],
+  chest_supported_row: ['lats:3,upback:3,delt_r:2,biceps:2', 'Mellkas a párnának, fogd a fogantyúkat.|Húzd a csípőd felé, a könyök a test mellett hátra.|Lassan engedd ki nyújtott karig.', 'A mellkasod maradjon végig a párnán.'],
+  wide_grip_lat_pulldown: ['lats:3,upback:2,biceps:2,delt_r:1', 'Ülj be, combot rögzítsd, a rudat fogd szélesen.|Húzd a rudat a felső mellkasodhoz, a könyök lefelé-hátra.|Lassan engedd fel nyújtott karig.', 'Ne dőlj nagyon hátra, ne rántsd.'],
+  single_arm_sagittal_pulldown: ['lats:3,upback:1,biceps:2,delt_r:1', 'Ülj be, egy kézzel fogd a fogantyút, a test előtt fentről.|Húzd lefelé a csípőd felé, a könyök a test mellett.|Lassan engedd fel, érezd a nyúlást a hát oldalán.', 'A könyök a törzsed mellett, előre-hátra síkban mozogjon.'],
+  straight_arm_lat_pulldown: ['lats:3,triceps:1,abs:1', 'Állj a csiga elé, fogd a rudat/kötelet nyújtott karral.|Nyújtott karral húzd le a combodig.|Lassan engedd vissza.', 'A könyök végig majdnem nyújtott maradjon.'],
+  cable_high_row: ['upback:3,lats:2,delt_r:2,biceps:2,traps:1', 'Ülj vagy térdelj a csiga elé, fogd fentről.|Húzd a fogantyút az arcod/mellkasod felé, könyök kifelé-hátra.|Lassan engedd vissza.', 'A lapockákat a végén húzd össze.'],
+  seated_cable_row: ['lats:3,upback:3,delt_r:2,biceps:2,lowback:1', 'Ülj, lábad a talpon, egyenes hát.|Húzd a fogantyút a hasadhoz.|Lassan engedd ki, de a háttal ne dőlj előre nagyon.', 'Ne lendítsd a törzsed hátra.'],
+  high_row_machine: ['upback:3,lats:3,delt_r:2,biceps:2', 'Ülj be, fogd fentről a fogantyúkat.|Húzd lefelé-hátra, a könyök a test mellé.|Lassan engedd vissza.', 'Lapockák hátra-le a mozgás végén.'],
+  chest_fly: ['chest:3,delt_f:1', 'Ülj be, fogd a fogantyúkat, könyök enyhén hajlítva.|Zárd össze a karjaidat a mellkasod előtt.|Lassan engedd szét, amíg nyúlást érzel.', 'A könyök szöge ne változzon.'],
+  machine_chest_press: ['chest:3,delt_f:2,triceps:2', 'Ülj be, a fogantyúk mellmagasságban.|Told előre a karod.|Lassan engedd vissza.', 'A lapockák maradjanak hátra húzva.'],
+  machine_shoulder_press: ['delt_f:3,delt_s:2,triceps:2', 'Ülj be, a fogantyúk vállmagasságban.|Told fel.|Lassan engedd vissza.', 'A hátad maradjon a támlán.'],
+  machine_lateral_raise: ['delt_s:3,delt_f:1,traps:1', 'Ülj be, a párnák a felkarod külső oldalán.|Emeld oldalra vállmagasságig.|Lassan engedd vissza.', 'Ne vond fel a vállad.'],
+  reverse_pec_deck: ['delt_r:3,upback:2,traps:1', 'Ülj be a gép felé fordulva, fogd a fogantyúkat.|Nyújtott karral tárd hátra.|Lassan engedd vissza.', 'Ne a lapockákat húzd össze, a hátsó vállal húzz.'],
+  cable_face_pull: ['delt_r:3,upback:2,traps:2,biceps:1', 'Kötél a csigán szemmagasságban.|Húzd az arcod felé, a kezeket húzd szét.|Lassan engedd vissza.', 'Fent fordítsd kifelé a kezed (mintha bicepszet mutatnál).'],
+  cable_rope_triceps_pushdown: ['triceps:3,forearm:1', 'Állj a csiga elé, fogd a kötelet, könyök a test mellett.|Nyújtsd le a karod, lent húzd szét a kötelet.|Lassan engedd vissza.', 'A könyök ne mozogjon előre-hátra.'],
+  single_arm_overhead_cable_triceps_extension: ['triceps:3', 'Fordulj háttal a csigának, egy kézzel fogd a fogantyút a fejed mögött.|Nyújtsd ki a karod előre-fel.|Lassan engedd vissza.', 'A felkar maradjon a füled mellett.'],
+  overhead_cable_triceps_extension: ['triceps:3', 'Háttal a csigának, kötél a fejed mögött, könyök előre.|Nyújtsd ki előre-fel a karjaidat.|Lassan engedd vissza nyújtásig.', 'Nyújtott helyzetben a tricepsz hosszú feje is erősen dolgozik.'],
+  machine_preacher_curl: ['biceps:3,forearm:1', 'Ülj be, a felkar a párnán.|Hajlítsd fel a fogantyút.|Lassan engedd le majdnem nyújtott karig.', 'Alul ne ejtsd le.'],
+  cable_curl: ['biceps:3,forearm:2', 'Állj a csiga elé, fogd alulról.|Hajlítsd fel, könyök a test mellett.|Lassan engedd le.', 'Ne lendíts.'],
+  pull_up: ['lats:3,upback:2,biceps:2,forearm:2,delt_r:1,abs:1', 'Fogd a rudat vállszélességnél szélesebben, lógj nyújtott karral.|Húzd fel magad, amíg az állad a rúd fölé ér, mellkas a rúd felé.|Lassan engedd le teljesen.', 'Ne lendülj; ha még nem megy, gumiszalaggal vagy géppel segíts.'],
+  dips: ['chest:2,triceps:3,delt_f:2', 'Támaszkodj fel a korláton nyújtott karral.|Ereszkedj le, amíg a váll a könyök alá kerül.|Told vissza magad.', 'Előredőlve több mell, egyenesen több tricepsz.'],
+  push_up: ['chest:3,triceps:2,delt_f:2,abs:1', 'Kéz vállszélességben, test egyenes vonalban.|Engedd le a mellkasod a földig.|Told vissza.', 'A csípő ne lógjon le.'],
+  hanging_leg_raise: ['abs:3,obl:2,forearm:1', 'Lógj a rúdon nyújtott karral.|Emeld fel a lábad (térdet) a hasad összehúzásával.|Lassan engedd le, ne lendülj.', 'A medencét is billentsd fel, ne csak a lábat emeld.'],
+  hanging_oblique_leg_raise: ['obl:3,abs:2,forearm:1', 'Lógj a rúdon.|Emeld a térded fel és oldalra, a csípőt fordítsd.|Lassan engedd le, majd a másik oldal.', 'Lassan, lendítés nélkül.']
+};
+/* Saját rajzú izomtérkép: elöl + hátul. A bal fél rajzolt, a jobb tükrözött. */
+const BODY_FRONT = [
+  ['traps', 'M92,57 L77,66 L90,67 Z'],
+  ['delt_s', 'M75,64 C63,64 56,74 57,90 L63,92 C63,80 66,72 75,68 Z'],
+  ['delt_f', 'M75,68 C67,72 64,80 64,92 L70,96 C72,86 77,78 84,74 L83,68 Z'],
+  ['chest', 'M84,72 L99,71 L99,104 C92,108 80,106 72,98 C71,88 76,78 84,72 Z'],
+  ['biceps', 'M60,95 C55,105 55,119 57,130 L67,131 C70,119 70,106 67,97 Z'],
+  ['forearm', 'M56,134 C50,150 49,164 50,178 L58,178 C62,164 66,150 67,135 Z'],
+  ['obl', 'M73,102 C79,108 85,109 87,110 C86,128 86,144 88,160 L79,157 C76,140 72,120 73,102 Z'],
+  ['abs', 'M88,109 L99,108 L99,162 L89,160 C87,142 87,126 88,109 Z'],
+  ['quads', 'M78,163 C70,190 70,222 74,250 L90,252 C94,230 96,204 96,180 L87,170 Z'],
+  ['adduct', 'M96,178 C96,202 94,226 92,246 L99,238 L99,176 Z'],
+  ['calves', 'M76,268 C71,290 73,318 78,344 L87,344 C90,320 91,292 89,268 Z']
+];
+const BODY_BACK = [
+  ['traps', 'M92,55 L75,65 L85,70 L99,98 L99,55 Z'],
+  ['delt_r', 'M75,64 C63,64 56,74 57,90 L64,92 C66,80 72,72 83,70 Z'],
+  ['upback', 'M85,71 L99,99 L99,110 L86,104 C81,94 80,80 85,71 Z'],
+  ['lats', 'M72,96 C74,92 79,90 83,94 L86,105 L99,111 L99,140 L87,146 C80,130 74,114 72,96 Z'],
+  ['lowback', 'M87,147 L99,141 L99,166 L87,163 Z'],
+  ['triceps', 'M60,95 C55,105 55,119 57,130 L67,131 C70,119 70,106 67,97 Z'],
+  ['forearm', 'M56,134 C50,150 49,164 50,178 L58,178 C62,164 66,150 67,135 Z'],
+  ['glutes', 'M79,158 C73,170 73,186 79,195 C87,200 96,198 99,193 L99,168 L87,165 Z'],
+  ['hams', 'M77,199 C72,216 72,236 76,252 L90,252 C94,234 96,214 97,200 Z'],
+  ['calves', 'M76,264 C69,280 71,300 77,318 L89,318 C94,300 94,282 90,264 Z']
+];
+const BODY_FILL = '<ellipse cx="100" cy="30" rx="15" ry="19"/><rect x="92" y="46" width="16" height="14" rx="4"/><path d="M73,100 C72,120 76,145 79,158 L99,168 L121,158 C124,145 128,120 127,100 Z"/><ellipse cx="54" cy="187" rx="5" ry="9"/><ellipse cx="146" cy="187" rx="5" ry="9"/><ellipse cx="83" cy="259" rx="8" ry="8"/><ellipse cx="117" cy="259" rx="8" ry="8"/><path d="M77,318 L89,318 L88,346 L78,346 Z M123,318 L111,318 L112,346 L122,346 Z"/><ellipse cx="83" cy="353" rx="9" ry="5"/><ellipse cx="117" cy="353" rx="9" ry="5"/>';
+function bodySvg(parts, m, dx, label) {
+  const shape = (k, d) => { const v = m[k] || 0; return `<path d="${d}" class="mm${v ? ' mm' + v : ''}"/>`; };
+  const body = parts.map(([k, d]) => shape(k, d) + `<g transform="translate(200,0) scale(-1,1)">${shape(k, d)}</g>`).join('');
+  const absLines = label === 'ELÖL' ? '<path d="M89,122 H111 M89,136 H111 M89,149 H111 M100,108 V162" class="mm-line"/>' : '<path d="M100,56 V166" class="mm-line"/>';
+  return `<g transform="translate(${dx},0)"><g class="mm-fill">${BODY_FILL}</g>${body}${absLines}<text x="100" y="372" text-anchor="middle" class="mm-lab">${label}</text></g>`;
+}
+function muscleMapSvg(m) {
+  return `<svg viewBox="0 0 400 380" class="muscle-map" role="img" aria-label="Izomtérkép">${bodySvg(BODY_FRONT, m, 0, 'ELÖL')}${bodySvg(BODY_BACK, m, 200, 'HÁTUL')}</svg>`;
+}
+function exInfoFor(id) {
+  const key = rankKeyFor(id) || RANK_ALIAS[id] || id, raw = EX_INFO[key]; if (!raw) return null;
+  const m = {}; for (const p of raw[0].split(',')) { const [k, v] = p.split(':'); m[k] = Number(v); }
+  return { m, steps: raw[1].split('|'), tip: raw[2] };
+}
+const ytUrl = name => 'https://www.youtube.com/results?search_query=' + encodeURIComponent(name + ' exercise form');
+function openExInfo(id, name, hu) {
+  document.getElementById('exInfo')?.remove();
+  const info = exInfoFor(id), el = document.createElement('div');
+  el.id = 'exInfo'; el.className = 'overlay edit-overlay exinfo-overlay';
+  const lvl = [['FŐ CÉLIZOM', 3], ['MÁSODLAGOS', 2], ['SEGÍT, STABILIZÁL', 1]];
+  const groups = info ? lvl.map(([t, v]) => { const ks = Object.keys(info.m).filter(k => info.m[k] === v); return ks.length ? `<div class="mi-group"><span class="mi-lvl mi${v}">${t}</span>${ks.map(k => `<div class="mi-row"><b>${esc(MUSCLES[k] || k)}</b><i class="mi-bar"><em class="mi${v}" style="width:${v * 33.3}%"></em></i></div>`).join('')}</div>` : ''; }).join('') : '';
+  el.innerHTML = `<div class="timer-card edit-card stats-card exinfo-card"><div class="stats-top-row"><div class="eyebrow">GYAKORLAT-ÚTMUTATÓ</div><button class="secondary stats-close" data-close aria-label="Bezárás">✕</button></div>
+  <div class="edit-title">${esc(name)}</div>${hu ? `<div class="exercise-hu">${esc(hu)}</div>` : ''}
+  ${info ? `${muscleMapSvg(info.m)}<div class="mi-legend"><span><i class="mi3"></i>fő</span><span><i class="mi2"></i>másodlagos</span><span><i class="mi1"></i>segít</span></div>${groups}
+  <div class="ei-sec">HOGYAN CSINÁLD</div><ol class="ei-steps">${info.steps.map(x => `<li>${esc(x)}</li>`).join('')}</ol><div class="ei-tip">💡 ${esc(info.tip)}</div>` : `<div class="empty">Ehhez a gyakorlathoz még nincs leírás és izomtérkép. Szólj, és hozzáadom.</div>`}
+  <a class="primary ei-video" href="${esc(ytUrl(name))}" target="_blank" rel="noopener">▶ VIDEÓK A YOUTUBE-ON</a><div class="ei-note">A videókeresés a YouTube-ot nyitja meg (internet kell). Az izmok erőssége tájékoztató jellegű.</div></div>`;
+  el.addEventListener('click', ev => { if (ev.target === el || ev.target.closest('[data-close]')) el.remove(); });
+  document.body.appendChild(el);
+}
 let flashRankId = null;
 function showRankUp(id, before, after, ovBefore, ovAfter) {
   document.getElementById('rankUp')?.remove();
@@ -1340,6 +1470,7 @@ function openStats(id) {
   $('statsHu').textContent = m.hu || '';
   $('statsPb').textContent = pb ? `🏆 Rekord: ${showNum(pb.weight)} kg × ${showNum(pb.reps)} · ${state.maxCycle > 1 ? pb.c + '. ciklus, ' : ''}${pb.w}. hét` : '';
   $('statsPb').classList.toggle('hidden', !pb);
+  $('statsInfo').onclick = () => openExInfo(id, nameOf(id), m.hu || '');
   $('statsBody').innerHTML = statsHtml(id);
   bindCharts($('statsBody'));
   $('statsOverlay').classList.remove('hidden');
