@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v32';
+const APP_VERSION = 'v33';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -586,7 +586,7 @@ function renderWorkout() {
     const vi = variantIndex(c, w, d, slot), v = slot.variants[vi], name = v.name, id = exId(name);
     const rec = recordFor(c, w, d, name), last = latestBefore(c, w, d, name);
     const sets = rec?.sets || [emptySet(), emptySet()], wu = rec?.warmup || emptySet(), pb = personalBest(id);
-    h += `<article class="exercise"><div class="exercise-head"><div><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(name)}</button>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(showReps(slot))}</div></div><div class="head-btns"><button class="info-btn" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="Útmutató: hogyan csináld, milyen izmokat dolgoztat">?</button><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div></div>`;
+    h += `<article class="exercise"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(name)}: animáció és útmutató">${typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?'}</button><div class="ex-main"><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(name)}</button>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(showReps(slot))}</div></div><div class="head-btns"><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div></div>`;
     const note = state.notes?.[id] || '';
     h += `<button class="ex-note${note ? '' : ' empty-note'}" data-note="${esc(id)}">📝 ${note ? esc(note) : 'Jegyzet a géphez (pl. ülés 4-es, támla 2. lyuk)'}</button>`;
     if (slot.variants.length > 1) {
@@ -1366,11 +1366,14 @@ function openExInfo(id, name, hu) {
   const groups = info ? lvl.map(([t, v]) => { const ks = Object.keys(info.m).filter(k => info.m[k] === v); return ks.length ? `<div class="mi-group"><span class="mi-lvl mi${v}">${t}</span>${ks.map(k => `<div class="mi-row"><b>${esc(MUSCLES[k] || k)}</b><i class="mi-bar"><em class="mi${v}" style="width:${v * 33.3}%"></em></i></div>`).join('')}</div>` : ''; }).join('') : '';
   el.innerHTML = `<div class="timer-card edit-card stats-card exinfo-card"><div class="stats-top-row"><div class="eyebrow">GYAKORLAT-ÚTMUTATÓ</div><button class="secondary stats-close" data-close aria-label="Bezárás">✕</button></div>
   <div class="edit-title">${esc(name)}</div>${hu ? `<div class="exercise-hu">${esc(hu)}</div>` : ''}
-  ${info ? `${muscleMapSvg(info.m)}<div class="mi-legend"><span><i class="mi3"></i>fő</span><span><i class="mi2"></i>másodlagos</span><span><i class="mi1"></i>segít</span></div>${groups}
+  ${typeof ANIM !== 'undefined' && ANIM.has(id) ? `<div class="ex-anim" role="img" aria-label="${esc(name)} animáció"></div><div class="ei-note">Koppints az animációra a megállításhoz. A zöld részek a dolgozó izmok.</div>` : ''}
+  ${info ? `<div class="ei-sec">MELYIK IZMOT DOLGOZTATJA</div>${muscleMapSvg(info.m)}<div class="mi-legend"><span><i class="mi3"></i>fő</span><span><i class="mi2"></i>másodlagos</span><span><i class="mi1"></i>segít</span></div>${groups}
   <div class="ei-sec">HOGYAN CSINÁLD</div><ol class="ei-steps">${info.steps.map(x => `<li>${esc(x)}</li>`).join('')}</ol><div class="ei-tip">💡 ${esc(info.tip)}</div>` : `<div class="empty">Ehhez a gyakorlathoz még nincs leírás és izomtérkép. Szólj, és hozzáadom.</div>`}
   <a class="primary ei-video" href="${esc(ytUrl(name))}" target="_blank" rel="noopener">▶ VIDEÓK A YOUTUBE-ON</a><div class="ei-note">A videókeresés a YouTube-ot nyitja meg (internet kell). Az izmok erőssége tájékoztató jellegű.</div></div>`;
-  el.addEventListener('click', ev => { if (ev.target === el || ev.target.closest('[data-close]')) el.remove(); });
+  let stop = () => {};
+  el.addEventListener('click', ev => { if (ev.target === el || ev.target.closest('[data-close]')) { stop(); el.remove(); } });
   document.body.appendChild(el);
+  const box = el.querySelector('.ex-anim'); if (box) stop = ANIM.play(box, id);
 }
 let flashRankId = null;
 function showRankUp(id, before, after, ovBefore, ovAfter) {
