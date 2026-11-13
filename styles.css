@@ -360,3 +360,12 @@ button.rank-line{width:100%;text-align:left;color:#f4f6f8;cursor:pointer;font:in
 .ex-anim{position:relative;margin:12px 0 4px;border-radius:16px;background:radial-gradient(ellipse at 50% 30%,#1a2127,#090c0f 75%);border:1px solid #22282e;overflow:hidden;cursor:pointer}
 .ex-anim svg{display:block;width:100%;height:auto;aspect-ratio:1.25}
 .ex-anim.paused::after{content:"▶";position:absolute;right:12px;top:10px;width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,.55);color:#9cff57;display:grid;place-items:center;font-size:13px}
+/* v34: 3D-s, forgatható gyakorlat-animáció */
+.ex-anim.ex-anim3d{cursor:grab;background:#0b0e12}
+.ex-anim3d .a3-canvas{display:block;width:100%;touch-action:pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.ex-anim3d.paused::after{display:none}
+.a3-bar{display:flex;gap:6px;padding:8px;background:#0b0e12;border-top:1px solid #1c2228}
+.a3-bar button{flex:1;background:#12171c;border:1px solid #2a3037;color:#aab2ba;border-radius:9px;padding:9px 4px;font-size:10.5px;font-weight:900;letter-spacing:.3px;cursor:pointer}
+.a3-bar button:active{border-color:#9cff57;color:#9cff57}
+.a3-bar .a3-play{flex:0 0 46px;color:#9cff57}
+.ex-thumb-img{width:100%;height:100%;object-fit:cover;display:block}

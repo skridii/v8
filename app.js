@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v33';
+const APP_VERSION = 'v34';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -586,7 +586,7 @@ function renderWorkout() {
     const vi = variantIndex(c, w, d, slot), v = slot.variants[vi], name = v.name, id = exId(name);
     const rec = recordFor(c, w, d, name), last = latestBefore(c, w, d, name);
     const sets = rec?.sets || [emptySet(), emptySet()], wu = rec?.warmup || emptySet(), pb = personalBest(id);
-    h += `<article class="exercise"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(name)}: animáció és útmutató">${typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?'}</button><div class="ex-main"><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(name)}</button>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(showReps(slot))}</div></div><div class="head-btns"><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div></div>`;
+    h += `<article class="exercise"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(name)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(name)}</button>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(showReps(slot))}</div></div><div class="head-btns"><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div></div>`;
     const note = state.notes?.[id] || '';
     h += `<button class="ex-note${note ? '' : ' empty-note'}" data-note="${esc(id)}">📝 ${note ? esc(note) : 'Jegyzet a géphez (pl. ülés 4-es, támla 2. lyuk)'}</button>`;
     if (slot.variants.length > 1) {
@@ -685,6 +685,7 @@ function bindInputs() {
   });
   workout.querySelectorAll('[data-stats]').forEach(btn => btn.onclick = () => openStats(btn.dataset.stats));
   workout.querySelectorAll('[data-info]').forEach(btn => btn.onclick = () => openExInfo(btn.dataset.info, btn.dataset.iname, btn.dataset.ihu));
+  if (typeof ANIM3D !== 'undefined') ANIM3D.fillThumbs(workout);
   workout.querySelectorAll('[data-note]').forEach(btn => btn.onclick = () => {
     const id = btn.dataset.note, cur = state.notes?.[id] || '';
     const v = prompt(`Jegyzet – ${nameOf(id)}\n(gépbeállítás, fogás, bármi, ami segít; minden héten látszik)`, cur);
@@ -1302,7 +1303,7 @@ const EX_INFO = {
   chest_fly: ['chest:3,delt_f:1', 'Ülj be, fogd a fogantyúkat, könyök enyhén hajlítva.|Zárd össze a karjaidat a mellkasod előtt.|Lassan engedd szét, amíg nyúlást érzel.', 'A könyök szöge ne változzon.'],
   machine_chest_press: ['chest:3,delt_f:2,triceps:2', 'Ülj be, a fogantyúk mellmagasságban.|Told előre a karod.|Lassan engedd vissza.', 'A lapockák maradjanak hátra húzva.'],
   machine_shoulder_press: ['delt_f:3,delt_s:2,triceps:2', 'Ülj be, a fogantyúk vállmagasságban.|Told fel.|Lassan engedd vissza.', 'A hátad maradjon a támlán.'],
-  machine_lateral_raise: ['delt_s:3,delt_f:1,traps:1', 'Ülj be, a párnák a felkarod külső oldalán.|Emeld oldalra vállmagasságig.|Lassan engedd vissza.', 'Ne vond fel a vállad.'],
+  machine_lateral_raise: ['delt_s:3,delt_f:1,traps:1', 'Állj a gépbe, a mellkasod a párnán; a gép párnái a felkarod külső oldalán, a kezed a fogantyún.|Emeld a karod oldalra vállmagasságig, a könyök vezessen.|Lassan engedd vissza, lent se ejtsd le a súlyt.', 'Ne vond fel a vállad, és ne lendíts a törzseddel. (Ülő gépen ugyanez a mozdulat.)'],
   reverse_pec_deck: ['delt_r:3,upback:2,traps:1', 'Ülj be a gép felé fordulva, fogd a fogantyúkat.|Nyújtott karral tárd hátra.|Lassan engedd vissza.', 'Ne a lapockákat húzd össze, a hátsó vállal húzz.'],
   cable_face_pull: ['delt_r:3,upback:2,traps:2,biceps:1', 'Kötél a csigán szemmagasságban.|Húzd az arcod felé, a kezeket húzd szét.|Lassan engedd vissza.', 'Fent fordítsd kifelé a kezed (mintha bicepszet mutatnál).'],
   cable_rope_triceps_pushdown: ['triceps:3,forearm:1', 'Állj a csiga elé, fogd a kötelet, könyök a test mellett.|Nyújtsd le a karod, lent húzd szét a kötelet.|Lassan engedd vissza.', 'A könyök ne mozogjon előre-hátra.'],
@@ -1358,22 +1359,37 @@ function exInfoFor(id) {
   return { m, steps: raw[1].split('|'), tip: raw[2] };
 }
 const ytUrl = name => 'https://www.youtube.com/results?search_query=' + encodeURIComponent(name + ' exercise form');
+let exInfoStop = null;
 function openExInfo(id, name, hu) {
+  if (exInfoStop) { exInfoStop(); exInfoStop = null; }
   document.getElementById('exInfo')?.remove();
   const info = exInfoFor(id), el = document.createElement('div');
+  // 3D-s animáció, ha ehhez a gyakorlathoz már van és a készülék tudja; különben (vagy hiba esetén) a 2D-s rajz
+  const use3d = typeof ANIM3D !== 'undefined' && ANIM3D.has(id), has2d = typeof ANIM !== 'undefined' && ANIM.has(id);
+  const NOTE2D = 'Koppints az animációra a megállításhoz. A zöld részek a dolgozó izmok.', NOTE3D = 'Húzd az ujjad oldalra a körbeforgatáshoz, koppints a megállításhoz. A zöld részek a dolgozó izmok.';
   el.id = 'exInfo'; el.className = 'overlay edit-overlay exinfo-overlay';
   const lvl = [['FŐ CÉLIZOM', 3], ['MÁSODLAGOS', 2], ['SEGÍT, STABILIZÁL', 1]];
   const groups = info ? lvl.map(([t, v]) => { const ks = Object.keys(info.m).filter(k => info.m[k] === v); return ks.length ? `<div class="mi-group"><span class="mi-lvl mi${v}">${t}</span>${ks.map(k => `<div class="mi-row"><b>${esc(MUSCLES[k] || k)}</b><i class="mi-bar"><em class="mi${v}" style="width:${v * 33.3}%"></em></i></div>`).join('')}</div>` : ''; }).join('') : '';
   el.innerHTML = `<div class="timer-card edit-card stats-card exinfo-card"><div class="stats-top-row"><div class="eyebrow">GYAKORLAT-ÚTMUTATÓ</div><button class="secondary stats-close" data-close aria-label="Bezárás">✕</button></div>
   <div class="edit-title">${esc(name)}</div>${hu ? `<div class="exercise-hu">${esc(hu)}</div>` : ''}
-  ${typeof ANIM !== 'undefined' && ANIM.has(id) ? `<div class="ex-anim" role="img" aria-label="${esc(name)} animáció"></div><div class="ei-note">Koppints az animációra a megállításhoz. A zöld részek a dolgozó izmok.</div>` : ''}
+  ${use3d || has2d ? `<div class="ex-anim" role="img" aria-label="${esc(name)} animáció"></div><div class="ei-note" id="exAnimNote">${use3d ? NOTE3D : NOTE2D}</div>` : ''}
   ${info ? `<div class="ei-sec">MELYIK IZMOT DOLGOZTATJA</div>${muscleMapSvg(info.m)}<div class="mi-legend"><span><i class="mi3"></i>fő</span><span><i class="mi2"></i>másodlagos</span><span><i class="mi1"></i>segít</span></div>${groups}
   <div class="ei-sec">HOGYAN CSINÁLD</div><ol class="ei-steps">${info.steps.map(x => `<li>${esc(x)}</li>`).join('')}</ol><div class="ei-tip">💡 ${esc(info.tip)}</div>` : `<div class="empty">Ehhez a gyakorlathoz még nincs leírás és izomtérkép. Szólj, és hozzáadom.</div>`}
   <a class="primary ei-video" href="${esc(ytUrl(name))}" target="_blank" rel="noopener">▶ VIDEÓK A YOUTUBE-ON</a><div class="ei-note">A videókeresés a YouTube-ot nyitja meg (internet kell). Az izmok erőssége tájékoztató jellegű.</div></div>`;
   let stop = () => {};
-  el.addEventListener('click', ev => { if (ev.target === el || ev.target.closest('[data-close]')) { stop(); el.remove(); } });
+  exInfoStop = () => stop();
+  el.addEventListener('click', ev => { if (ev.target === el || ev.target.closest('[data-close]')) { stop(); exInfoStop = null; el.remove(); } });
   document.body.appendChild(el);
-  const box = el.querySelector('.ex-anim'); if (box) stop = ANIM.play(box, id);
+  const box = el.querySelector('.ex-anim');
+  if (box) {
+    const play2d = () => {
+      const note = el.querySelector('#exAnimNote'); box.className = 'ex-anim'; box.textContent = '';
+      if (has2d) { stop = ANIM.play(box, id); if (note) note.textContent = NOTE2D; } else { stop = () => {}; box.remove(); note?.remove(); }
+    };
+    let s3 = null;
+    if (use3d) { try { s3 = ANIM3D.mount(box, id, play2d); } catch (e) { s3 = null; } }
+    if (s3) stop = s3; else play2d();
+  }
 }
 let flashRankId = null;
 function showRankUp(id, before, after, ovBefore, ovAfter) {
