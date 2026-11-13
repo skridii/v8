@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v30';
+const APP_VERSION = 'v31';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -14,7 +14,8 @@ const DAYS = [
   { name: 'UPPER 2', subtitle: 'Shoulders & Lat Width Focus' }
 ];
 
-const PROGRAM = [
+/* A régi (v9 előtti) alapprogram – csak a régi mentések átalakításához kell (indexek szerinti névpárosítás). NE módosítsd! */
+const LEGACY_PROGRAM = [
 {name:'LOWER 1',subtitle:'Deadlift & Quadriceps Focus',ex:[
 ['Conventional Deadlift','Sima Felhúzás','2 × 5–7'],['Hack Squat','Hack Guggolás Gépen','2 × 6–8'],['Machine Ab Crunch','Gépes hasprés gépen','2 × 10–15'],['Machine Hip Adduction','Csípő Addukció Gépen','2 × 10–12'],['Standing Calf Raise','Álló Vádli Gépen','2 × 8–10'],['Dumbbell Wrist Curl','Csuklóhajlítás','2 × 12–15'],['Dumbbell Reverse Wrist Curl','Csuklófeszítés','2 × 12–15']]},
 {name:'UPPER 1',subtitle:'Chest & Back Thickness',ex:[
@@ -24,12 +25,24 @@ const PROGRAM = [
 {name:'UPPER 2',subtitle:'Shoulders & Lat Width Focus',ex:[
 ['Smith Machine Overhead Shoulder Press','Smith Vállból Nyomás','2 × 6–8'],['Wide-Grip Lat Pulldown','Széles Lehúzás Csigán','2 × 8–10'],['Chest Fly','Mell Tárogatás / Pec Deck','2 × 8–10'],['High Row Machine','Gépes magas evezés / High Row','2 × 8–10'],['Alternating Dumbbell Biceps Curl','Váltott Karú Bicepsz','2 × 8–10'],['Single-Arm Overhead Cable Triceps Extension','1 Kezes Fejfeletti Tricepsz','2 × 8–10']]}
 ];
+/* Alap edzésterv az új felhasználóknak (v31-től: Ádám 2026-11 programja).
+   [név, magyar név, ismétlés, szettszám]. A meglévő felhasználók saját tervét NEM érinti. */
+const PROGRAM = [
+{name:'LOWER 1',subtitle:'Deadlift & Quadriceps Focus',ex:[
+['Conventional Deadlift','Sima Felhúzás','2 × 5–7',2],['Hack Squat','Hack Guggolás Gépen','2 × 6–8',2],['Machine Ab Crunch','Gépes hasprés gépen','1 × 10–15',1],['Machine Hip Adduction','Csípő Addukció Gépen','2 × 10–12',2],['Standing Calf Raise','Álló Vádli Gépen','2 × 8–10',2],['Dumbbell Wrist Curl','Csuklóhajlítás','2 × 12–15',2],['Dumbbell Reverse Wrist Curl','Csuklófeszítés','2 × 12–15',2]]},
+{name:'UPPER 1',subtitle:'Chest & Back Thickness',ex:[
+['Bench Press','Fekvenyomás','2 × 6–8',2],['Chest-Supported Row','Mellkassal támasztott evezés – csípő felé húzva','2 × 6–8',2],['Machine Lateral Raise','Gépes Oldalemelés','2 × 10–12',2],['Reverse Pec Deck','Hátsó Váll Pec Deck Gépen','2 × 10–12',2],['Machine Preacher Curl','Gépes Scott Bicepsz (csigás)','2 × 8–10',2],['Cable Rope Triceps Pushdown','Csigás Kötél Tricepsz','2 × 8–10',2],['Single-Arm Sagittal Pulldown','Szagittális Lehúzás Egy Kézzel Gépen','1 × 8–10',1]]},
+{name:'LOWER 2',subtitle:'Quadriceps, Hamstring & Soleus Focus',ex:[
+['Smith Machine Bulgarian Split Squat','Smith Bolgár Guggolás','2 × 8–10 / láb',2],['Lying Hamstring Curl','Fekvő Combhajlítás','2 × 8–10',2],['Leg Extension','Láb Extenzió','2 × 10–12',2],['Seated Calf Raise','Ülő Vádli Gépen','2 × 10–12',2],['Hanging Oblique Leg Raise','Függeszkedős Oldalsó Lábemelés (oldalanként)','2 × 10–12',2],['Dumbbell Wrist Curl','Csuklóhajlítás','2 × 12–15',2],['Dumbbell Reverse Wrist Curl','Csuklófeszítés','2 × 12–15',2]]},
+{name:'UPPER 2',subtitle:'Shoulders & Lat Width Focus',ex:[
+['Smith Machine Overhead Shoulder Press','Smith Vállból Nyomás','2 × 6–8',2],['Pull Up','Húzódzkodás','2 × 8–10',2],['Chest Fly','Mell Tárogatás / Pec Deck','2 × 8–10',2],['Cable High Row','Magas Evezés Csigán','2 × 8–10',2],['Alternating Dumbbell Biceps Curl','Váltott Karú Bicepsz','2 × 8–10',2],['Overhead Cable Triceps Extension','Fejfeletti Tricepsz Csigán (2 kézzel)','2 × 8–10',2]]}
+];
 const INCLINE = { name: 'Incline Bench Press', hu: 'Ferde Fekvenyomás' };
 
 // A legrégebbi (v1–v3, "logs" formátumú) mentések programja: ott a LOWER 1 3. gyakorlata
 // Leg Extension, az UPPER 2 4. gyakorlata Cable Face Pull volt. Így ezek az adatok
 // a saját nevük alatt maradnak, nem keverednek az Ab Crunch / High Row adataival.
-const LEGACY_NAMES = PROGRAM.map(d => d.ex.map(x => x[0]));
+const LEGACY_NAMES = LEGACY_PROGRAM.map(d => d.ex.map(x => x[0]));
 LEGACY_NAMES[0][2] = 'Leg Extension';
 LEGACY_NAMES[3][3] = 'Cable Face Pull';
 
@@ -79,11 +92,14 @@ function hasData(r) { if (!r) return false; return [r.warmup, ...(r.sets || [])]
 function withTimeout(p, ms) { return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]); }
 
 /* ---------- program / layout ---------- */
-function defaultLayout(exerciseNames = {}) {
-  return PROGRAM.map((day, d) => day.ex.map((x, e) => {
+/* Új felhasználó: az aktuális alapterv. Régi mentés átalakítása (legacy = true): a régi program, mert ott
+   az egyedi nevek („nap-sorszám”) a régi sorrendre hivatkoznak. */
+function defaultLayout(exerciseNames = {}, legacy = false) {
+  return (legacy ? LEGACY_PROGRAM : PROGRAM).map((day, d) => day.ex.map((x, e) => {
     const custom = exerciseNames[`${d}-${e}`];
     const name = custom || x[0];
     const slot = { uid: `d${d}e${e}`, reps: x[2], variants: [{ name, hu: custom && custom !== x[0] ? '' : x[1] }] };
+    if (x[3] && x[3] !== 2) slot.sets = x[3];
     if (name === 'Bench Press') slot.variants.push({ ...INCLINE });
     return slot;
   }));
@@ -283,7 +299,7 @@ function migrate(old) {
       exercises[id] = { ...obj, occurrences: occ };
     }
     s = { ...blankState(), ...old, version: 6, exercises, exerciseNames: old.exerciseNames || {} };
-    s.layouts = { '1-1': defaultLayout(s.exerciseNames) };
+    s.layouts = { '1-1': defaultLayout(s.exerciseNames, true) };
     s.cycle = 1; s.maxCycle = 1; s.variantChoice = {}; s.names = {};
     // Kérés: a v9 utáni első UPPER 1 alkalom sima Bench Press legyen (utána váltakozik).
     const benchSlot = s.layouts['1-1'][1].find(x => x.variants.length > 1 && x.variants[0].name === 'Bench Press');
@@ -315,7 +331,7 @@ function migrate(old) {
   s.variantChoice = s.variantChoice || {};
   s.names = s.names || {};
   s.exerciseNames = s.exerciseNames || {};
-  if (!s.layouts || !Object.keys(s.layouts).length) s.layouts = { '1-1': defaultLayout(s.exerciseNames) };
+  if (!s.layouts || !Object.keys(s.layouts).length) s.layouts = { '1-1': defaultLayout(s.exerciseNames, true) };
   for (const obj of Object.values(s.exercises)) {
     if (!obj.occurrences) obj.occurrences = {};
     for (const k of Object.keys(obj.occurrences)) obj.occurrences[k] = normalizeRecord(obj.occurrences[k]);
@@ -331,7 +347,7 @@ function migrate(old) {
   const prev = state; state = s;
   try {
     registerNames();
-    for (const day of PROGRAM) for (const x of day.ex) if (!s.names[exId(x[0])]) s.names[exId(x[0])] = x[0];
+    for (const day of [...LEGACY_PROGRAM, ...PROGRAM]) for (const x of day.ex) if (!s.names[exId(x[0])]) s.names[exId(x[0])] = x[0];
     for (const row of LEGACY_NAMES) for (const n of row) if (!s.names[exId(n)]) s.names[exId(n)] = n;
     // Váltakozó gyakorlatnál a már rögzített hetek választását rögzítjük, hogy ne ugráljon.
     for (const [id, obj] of Object.entries(s.exercises)) for (const [k, r] of Object.entries(obj.occurrences)) {
