@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v34';
+const APP_VERSION = 'v35';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -825,6 +825,43 @@ function monthSummary(mk) {
   const ups = Object.keys(best).filter(id => before[id] > 0 && best[id] > before[id] * 1.001).map(id => ({ id, pct: (best[id] / before[id] - 1) * 100 })).sort((a, b) => b.pct - a.pct);
   return { workouts: sessions.size, vol, sets, ups, label: `${Math.floor(mk / 12)}. ${HU_MONTHS[mk % 12]}` };
 }
+/* ---------- v35: heti izomtérkép – melyik izom hányszor volt megcélozva a héten ---------- */
+let muscleMode = 'done';      // 'done' = az elvégzett szettek, 'plan' = a heti terv (ha mindent megcsinálsz)
+function weekMuscles(c, w, plan) {
+  const M = {}, L = layoutFor(c, w);
+  DAYS.forEach((day, d) => {
+    for (const slot of (L[d] || [])) {
+      const name = slotName(c, w, d, slot), r = recordFor(c, w, d, name), info = exInfoFor(exId(name)); if (!info) continue;
+      const n = plan ? setCount(slot, r) : (r?.sets || []).filter(x => x?.done).length; if (!n) continue;
+      for (const [k, lv] of Object.entries(info.m)) (M[k] || (M[k] = [])).push({ name, lv, n, d });
+    }
+  });
+  return M;
+}
+function weekMuscleHtml() {
+  const c = state.cycle, w = state.week, plan = muscleMode === 'plan', M = weekMuscles(c, w, plan), lv = {}, cnt = [0, 0, 0, 0];
+  let rows = '';
+  for (const k of Object.keys(MUSCLES)) {
+    const ex = M[k] || [], days3 = new Set(ex.filter(x => x.lv === 3).map(x => x.d)).size, days2 = new Set(ex.filter(x => x.lv >= 2).map(x => x.d)).size;
+    const sets3 = ex.filter(x => x.lv === 3).reduce((a, x) => a + x.n, 0), sets2 = ex.filter(x => x.lv === 2).reduce((a, x) => a + x.n, 0);
+    const L = days3 >= 2 ? 3 : days3 === 1 || days2 >= 2 ? 2 : ex.length ? 1 : 0;
+    if (L) lv[k] = L; cnt[L]++;
+    const status = L === 3 ? '2× megvolt' : L === 2 ? (days3 ? '1× célzottan' : '2× másodlagosan') : L === 1 ? (sets2 ? '1× másodlagosan' : 'csak segített') : 'kimaradt';
+    const parts = []; if (sets3) parts.push(`célzottan ${days3} nap · ${sets3} szett`); if (sets2) parts.push(`másodlagosan ${sets2} szett`); if (!sets3 && !sets2 && ex.length) parts.push('csak segítő izomként dolgozott');
+    const names = [...new Set(ex.filter(x => x.lv >= 2).sort((a, b) => b.lv - a.lv || a.d - b.d).map(x => x.name))];
+    rows += `<div class="wm-row s${L}"><i></i><div><b>${esc(MUSCLES[k])}</b><span>${parts.length ? esc(parts.join(' · ')) : (plan ? 'nincs rá gyakorlat a heti tervben' : 'ezen a héten még nem dolgozott')}</span>${names.length ? `<span class="wm-ex">${esc(names.join(' · '))}</span>` : ''}</div><em>${status}</em></div>`;
+  }
+  let fig = '';
+  if (typeof ANIM3D !== 'undefined') { try { const a = ANIM3D.figure(lv, -14), b = ANIM3D.figure(lv, 166); if (a && b) fig = `<div class="wm-fig"><figure><img src="${a}" alt="Izomtérkép elölről"><figcaption>ELÖL</figcaption></figure><figure><img src="${b}" alt="Izomtérkép hátulról"><figcaption>HÁTUL</figcaption></figure></div>`; } catch (e) { fig = ''; } }
+  if (!fig) fig = muscleMapSvg(lv);
+  return `<section class="summary-card wm-card"><div class="summary-title">💪 HETI IZOMTÉRKÉP · ${cycLabel(c)}${w}. HÉT</div>
+  <div class="wm-tabs"><button data-mm="done" class="${plan ? '' : 'on'}">ELVÉGZETT</button><button data-mm="plan" class="${plan ? 'on' : ''}">TERV SZERINT</button></div>
+  <div class="bw-note">${plan ? 'Ezt edzi meg a heti terved, ha minden szettet megcsinálsz.' : 'A héten eddig kipipált munkasorozatok alapján.'} Cél: minden izom hetente 2× legyen célzottan megdolgoztatva.</div>
+  ${fig}
+  <div class="wm-legend"><span class="s3"><i></i>2× megvolt</span><span class="s2"><i></i>1× célzottan</span><span class="s1"><i></i>alig dolgozott</span><span class="s0"><i></i>kimaradt</span></div>
+  <div class="summary-stats three"><div><strong>${cnt[3]}</strong><span>izom 2× megvolt</span></div><div><strong>${cnt[2]}</strong><span>izom csak 1× célzottan</span></div><div><strong>${cnt[1] + cnt[0]}</strong><span>izom alig vagy nem dolgozott</span></div></div>
+  <div class="wm-list">${rows}</div></section>`;
+}
 function monthHtml() {
   const now = monthKey(Date.now()), mk = monthSel ?? now, m = monthSummary(mk);
   let h = `<section class="summary-card month-card"><div class="month-nav"><button class="cycle-btn" id="monthPrev">‹</button><div class="summary-title">HAVI ÖSSZEFOGLALÓ · ${esc(m.label.toUpperCase())}</div><button class="cycle-btn" id="monthNext" ${mk >= now ? 'disabled' : ''}>›</button></div>`;
@@ -847,6 +884,7 @@ function renderHistory() {
   const doneSets = rows.reduce((a, x) => a + x.done, 0), allSets = rows.reduce((a, x) => a + x.total, 0);
   h += `<section class="summary-card"><div class="summary-title">${cycLabel(c)}${w}. HÉT ÖSSZESÍTŐ</div><div class="summary-stats three"><div><strong>${started}/4</strong><span>edzésnap elkezdve</span></div><div><strong>${finished}/4</strong><span>edzésnap kész</span></div><div><strong>${doneSets}/${allSets}</strong><span>munkasorozat kész</span></div></div><div class="summary-row total"><span>Heti megmozgatott súly</span><b>${kg(rows.reduce((a, x) => a + x.vol, 0))} kg</b></div>${rows.map(x => `<div class="summary-row"><span>${x.name}</span><b>${x.done}/${x.total} szett · ${kg(x.vol)} kg${x.total && x.done >= x.total ? ' ✓' : ''}</b></div>`).join('')}</section>`;
 
+  h += weekMuscleHtml();
   h += monthHtml();
   h += recentRankUpsHtml();
   const active = [];
@@ -867,6 +905,7 @@ function renderHistory() {
   h += `<div class="note">Az alkalmazás minden változást azonnal ment, és naponta külön helyi másolatot is készít. A fájlba mentés külön, letölthető másolatot ad. IRONLOG ${APP_VERSION}</div>`;
   workout.innerHTML = h;
   $('histSearch').oninput = e => { histQuery = e.target.value; filterHistory(); };
+  workout.querySelectorAll('[data-mm]').forEach(b => b.onclick = () => { muscleMode = b.dataset.mm; renderHistory(); });
   workout.querySelectorAll('.ru-row[data-rstats]').forEach(b => b.onclick = () => openStats(b.dataset.rstats));
   $('monthPrev').onclick = () => { monthSel = (monthSel ?? monthKey(Date.now())) - 1; renderHistory(); };
   $('monthNext').onclick = () => { monthSel = Math.min(monthKey(Date.now()), (monthSel ?? monthKey(Date.now())) + 1); renderHistory(); };

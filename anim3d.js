@@ -373,7 +373,7 @@ void main() {}`;
     cyl(mad(c, ax, -th / 2 - 0.003), mad(c, ax, th / 2 + 0.003), R * 0.42, PLATE2, 0.004);
     cyl(mad(c, ax, -th / 2 - 0.006), mad(c, ax, th / 2 + 0.006), R * 0.16, CHROME, 0.004);
   }
-  EX._stand = { cam: { yaw: -25, pitch: 6, dist: 4.5, target: [0, 0.92, 0] }, build: () => ({ root: [0, 0.98, 0] }) };
+  EX._stand = { cam: { yaw: -25, pitch: 6, dist: 4.5, target: [0, 0.92, 0], floor: 1.5 }, build: () => Object.assign({ root: [0, 0.98, 0] }, LR(sd => ({ hand: [sd * 0.4, 0.86, 0.06], pole: [sd * 0.4, 0, -1], foot: [sd * 0.13, D.ankle, 0], toe: [sd * 0.2, 0, 1] }))) };
 
   /* Hack guggolás: ferde sínen futó szánkó (háttámla + vállpárnák), a lábak a döntött lapon. t = 0 fent, 1 lent. */
   EX.hack_squat = {
@@ -381,7 +381,7 @@ void main() {}`;
     build(t) {
       const al = rad(48), u = [0, Math.sin(al), -Math.cos(al)], n = [0, Math.cos(al), Math.sin(al)], F = { x: X, y: u, z: n };   // u: a sín iránya (fel-hátra), n: a támlától a test felé
       const PC = [0, 0.3, 0.7], A = mad(mad(PC, n, -0.07), u, 0.095);                      // a lábtartó közepe; a boka helye
-      const hip = mad(mad(A, n, -0.12), u, lerp(0.845, 0.575, t));                          // a csípő a sínnel párhuzamosan mozog
+      const hip = mad(mad(A, n, -0.12), u, lerp(0.85, 0.45, t));                          // a csípő a sínnel párhuzamosan mozog
       const at = (x, a, b) => [x, hip[1] + u[1] * a + n[1] * b, hip[2] + u[2] * a + n[2] * b];   // a szánkóhoz rögzített pont
       const fx = (x, a, b) => [x, A[1] + u[1] * a + n[1] * b, A[2] + u[2] * a + n[2] * b];       // a vázhoz rögzített pont
       const top = fx(0, 1.64, -0.42), bot = fx(0, 0, -0.42);
@@ -422,7 +422,7 @@ void main() {}`;
     cam: { yaw: -32, pitch: 7, dist: 5.35, target: [0, 1.07, 0], rad: 2.1 },
     build(t) {
       const seatY = 0.47, ln = rad(10), bd = [0, Math.cos(ln), -Math.sin(ln)], bn = [0, Math.sin(ln), Math.cos(ln)];
-      const bz = 0.01, by = lerp(1.19, 1.67, t), ux = 0.58;
+      const bz = 0.01, by = lerp(1.13, 1.68, t), ux = 0.58;
       side2(sd => {
         beam([sd * ux, 0.03, -0.6], [sd * ux, 0.03, 0.6], 0.08, 0.05, STEEL, Y);
         beam([sd * ux, 0.03, -0.22], [sd * ux, 2.08, -0.22], 0.07, 0.08, STEEL, Zf);
@@ -453,7 +453,7 @@ void main() {}`;
   EX.machine_lateral_raise = {
     cam: { yaw: -152, pitch: 8, dist: 4.75, target: [0, 0.98, 0.12], rad: 2.1 },
     build(t) {
-      const th = rad(lerp(12, 86, t)), px = 0.205, py = 1.5, za = 0.105, Fpad = frot(W, 'x', rad(7)), lift = 0.28 * t;
+      const th = rad(lerp(10, 92, t)), px = 0.205, py = 1.5, za = 0.105, Fpad = frot(W, 'x', rad(7)), lift = 0.28 * t;
       beam([0, 0.03, -0.3], [0, 0.03, 0.82], 0.09, 0.05, STEEL, Y);
       beam([-0.36, 0.03, -0.28], [0.36, 0.03, -0.28], 0.07, 0.05, STEEL, Y); beam([-0.36, 0.03, 0.8], [0.36, 0.03, 0.8], 0.07, 0.05, STEEL, Y);
       box([0, 0.045, 0], [0.33, 0.012, 0.24], 0.008, W, STEEL2);
@@ -539,15 +539,27 @@ void main() {}`;
   const camOf = (ex, o = {}) => ({ yaw: rad(o.yaw ?? ex.cam.yaw), pitch: rad(o.pitch ?? ex.cam.pitch), dist: o.dist ?? ex.cam.dist, target: o.target || ex.cam.target, cen: ex.cam.cen, rad: ex.cam.rad, fov: ex.cam.fov, floor: ex.cam.floor });
   // állókép adat-URL-ként (ikonokhoz és ellenőrzéshez): 2× felbontáson rajzol, majd lekicsinyít
   function shot(key, o = {}) {
-    const g = ensureGL(), gl = g.gl, size = o.size || 160, S = size * 2, ex = EX[key];
-    render(g, scene(key, o.t ?? 0.7, o.glow ?? 0.6), camOf(ex, o), S, S, target(g, S).fbo);
-    const px = new Uint8ClampedArray(S * S * 4); gl.readPixels(0, 0, S, S, gl.RGBA, gl.UNSIGNED_BYTE, px); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    const big = document.createElement('canvas'); big.width = big.height = S;
-    const img = new ImageData(S, S); for (let y = 0; y < S; y++) img.data.set(px.subarray((S - 1 - y) * S * 4, (S - y) * S * 4), y * S * 4);
+    const g = ensureGL(), gl = g.gl, w = o.w || o.size || 160, h = o.h || o.size || 160, W = w * 2, H = h * 2, ex = EX[key];
+    render(g, scene(key, o.t ?? 0.7, o.glow ?? 0.6), camOf(ex, o), W, H, target(g, Math.max(W, H)).fbo);
+    const px = new Uint8ClampedArray(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const big = document.createElement('canvas'); big.width = W; big.height = H;
+    const img = new ImageData(W, H); for (let y = 0; y < H; y++) img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
     big.getContext('2d').putImageData(img, 0, 0);
-    const out = document.createElement('canvas'); out.width = out.height = size;
-    const c2 = out.getContext('2d'); c2.imageSmoothingQuality = 'high'; c2.drawImage(big, 0, 0, size, size);
+    const out = document.createElement('canvas'); out.width = w; out.height = h;
+    const c2 = out.getContext('2d'); c2.imageSmoothingQuality = 'high'; c2.drawImage(big, 0, 0, w, h);
     return out.toDataURL('image/png');
+  }
+  /* Álló figura a megadott izomszintekkel (heti izomtérkép): kép-URL, vagy '' ha a 3D nem megy. */
+  const FIGS = new Map();
+  function figure(lv, yaw) {
+    if (!ok()) return '';
+    const k = yaw + JSON.stringify(lv);
+    if (!FIGS.has(k)) {
+      if (FIGS.size > 16) { for (const u of FIGS.values()) { try { URL.revokeObjectURL(u); } catch (e) {} } FIGS.clear(); }
+      LV_TEST = lv;
+      try { FIGS.set(k, blobUrl(shot('_stand', { w: 230, h: 430, yaw, pitch: 4, dist: 4.5, t: 0, glow: 0.8 }))); } catch (e) { failed = true; return ''; } finally { LV_TEST = null; }
+    }
+    return FIGS.get(k);
   }
 
   /* ===== nézőke: mozgó, ujjal forgatható animáció ===== */
@@ -643,5 +655,5 @@ void main() {}`;
       } catch (e) { failed = true; console.warn('IRONLOG 3D ikon hiba:', e); }
     }, 80);
   }
-  return { EX, ok, has, mount, thumbHtml, fillThumbs, shot, scene, solve, phase, keyOf, _lv: v => { LV_TEST = v; } };
+  return { EX, ok, has, mount, thumbHtml, fillThumbs, figure, shot, scene, solve, phase, keyOf, _lv: v => { LV_TEST = v; } };
 })();
