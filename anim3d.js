@@ -283,7 +283,8 @@ void main() {}`;
       S = add(S, fdir(Fc, -s * 0.02 * up, 0.05 * up * up + (A.shrug || 0), 0.03 * fw * (1 - up)));
       const k = ik(S, T, D.uarm, D.farm + D.hand, A.pole || fdir(Fc, s * 0.3, -0.2, -1));
       const E = k.mid, H = k.end, W = mad(E, norm(sub(H, E)), D.farm);
-      J.arm.push({ s, S, E, W, H, perp: k.perp, grip: A.grip, open: A.open });
+      const Hw = A.wr ? mad(W, norm(A.wr), D.hand) : H;                     // wr: a kézfej iránya, ha a csukló hajlik
+      J.arm.push({ s, S, E, W, H: Hw, hd: A.wr ? norm(A.wr) : null, perp: k.perp, grip: A.grip, open: A.open });
     }
     for (const s of [1, -1]) {
       const A = (s > 0 ? P.L : P.R) || {};
@@ -343,7 +344,7 @@ void main() {}`;
       blob(a.E, a.W, [0.045, 0.042, 0.042], [0.031, 0.03, 0.025], ff, SKIN);
       ell(mix(a.E, a.W, 0.3), [0.05, 0.105, 0.046], { x: cross(fa, ff), y: fa, z: ff }, mm('forearm', s));
       // kéz: ökölbe zárva a fogantyú körül (grip = a fogantyú tengelye), különben nyitva
-      if (a.grip) { const gx = perpTo(a.grip, fa) || cross(fa, ff); ell(a.H, [0.047, 0.041, 0.036], { x: gx, y: fa, z: cross(gx, fa) }, SKIN); }
+      if (a.grip) { const hy = a.hd || fa, gx = perpTo(a.grip, hy) || cross(hy, ff); ell(a.H, [0.047, 0.041, 0.036], { x: gx, y: hy, z: cross(gx, hy) }, SKIN); }
       else { const hf = { x: ff, y: fa, z: cross(ff, fa) }; ell(mad(a.W, fa, 0.052), [0.045, 0.062, 0.021], hf, SKIN); ell(mad(mad(a.W, fa, 0.132), ff, 0.012), [0.04, 0.052, 0.017], hf, SKIN); }
     }
     // lábak
@@ -522,25 +523,361 @@ void main() {}`;
     }
   };
 
+  /* ===== közös építőelemek a további gyakorlatokhoz ===== */
+  const ROPE = mat('#c9c2b2', 0.1, 10, 0.3), CABLE = mat('#0f1114', 0.3, 30, 0.3);
+  const baseT = (z0, z1, wx = 0.36) => { beam([0, 0.03, z0], [0, 0.03, z1], 0.09, 0.05, STEEL, Y); beam([-wx, 0.03, z0 + 0.02], [wx, 0.03, z0 + 0.02], 0.07, 0.05, STEEL, Y); beam([-wx, 0.03, z1 - 0.02], [wx, 0.03, z1 - 0.02], 0.07, 0.05, STEEL, Y); };
+  // súlytorony: a felső lapok tömbje „lift” métert emelkedik
+  function stack(x, z, lift, top = 1.5) {
+    side2(sd => cyl([x + sd * 0.09, 0.06, z], [x + sd * 0.09, top, z], 0.012, CHROME, 0.003));
+    for (let i = 0; i < 13; i++) box([x, 0.1 + i * 0.052 + (i >= 8 ? lift : 0), z], [0.14, 0.023, 0.06], 0.006, W, i >= 8 ? PLATE2 : PLATE);
+    beam([x - 0.13, top, z], [x + 0.13, top, z], 0.06, 0.06, STEEL, Y); beam([x - 0.13, 0.05, z], [x + 0.13, 0.05, z], 0.07, 0.07, STEEL, Y);
+    cyl([x, 0.1 + 12 * 0.052 + lift + 0.03, z], [x, top - 0.02, z], 0.004, CABLE, 0.001);
+  }
+  const cable = (a, b) => cyl(a, b, 0.0045, CABLE, 0.001);
+  const pulley = c => cyl([c[0] - 0.012, c[1], c[2]], [c[0] + 0.012, c[1], c[2]], 0.045, STEEL2, 0.006);
+  // ülés (teteje seatY magasan, közepe zc-nél); lean: a háttámla dőlése fokban (0 = nincs támla), top: a támla hossza
+  function seat(seatY, zc = 0, lean = null, top = 0.62, post = true) {
+    box([0, seatY - 0.03, zc + 0.02], [0.17, 0.03, 0.19], 0.026, W, PAD);
+    if (post) beam([0, seatY - 0.06, zc], [0, 0.03, zc], 0.07, 0.07, STEEL, Zf);
+    if (lean !== null) { const a = rad(lean), bd = [0, Math.cos(a), -Math.sin(a)], bn = [0, Math.sin(a), Math.cos(a)], o = [0, seatY + 0.02, zc - 0.2]; box(mad(mad(o, bd, top / 2), bn, -0.03), [0.15, top / 2, 0.03], 0.026, { x: X, y: bd, z: bn }, PAD); beam(mad([0, 0.03, zc - 0.24], bn, -0.08), mad(mad(o, bd, top * 0.85), bn, -0.085), 0.06, 0.05, STEEL, bn); }
+  }
+  const sitLegs = (sd, zf = 0.42, x = 0.17, y = D.ankle) => ({ foot: [sd * x, y, zf], toe: [sd * 0.15, 0, 1], kpole: [sd * 0.2, 0.6, 1] });
+  function barbell(c, half = 1.05, plates = [0.62]) {
+    cyl([c[0] - half + 0.4, c[1], c[2]], [c[0] + half - 0.4, c[1], c[2]], 0.0145, CHROME, 0.003);
+    side2(sd => { cyl([c[0] + sd * (half - 0.42), c[1], c[2]], [c[0] + sd * half, c[1], c[2]], 0.025, CHROME, 0.005); for (const px of plates) weightPlate([c[0] + sd * px, c[1], c[2]], X); cyl([c[0] + sd * (plates[plates.length - 1] + 0.03), c[1], c[2]], [c[0] + sd * (plates[plates.length - 1] + 0.062), c[1], c[2]], 0.034, STEEL2, 0.006); });
+  }
+  function dumbbell(c, ax, R = 0.05) { const a = norm(ax); cyl(mad(c, a, -0.1), mad(c, a, 0.1), 0.013, CHROME, 0.003); for (const sd of [1, -1]) cyl(mad(c, a, sd * 0.06), mad(c, a, sd * 0.115), R, PLATE, 0.012); }
+  function smithFrame(by, bz, ux = 0.58) {
+    side2(sd => {
+      beam([sd * ux, 0.03, bz - 0.62], [sd * ux, 0.03, bz + 0.6], 0.08, 0.05, STEEL, Y);
+      beam([sd * ux, 0.03, bz - 0.23], [sd * ux, 2.08, bz - 0.23], 0.07, 0.08, STEEL, Zf);
+      cyl([sd * ux, 0.07, bz], [sd * ux, 2.06, bz], 0.016, CHROME, 0.004);
+      beam([sd * ux, 2.06, bz - 0.25], [sd * ux, 2.06, bz + 0.04], 0.06, 0.05, STEEL, Y); beam([sd * ux, 0.09, bz - 0.23], [sd * ux, 0.09, bz + 0.04], 0.06, 0.05, STEEL, Y);
+      box([sd * ux, by, bz], [0.04, 0.075, 0.042], 0.012, W, STEEL2);
+      cyl([sd * 0.63, by, bz], [sd * 0.92, by, bz], 0.025, CHROME, 0.005); weightPlate([sd * 0.7, by, bz], X); cyl([sd * 0.728, by, bz], [sd * 0.762, by, bz], 0.034, STEEL2, 0.006);
+    });
+    beam([-ux, 2.08, bz - 0.23], [ux, 2.08, bz - 0.23], 0.07, 0.07, STEEL, Y); beam([-ux, 0.03, bz - 0.6], [ux, 0.03, bz - 0.6], 0.07, 0.05, STEEL, Y);
+    cyl([-0.64, by, bz], [0.64, by, bz], 0.0145, CHROME, 0.003);
+  }
+  // húzódzkodó állvány: rúd „y” magasan
+  function pullupRig(y, z = 0) { side2(sd => { beam([sd * 0.62, 0.03, z - 0.02], [sd * 0.62, y + 0.06, z - 0.02], 0.07, 0.07, STEEL, Zf); beam([sd * 0.62, 0.03, z - 0.5], [sd * 0.62, 0.03, z + 0.5], 0.08, 0.05, STEEL, Y); beam([sd * 0.62, 0.05, z - 0.42], [sd * 0.62, 0.9, z - 0.02], 0.05, 0.05, STEEL, Zf); }); beam([-0.62, y + 0.05, z - 0.02], [0.62, y + 0.05, z - 0.02], 0.07, 0.07, STEEL, Y); cyl([-0.6, y, z + 0.02], [0.6, y, z + 0.02], 0.016, CHROME, 0.004); side2(sd => beam([sd * 0.56, y + 0.05, z - 0.02], [sd * 0.56, y, z + 0.02], 0.03, 0.03, STEEL, X)); }
+  // a láb a talp elülső párnáján billen: B = a talp pontja a lépcsőn, al = a sarok emelése fokban (− = sarok lent)
+  function footOnBall(B, al) { const a = rad(al), toe = [0, -Math.sin(a), Math.cos(a)], up = [0, Math.cos(a), Math.sin(a)]; return { foot: mad(mad(B, up, 0.085), toe, -0.12), toe, footUp: up }; }
+
+  /* --- LOWER 1 --- */
+  /* Felhúzás: a rúd a lábközép fölött, egyenes háttal a földről a combig. t = 0 lent, 1 fent. */
+  EX.conventional_deadlift = {
+    cam: { yaw: -58, pitch: 8, dist: 4.9, target: [0, 0.78, 0], rad: 2.1 },
+    build(t) {
+      const p = lerp(75, 0, t), by = lerp(0.225, 0.86, t), bz = lerp(0.07, 0.125, t);
+      barbell([0, by, bz], 1.05, [0.6, 0.648]);
+      return Object.assign({ root: [0, lerp(0.735, 0.975, t), lerp(-0.39, -0.015, t)], pitch: p, chest: -6 * (1 - t), head: -p * 0.45 }, LR(sd => ({
+        hand: [sd * 0.25, by, bz], grip: X, pole: [sd * 0.3, 0, -1], foot: [sd * 0.115, D.ankle, 0], toe: [sd * 0.22, 0, 1], kpole: [sd * 0.3, 0, 1] })));
+    }
+  };
+  /* Gépes hasprés: ülve, a váll fölötti karokat fogva a törzs előregörbül. t = 0 egyenes, 1 összegörbülve. */
+  EX.machine_ab_crunch = {
+    cam: { yaw: -68, pitch: 8, dist: 4.6, target: [0, 0.85, -0.1], rad: 2.0 },
+    build(t) {
+      const seatY = 0.5, piv = [0, seatY + 0.34, -0.03], ph = rad(lerp(-6, 62, t));
+      const hp = sd => { const v = [0.42, 0.13]; return [sd * 0.2, piv[1] + v[0] * Math.cos(ph) - v[1] * Math.sin(ph), piv[2] + v[0] * Math.sin(ph) + v[1] * Math.cos(ph)]; };
+      baseT(-0.75, 0.6); seat(seatY, 0, 6, 0.3); stack(0, -0.62, 0.26 * t, 1.45);
+      beam([0, 0.03, -0.3], [0, piv[1] + 0.02, -0.26], 0.08, 0.07, STEEL, Zf);
+      cyl([-0.31, piv[1], piv[2]], [0.31, piv[1], piv[2]], 0.02, CHROME, 0.004);
+      side2(sd => { const H = hp(sd), P = [sd * 0.28, piv[1], piv[2]], top = [sd * 0.28, H[1] + 0.02, H[2] - 0.1]; beam(P, top, 0.04, 0.04, STEEL, X); beam(top, [sd * 0.28, H[1], H[2]], 0.04, 0.04, STEEL, X); cyl([sd * 0.3, H[1], H[2]], [sd * 0.13, H[1], H[2]], 0.018, GRIP, 0.005); });
+      beam([0, 0.03, 0.42], [0, 0.3, 0.4], 0.06, 0.06, STEEL, Zf); side2(sd => cyl([sd * 0.05, 0.3, 0.42], [sd * 0.26, 0.3, 0.42], 0.045, PAD, 0.018));
+      return Object.assign({ root: [0, seatY + 0.125, 0], pitch: lerp(-6, 4, t), spine: 34 * t, chest: 28 * t, head: 8 * t }, LR(sd => Object.assign(sitLegs(sd, 0.33, 0.16), { hand: hp(sd), grip: X, pole: [sd * 0.5, -1, 0.4] })));
+    }
+  };
+  /* Csípő-addukció gépen: ülve, a térd belső oldalán párna; a szétnyitott lábat összezárja. t = 0 nyitva, 1 zárva. */
+  EX.machine_hip_adduction = {
+    cam: { yaw: -22, pitch: 13, dist: 4.5, target: [0, 0.72, 0.1], rad: 2.0 },
+    build(t) {
+      const seatY = 0.5, a = rad(lerp(44, 4, t)), root = [0, seatY + 0.125, 0];
+      baseT(-0.8, 0.5); seat(seatY, 0, 18, 0.62); stack(0, -0.68, 0.24 * t, 1.4);
+      const legs = {};
+      side2(sd => {
+        const hip = [sd * 0.095, root[1] - 0.03, 0], kn = [hip[0] + sd * 0.44 * Math.sin(a), hip[1] - 0.03, 0.44 * Math.cos(a)], piv = [sd * 0.1, seatY - 0.09, 0.08];
+        const dir = norm([kn[0] - piv[0], 0, kn[2] - piv[2]]), inn = [-sd * dir[2], 0, sd * dir[0]];
+        beam(piv, [kn[0], seatY - 0.09, kn[2]], 0.045, 0.04, STEEL, Y); beam([kn[0], seatY - 0.09, kn[2]], [kn[0], kn[1], kn[2]], 0.04, 0.04, STEEL, dir);
+        box(mad([kn[0], kn[1], kn[2]], inn, -0.085), [0.03, 0.075, 0.09], 0.026, { x: inn, y: Y, z: dir }, PAD);
+        const ft = mad(mad([kn[0], 0.2, kn[2]], dir, 0.1), inn, 0); box([ft[0], 0.11, ft[2]], [0.06, 0.012, 0.11], 0.008, { x: inn, y: Y, z: dir }, STEEL2); beam([kn[0], seatY - 0.09, kn[2]], [ft[0], 0.11, ft[2]], 0.035, 0.035, STEEL, dir);
+        legs[sd] = { foot: [ft[0], 0.122 + D.ankle, ft[2] - dir[2] * 0.03], toe: dir, kpole: [dir[0], 0.8, dir[2]] };
+        cyl([sd * 0.27, seatY + 0.1, -0.02], [sd * 0.27, seatY + 0.1, 0.12], 0.018, GRIP, 0.005); beam([sd * 0.27, seatY - 0.06, 0.05], [sd * 0.27, seatY + 0.1, 0.05], 0.035, 0.035, STEEL, Zf);
+      });
+      return Object.assign({ root, pitch: -18, head: 12 }, LR(sd => Object.assign(legs[sd], { hand: [sd * 0.27, seatY + 0.1, 0.05], grip: Zf, pole: [sd * 0.6, -0.2, -1] })));
+    }
+  };
+  /* Álló vádli gépen: a váll a párnák alatt, a talp eleje a lépcsőn; a sarok mélyről lábujjhegyig emelkedik. t = 0 lent, 1 fent. */
+  EX.standing_calf_raise = {
+    cam: { yaw: -72, pitch: 7, dist: 5.0, target: [0, 0.95, -0.15], rad: 2.1 },
+    build(t) {
+      const fo = footOnBall([0, 0.13, 0.1], lerp(-22, 36, t)), ry = fo.foot[1] + 0.86, rz = fo.foot[2] + 0.015, shY = ry + 0.48 + 0.075;
+      baseT(-0.85, 0.45); box([0, 0.085, 0.16], [0.3, 0.045, 0.1], 0.012, W, STEEL2);
+      beam([0, 0.03, -0.72], [0, 1.72, -0.66], 0.1, 0.09, STEEL, Zf); stack(0, -0.9, 0.2 * t, 1.5);
+      const piv = [0, 1.62, -0.62];
+      side2(sd => { const pc = [sd * 0.17, shY + 0.045, rz + 0.01]; beam([sd * 0.2, piv[1], piv[2]], [sd * 0.2, pc[1] + 0.06, pc[2] - 0.02], 0.045, 0.045, STEEL, Y); box(pc, [0.07, 0.045, 0.11], 0.035, W, PAD); cyl([sd * 0.2, pc[1] + 0.03, pc[2] + 0.1], [sd * 0.2, pc[1] + 0.03, pc[2] + 0.26], 0.018, GRIP, 0.005); });
+      cyl([-0.24, piv[1], piv[2]], [0.24, piv[1], piv[2]], 0.022, CHROME, 0.004);
+      return Object.assign({ root: [0, ry, rz], pitch: 0 }, LR(sd => ({ hand: [sd * 0.2, shY + 0.075, rz + 0.19], grip: Zf, pole: [sd * 0.5, -1, 0.2], foot: [sd * 0.11, fo.foot[1], fo.foot[2]], toe: fo.toe, footUp: fo.footUp, kpole: [0, 0, 1] })));
+    }
+  };
+  /* Csuklóhajlítás / csuklófeszítés súlyzóval: ülve, az alkar a combon, csak a csukló mozog. */
+  function wristCurl(t, lo, hi) {
+    const seatY = 0.46, pose = Object.assign({ root: [0, seatY + 0.125, 0], pitch: 42, chest: 6, head: -30 }, LR(sd => Object.assign(sitLegs(sd, 0.4, 0.15), { hand: [sd * 0.15, 0.6, 0.6], grip: X, pole: [sd * 0.25, -0.4, -1] })));
+    box([0, seatY - 0.03, -0.02], [0.6, 0.03, 0.15], 0.026, W, PAD); side2(sd => { beam([sd * 0.48, seatY - 0.06, -0.02], [sd * 0.48, 0.03, -0.02], 0.05, 0.05, STEEL, Zf); beam([sd * 0.48, 0.03, -0.2], [sd * 0.48, 0.03, 0.16], 0.06, 0.05, STEEL, Y); });
+    const J = solve(pose);
+    for (const a of J.arm) { const fa = norm(sub(a.W, a.E)), wr = rot(fa, X, rad(lerp(lo, hi, t))); (a.s > 0 ? pose.L : pose.R).wr = wr; dumbbell(mad(a.W, wr, D.hand), X, 0.045); }
+    return pose;
+  }
+  EX.dumbbell_wrist_curl = { cam: { yaw: -64, pitch: 13, dist: 3.3, target: [0, 0.64, 0.28], rad: 1.6 }, build: t => wristCurl(t, 48, -52) };
+  EX.dumbbell_reverse_wrist_curl = { cam: { yaw: -64, pitch: 13, dist: 3.3, target: [0, 0.64, 0.28], rad: 1.6 }, build: t => wristCurl(t, 46, -40) };
+
+  /* --- UPPER 1 --- */
+  // fekvenyomó pad állvánnyal; inc: a háttámla dőlése a vízszinteshez képest (0 = vízszintes)
+  function pressBench(inc, rackY, rackZ) {
+    const a = rad(inc), bd = [0, Math.sin(a), -Math.cos(a)], bn = [0, Math.cos(a), Math.sin(a)], o = [0, 0.44, inc ? 0.02 : 0.42];
+    box(mad(mad(o, bd, 0.5), bn, -0.035), [0.15, 0.5, 0.035], 0.028, { x: X, y: bd, z: bn }, PAD);
+    if (inc) box([0, 0.4, 0.2], [0.15, 0.03, 0.17], 0.026, frot(W, 'x', rad(-8)), PAD);
+    beam([0, 0.32, 0.4], [0, 0.32, -0.75], 0.07, 0.06, STEEL, Y);
+    if (inc) beam(mad(mad(o, bd, 0.9), bn, -0.09), [0, 0.32, -0.72], 0.06, 0.05, STEEL, X);
+    for (const z of [0.36, -0.72]) { beam([0, 0.32, z], [0, 0.03, z], 0.06, 0.06, STEEL, Zf); beam([-0.3, 0.03, z], [0.3, 0.03, z], 0.07, 0.05, STEEL, Y); }
+    side2(sd => { beam([sd * 0.56, 0.03, rackZ - 0.06], [sd * 0.56, rackY + 0.12, rackZ - 0.06], 0.06, 0.06, STEEL, Zf); beam([sd * 0.56, 0.03, rackZ - 0.4], [sd * 0.56, 0.03, rackZ + 0.3], 0.07, 0.05, STEEL, Y); box([sd * 0.56, rackY - 0.035, rackZ - 0.005], [0.03, 0.015, 0.05], 0.008, W, STEEL2); box([sd * 0.56, rackY, rackZ + 0.04], [0.03, 0.04, 0.012], 0.008, W, STEEL2); });
+    beam([-0.56, 0.03, rackZ - 0.38], [0.56, 0.03, rackZ - 0.38], 0.07, 0.05, STEEL, Y);
+  }
+  /* Fekvenyomás: a rúd a váll fölül az alsó mellkasig ereszkedik, majd vissza. t = 0 fent, 1 a mellkason. */
+  EX.bench_press = {
+    neg: true, cam: { yaw: -48, pitch: 14, dist: 4.7, target: [0, 0.62, -0.05], rad: 2.1 },
+    build(t) {
+      const by = lerp(1.16, 0.715, t), bz = lerp(-0.17, -0.07, t);
+      pressBench(0, 1.08, -0.3); barbell([0, by, bz], 1.05, [0.72]);
+      return Object.assign({ root: [0, 0.565, 0.3], pitch: -90, spine: -7, chest: -5, head: 4 }, LR(sd => ({
+        hand: [sd * 0.4, by, bz], grip: X, pole: [sd * 0.9, -1, 0.45], foot: [sd * 0.27, D.ankle, 0.66], toe: [sd * 0.3, 0, 1], kpole: [sd * 0.4, 1, 0.3] })));
+    }
+  };
+  /* Ferde pados nyomás: 35°-os támlán, a rúd a váll fölül a felső mellkasig. t = 0 fent, 1 lent. */
+  EX.incline_bench_press = {
+    neg: true, cam: { yaw: -50, pitch: 11, dist: 4.9, target: [0, 0.78, -0.05], rad: 2.1 },
+    build(t) {
+      const by = lerp(1.44, 0.93, t), bz = lerp(-0.25, -0.13, t);
+      pressBench(35, 1.36, -0.34); barbell([0, by, bz], 1.05, [0.72]);
+      return Object.assign({ root: [0, 0.545, 0.14], pitch: -55, spine: -5, chest: -4, head: 6 }, LR(sd => ({
+        hand: [sd * 0.4, by, bz], grip: X, pole: [sd * 0.9, -1, 0.5], foot: [sd * 0.27, D.ankle, 0.6], toe: [sd * 0.3, 0, 1], kpole: [sd * 0.4, 1, 0.4] })));
+    }
+  };
+  /* Mellkassal támasztott evezés: a mellkas a párnán, a fogantyúk a csípő felé, ívben húzva. t = 0 nyújtott kar, 1 behúzva. */
+  EX.chest_supported_row = {
+    cam: { yaw: -122, pitch: 9, dist: 5.2, target: [0, 0.95, 0.35], rad: 2.2 },
+    build(t) {
+      const seatY = 0.52, piv = [0, 1.653, 0.223], R = 0.803, a0 = Math.atan2(0.66 - piv[2], piv[1] - 0.98), a1 = Math.atan2(0.1 - piv[2], piv[1] - 0.86), a = lerp(a0, a1, t);
+      const H = [0, piv[1] - R * Math.cos(a), piv[2] + R * Math.sin(a)];
+      baseT(-0.4, 1.3); seat(seatY, -0.02); stack(0, 1.18, 0.26 * t, 1.5);
+      beam([0, 0.03, 0.42], [0, 1.2, 0.3], 0.07, 0.06, STEEL, Zf); box([0, 1.03, 0.235], [0.12, 0.17, 0.035], 0.028, frot(W, 'x', rad(6)), PAD);
+      beam([0, 0.03, 1.0], [0, 1.76, 0.9], 0.1, 0.09, STEEL, Zf); beam([0, 1.74, 0.92], [0, piv[1] + 0.03, piv[2] - 0.02], 0.08, 0.07, STEEL, Y);
+      cyl([-0.4, piv[1], piv[2]], [0.4, piv[1], piv[2]], 0.022, CHROME, 0.004);
+      side2(sd => { const P = [sd * 0.36, piv[1], piv[2]], E = [sd * 0.36, H[1], H[2]], M = mix(P, E, 0.72); beam(P, mad(E, norm(sub(E, P)), 0.04), 0.045, 0.04, STEEL, X);
+        cyl([sd * 0.38, H[1], H[2]], [sd * 0.2, H[1], H[2]], 0.014, CHROME, 0.004); cyl([sd * 0.33, H[1], H[2]], [sd * 0.21, H[1], H[2]], 0.02, GRIP, 0.006);
+        void M; });
+      return Object.assign({ root: [0, seatY + 0.125, 0], pitch: 8, chest: -5 * t, head: -6 }, LR(sd => Object.assign(sitLegs(sd, 0.36, 0.2), { hand: [sd * 0.27, H[1], H[2]], grip: X, pole: [sd * 0.35, -0.5, -1] })));
+    }
+  };
+  // tárogató gép (pec deck): ülés, oszlop párnával, fönt forgó karok függőleges fogantyúval; front: a párna elöl van (hátsó vállhoz)
+  function flyMachine(seatY, hands, pivX, pivZ, hy, lift, front) {
+    const cz = front ? 0.3 : -0.3, sz = front ? 0.6 : -0.62;
+    baseT(Math.min(-0.45, sz - 0.12), Math.max(0.45, sz + 0.12)); seat(seatY, 0);
+    beam([0, 0.03, cz], [0, 1.84, cz], 0.1, 0.08, STEEL, Zf); beam([0, 1.8, cz], [0, 1.8, pivZ], 0.08, 0.07, STEEL, Y); beam([-pivX, 1.8, pivZ], [pivX, 1.8, pivZ], 0.07, 0.07, STEEL, Y);
+    box([0, hy - 0.02, front ? 0.185 : -0.215], [0.13, 0.26, 0.035], 0.028, W, PAD); beam([0, hy, front ? 0.21 : -0.24], [0, hy, cz], 0.06, 0.05, STEEL, Y);
+    stack(0, sz, lift, 1.5);
+    side2(sd => { const h = hands[sd], P = [sd * pivX, 1.74, pivZ]; cyl([sd * pivX, 1.68, pivZ], [sd * pivX, 1.8, pivZ], 0.04, STEEL2, 0.008); beam(P, [h[0], 1.74, h[2]], 0.045, 0.04, STEEL, Y); beam([h[0], 1.74, h[2]], [h[0], hy - 0.2, h[2]], 0.03, 0.03, STEEL, Zf); cyl([h[0], hy - 0.1, h[2]], [h[0], hy + 0.1, h[2]], 0.02, GRIP, 0.006); });
+  }
+  /* Hátsó váll pec deck gépen: a mellkas a párnán, a nyújtott karok elölről oldalra-hátra nyílnak. t = 0 elöl, 1 hátul. */
+  EX.reverse_pec_deck = {
+    cam: { yaw: -150, pitch: 12, dist: 5.0, target: [0, 1.0, 0.1], rad: 2.1 },
+    build(t) {
+      const seatY = 0.52, hy = seatY + 0.125 + 0.46, a = rad(lerp(-6, 104, t)), hands = {};
+      side2(sd => { hands[sd] = [sd * (0.22 + 0.57 * Math.sin(a)), hy, 0.08 + 0.57 * Math.cos(a)]; });
+      flyMachine(seatY, hands, 0.22, 0.08, hy, 0.24 * t, true);
+      return Object.assign({ root: [0, seatY + 0.125, 0], pitch: 5, head: -4 }, LR(sd => Object.assign(sitLegs(sd, 0.34, 0.2), { hand: hands[sd], grip: Y, pole: [sd * 0.6, 0.5, -1] })));
+    }
+  };
+  /* Gépes Scott-bicepsz: a felkar a ferde párnán, a kar a könyök tengelye körül a teljes nyújtástól a vállig hajlik. t = 0 nyújtva, 1 behajlítva. */
+  EX.machine_preacher_curl = {
+    cam: { yaw: -64, pitch: 9, dist: 4.5, target: [0, 0.85, 0.25], rad: 2.0 },
+    build(t) {
+      const seatY = 0.5, root = [0, seatY + 0.125, 0], sh = [0, root[1] + 0.48 * Math.cos(rad(16)), 0.48 * Math.sin(rad(16))];
+      const el = [0, sh[1] - 0.3 * 0.72, sh[2] + 0.3 * 0.69], be = rad(lerp(-42, 112, t)), H = [0, el[1] + 0.335 * Math.sin(be), el[2] + 0.335 * Math.cos(be)];
+      baseT(-0.4, 1.05); seat(seatY, -0.02); stack(0, 0.9, 0.26 * t, 1.4);
+      const pd = norm([0, -0.72, 0.69]), pn = [0, 0.69, 0.72];
+      box(mad(mad(mix(sh, el, 0.62), pn, -0.1), X, 0), [0.24, 0.2, 0.035], 0.028, { x: X, y: pd, z: pn }, PAD);
+      beam([0, 0.03, 0.42], mad(mix(sh, el, 0.7), pn, -0.14), 0.08, 0.07, STEEL, Zf);
+      cyl([-0.36, el[1], el[2]], [0.36, el[1], el[2]], 0.018, CHROME, 0.004);
+      side2(sd => { beam([sd * 0.33, el[1], el[2]], [sd * 0.33, H[1], H[2]], 0.04, 0.035, STEEL, X); cyl([sd * 0.3, el[1], el[2]], [sd * 0.36, el[1], el[2]], 0.04, STEEL2, 0.008); });
+      cyl([-0.35, H[1], H[2]], [0.35, H[1], H[2]], 0.014, CHROME, 0.004); side2(sd => cyl([sd * 0.1, H[1], H[2]], [sd * 0.24, H[1], H[2]], 0.02, GRIP, 0.006));
+      return Object.assign({ root, pitch: 16, head: -8 }, LR(sd => Object.assign(sitLegs(sd, 0.3, 0.2), { hand: [sd * 0.17, H[1], H[2]], grip: X, pole: [0, -0.75, 0.66] })));
+    }
+  };
+  // kábeloszlop: magas csiga a megadott ponton, mögötte oszlop súlytoronnyal
+  function cableTower(pz, py, lift, dir = 1) {
+    const cz = pz + dir * 0.34; baseT(Math.min(cz + dir * 0.3, -0.3), Math.max(cz + dir * 0.3, 0.3));
+    beam([0, 0.03, cz], [0, py + 0.12, cz], 0.1, 0.09, STEEL, Zf); beam([0, py + 0.08, cz], [0, py + 0.08, pz], 0.07, 0.06, STEEL, Y); pulley([0, py, pz]); stack(0, cz + dir * 0.2, lift, Math.min(1.5, py - 0.2));
+  }
+  /* Csigás kötél-tricepsz: a könyök a törzs mellett marad, az alkar a mellkastól a teljes nyújtásig tolja le a kötelet. t = 0 fent, 1 lent. */
+  EX.cable_rope_triceps_pushdown = {
+    cam: { yaw: -66, pitch: 7, dist: 5.2, target: [0, 1.02, 0.25], rad: 2.2 },
+    build(t) {
+      const root = [0, 0.965, 0], p = rad(10), sh = [0, root[1] + 0.48 * Math.cos(p), 0.48 * Math.sin(p)], el = [0, sh[1] - 0.295, sh[2] + 0.02], be = rad(lerp(58, -80, t)), sp = lerp(0.07, 0.15, t);
+      const H = [0, el[1] + 0.335 * Math.sin(be), el[2] + 0.335 * Math.cos(be)], K = [0, H[1] + 0.11, H[2] + 0.04], P = [0, 2.02, 0.5];
+      cableTower(P[2], P[1], 0.3 * t); cable([0, P[1] - 0.04, P[2]], K); ball(K, 0.018, STEEL2);
+      side2(sd => { tube(K, [sd * sp, H[1] + 0.03, H[2]], 0.011, ROPE); tube([sd * sp, H[1] + 0.03, H[2]], [sd * sp, H[1] - 0.07, H[2] - 0.01], 0.013, ROPE); ball([sd * sp, H[1] - 0.075, H[2] - 0.01], 0.02, GRIP); });
+      return Object.assign({ root, pitch: 10, head: -6 }, LR(sd => ({ hand: [sd * sp, H[1], H[2]], grip: [0, 1, 0.1], pole: [sd * 0.25, 0.1, -1], foot: [sd * 0.13, D.ankle, -0.02], toe: [sd * 0.2, 0, 1] })));
+    }
+  };
+
+  /* --- LOWER 2 --- */
+  /* Smith bolgár guggolás: az elöl lévő láb dolgozik, a hátsó lábfej a padon; a hátsó térd majdnem a talajig ereszkedik. t = 0 fent, 1 lent. */
+  EX.smith_machine_bulgarian_split_squat = {
+    neg: true, side: -1, cam: { yaw: -64, pitch: 8, dist: 5.4, target: [0, 1.0, -0.1], rad: 2.2 },
+    build(t) {
+      const p = rad(lerp(6, 17, t)), ry = lerp(0.915, 0.5, t), rz = -0.02 - 0.48 * Math.sin(p), by = ry + 0.48 * Math.cos(p) + 0.09, bz = -0.075;
+      smithFrame(by, bz);
+      box([0, 0.38, -0.66], [0.5, 0.04, 0.14], 0.03, W, PAD); side2(sd => { beam([sd * 0.4, 0.34, -0.66], [sd * 0.4, 0.03, -0.66], 0.05, 0.05, STEEL, Zf); beam([sd * 0.4, 0.03, -0.82], [sd * 0.4, 0.03, -0.5], 0.06, 0.05, STEEL, Y); });
+      return { root: [0, ry, rz], pitch: p * 180 / Math.PI, head: -6,
+        R: { hand: [-0.4, by, bz], grip: X, pole: [-0.5, -1, -0.3], foot: [-0.12, D.ankle, 0.3], toe: [-0.1, 0, 1], kpole: [-0.15, 0, 1] },
+        L: { hand: [0.4, by, bz], grip: X, pole: [0.5, -1, -0.3], foot: [0.12, 0.5, -0.62], toe: [0, -0.5, -1], footUp: [0, 1, -0.5], kpole: [0, -1, 0.35] } };
+    }
+  };
+  /* Fekvő combhajlítás: hason fekve, a párna a boka fölött; a sarok a nyújtott lábtól a farizomig húz. t = 0 nyújtva, 1 behajlítva. */
+  EX.lying_hamstring_curl = {
+    cam: { yaw: -74, pitch: 11, dist: 4.9, target: [0, 0.62, 0.05], rad: 2.1 },
+    build(t) {
+      const root = [0, 0.75, 0], K = [0, 0.66, -0.46], g = rad(lerp(-8, 124, t)), dir = [0, Math.sin(g), -Math.cos(g)], toe = [0, -Math.cos(g), -Math.sin(g)], An = mad(K, dir, 0.43), pad = mad(mad(An, toe, -0.085), dir, -0.03);
+      baseT(-0.75, 1.15); stack(0, 1.02, 0.26 * t, 1.3);
+      box([0, 0.6, 0.27], [0.19, 0.035, 0.36], 0.028, W, PAD); box([0, 0.565, -0.26], [0.19, 0.035, 0.2], 0.028, frot(W, 'x', rad(-12)), PAD);
+      beam([0, 0.03, 0.35], [0, 0.56, 0.35], 0.08, 0.08, STEEL, Zf); beam([0, 0.03, -0.3], [0, 0.5, -0.3], 0.08, 0.08, STEEL, Zf);
+      cyl([-0.3, K[1], K[2]], [0.3, K[1], K[2]], 0.018, CHROME, 0.004); beam([0, 0.5, -0.3], [0, K[1] - 0.02, K[2]], 0.06, 0.05, STEEL, X);
+      side2(sd => { beam([sd * 0.27, K[1], K[2]], [sd * 0.27, pad[1], pad[2]], 0.04, 0.035, STEEL, X); cyl([sd * 0.24, K[1], K[2]], [sd * 0.3, K[1], K[2]], 0.04, STEEL2, 0.008); cyl([sd * 0.2, 0.5, 0.52], [sd * 0.2, 0.5, 0.66], 0.018, GRIP, 0.005); beam([sd * 0.2, 0.5, 0.52], [sd * 0.1, 0.55, 0.45], 0.03, 0.03, STEEL, Y); });
+      cyl([-0.28, pad[1], pad[2]], [0.28, pad[1], pad[2]], 0.014, CHROME, 0.004); cyl([-0.2, pad[1], pad[2]], [0.2, pad[1], pad[2]], 0.05, PAD, 0.02);
+      return Object.assign({ root, pitch: 90, spine: -4, head: -18 }, LR(sd => ({ hand: [sd * 0.2, 0.5, 0.59], grip: Zf, pole: [sd * 0.8, 0.2, -0.3], foot: [sd * 0.1, An[1], An[2]], toe, footUp: mul(dir, -1), kpole: [0, -1, -0.2] })));
+    }
+  };
+  /* Láb-extenzió: ülve, a térd az ülés szélénél; a sípcsont a behajlított helyzetből a teljes nyújtásig emelkedik. t = 0 lent, 1 nyújtva. */
+  EX.leg_extension = {
+    cam: { yaw: -60, pitch: 9, dist: 4.7, target: [0, 0.72, 0.2], rad: 2.0 },
+    build(t) {
+      const seatY = 0.52, root = [0, seatY + 0.125, -0.03], K = [0, 0.565, 0.4], dl = rad(lerp(-103, 3, t)), dir = [0, Math.sin(dl), Math.cos(dl)], toe = [0, Math.cos(dl), -Math.sin(dl)], An = mad(K, dir, 0.43), pad = mad(mad(An, toe, 0.09), dir, -0.05);
+      baseT(-0.8, 0.5); seat(seatY, 0, 16, 0.6); stack(0, -0.7, 0.26 * t, 1.4);
+      cyl([-0.3, K[1], K[2]], [0.3, K[1], K[2]], 0.018, CHROME, 0.004);
+      side2(sd => { beam([sd * 0.27, K[1], K[2]], [sd * 0.27, pad[1], pad[2]], 0.04, 0.035, STEEL, X); cyl([sd * 0.24, K[1], K[2]], [sd * 0.3, K[1], K[2]], 0.04, STEEL2, 0.008); beam([sd * 0.27, K[1], K[2]], [sd * 0.2, seatY - 0.06, 0.1], 0.04, 0.04, STEEL, Y);
+        cyl([sd * 0.27, seatY + 0.09, -0.05], [sd * 0.27, seatY + 0.09, 0.1], 0.018, GRIP, 0.005); beam([sd * 0.27, seatY - 0.06, 0.02], [sd * 0.27, seatY + 0.09, 0.02], 0.035, 0.035, STEEL, Zf); });
+      cyl([-0.28, pad[1], pad[2]], [0.28, pad[1], pad[2]], 0.014, CHROME, 0.004); cyl([-0.2, pad[1], pad[2]], [0.2, pad[1], pad[2]], 0.05, PAD, 0.02);
+      return Object.assign({ root, pitch: -16, head: 10 }, LR(sd => ({ hand: [sd * 0.27, seatY + 0.09, 0.02], grip: Zf, pole: [sd * 0.6, -0.2, -1], foot: [sd * 0.11, An[1], An[2]], toe, footUp: mul(dir, -1), kpole: [0, 1, 0.3] })));
+    }
+  };
+  /* Ülő vádli gépen: a térd a párna alatt, a talp eleje a lépcsőn; a sarok mélyről lábujjhegyig emelkedik. t = 0 lent, 1 fent. */
+  EX.seated_calf_raise = {
+    cam: { yaw: -68, pitch: 9, dist: 4.3, target: [0, 0.6, 0.3], rad: 1.9 },
+    build(t) {
+      const seatY = 0.5, fo = footOnBall([0, 0.13, 0.46], lerp(-24, 34, t));
+      const pose = Object.assign({ root: [0, seatY + 0.125, 0], pitch: 4, head: -4 }, LR(sd => ({ foot: [sd * 0.12, fo.foot[1], fo.foot[2]], toe: fo.toe, footUp: fo.footUp, kpole: [0, 1, 0.4] })));
+      const kn = solve(pose).leg[0].K, pc = [0, kn[1] + 0.095, kn[2] - 0.03], piv = [0, 0.62, 0.98];
+      baseT(-0.3, 1.1, 0.32); seat(seatY, -0.02); box([0, 0.085, 0.52], [0.3, 0.045, 0.1], 0.012, W, STEEL2);
+      beam([0, 0.03, 0.98], [0, piv[1] + 0.04, 0.98], 0.08, 0.08, STEEL, Zf); cyl([-0.3, piv[1], piv[2]], [0.3, piv[1], piv[2]], 0.02, CHROME, 0.004);
+      side2(sd => { const P = [sd * 0.27, piv[1], piv[2]], E = [sd * 0.27, pc[1] + 0.02, pc[2]]; beam(P, E, 0.045, 0.04, STEEL, X); cyl([sd * 0.27, mix(P, E, 0.45)[1], mix(P, E, 0.45)[2]], [sd * 0.46, mix(P, E, 0.45)[1], mix(P, E, 0.45)[2]], 0.022, CHROME, 0.005); weightPlate([sd * 0.36, mix(P, E, 0.45)[1], mix(P, E, 0.45)[2]], X, 0.17, 0.035); });
+      box(pc, [0.26, 0.04, 0.09], 0.035, W, PAD); cyl([-0.2, pc[1] + 0.07, pc[2] + 0.02], [0.2, pc[1] + 0.07, pc[2] + 0.02], 0.016, GRIP, 0.005);
+      side2(sd => { const o = sd > 0 ? pose.L : pose.R; o.hand = [sd * 0.15, pc[1] + 0.07, pc[2] + 0.02]; o.grip = X; o.pole = [sd * 0.6, -0.5, -1]; });
+      return pose;
+    }
+  };
+  /* Függeszkedős oldalsó lábemelés: a rúdon lógva a térd felhúz és oldalra fordul, ismétlésenként váltott oldalra. t = 0 lógva, 1 felhúzva. */
+  EX.hanging_oblique_leg_raise = {
+    cam: { yaw: -28, pitch: 6, dist: 6.0, target: [0, 1.28, 0], rad: 2.4 },
+    build(t, rep = 0) {
+      const s = rep % 2 ? 1 : -1, yaw = rad(s * 38 * t), fwd = [Math.sin(yaw), 0, Math.cos(yaw)], lat = [Math.cos(yaw), 0, -Math.sin(yaw)], root = [0, 1.15, -0.03 - 0.05 * t];
+      pullupRig(2.27);
+      return Object.assign({ root, yaw: s * 38 * t, pitch: -24 * t, spine: 34 * t, chest: -6 * t, twist: -s * 36 * t, only: null }, LR(sd => {
+        const f = add(add(root, mul(lat, sd * 0.09)), add([0, lerp(-0.875, -0.2, t), 0], mul(fwd, lerp(0.03, 0.4, t))));
+        return { hand: [sd * 0.3, 2.27, 0.02], grip: X, pole: [sd * 0.6, -0.4, 0.5], foot: f, toe: add(fwd, [0, -0.5 * t, 0]), footUp: [0, 1, 0.4 * t], kpole: add(mul(fwd, 1), [0, 0.9, 0]) };
+      }));
+    }
+  };
+
+  /* --- UPPER 2 --- */
+  /* Húzódzkodás: teljes lógásból addig, amíg az áll a rúd fölé kerül. t = 0 lógva, 1 fent. */
+  EX.pull_up = {
+    cam: { yaw: -152, pitch: 6, dist: 6.2, target: [0, 1.32, 0], rad: 2.5 },
+    build(t) {
+      const root = [0, lerp(1.15, 1.6, t), lerp(-0.03, -0.13, t)];
+      pullupRig(2.27);
+      return Object.assign({ root, pitch: -11 * t, chest: -7 * t, head: -8 * t }, LR(sd => ({
+        hand: [sd * 0.37, 2.27, 0.02], grip: X, pole: [sd * 0.9, -1, 0.15], foot: [sd * 0.085, root[1] - 0.83, root[2] - 0.16 - 0.06 * t], toe: [sd * 0.1, -0.5, 1], footUp: [0, 1, 0.5], kpole: [sd * 0.1, 0.2, 1] })));
+    }
+  };
+  /* Mell-tárogatás (pec deck): a hát a támlán, a széttárt karok ívben a mellkas elé záródnak. t = 0 széttárva, 1 összezárva. */
+  EX.chest_fly = {
+    cam: { yaw: -24, pitch: 10, dist: 5.0, target: [0, 1.0, 0], rad: 2.1 },
+    build(t) {
+      const seatY = 0.52, hy = seatY + 0.125 + 0.45, a = rad(lerp(102, -32, t)), hands = {};
+      side2(sd => { hands[sd] = [sd * (0.3 + 0.5 * Math.sin(a)), hy, -0.02 + 0.5 * Math.cos(a)]; });
+      flyMachine(seatY, hands, 0.3, -0.02, hy, 0.24 * t, false);
+      return Object.assign({ root: [0, seatY + 0.125, -0.09], pitch: -3, head: 3 }, LR(sd => Object.assign(sitLegs(sd, 0.34, 0.2), { hand: hands[sd], grip: Y, pole: [sd * 0.5, -0.5, -1] })));
+    }
+  };
+  /* Magas evezés csigán: ülve, a fent-elöl lévő csigáról a rudat a felső mellkashoz húzza, a könyök kifelé-hátra megy. t = 0 nyújtott kar, 1 behúzva. */
+  EX.cable_high_row = {
+    cam: { yaw: -124, pitch: 9, dist: 5.6, target: [0, 1.05, 0.5], rad: 2.4 },
+    build(t) {
+      const seatY = 0.5, H = [0, lerp(1.5, 1.16, t), lerp(0.56, 0.2, t)], P = [0, 2.02, 1.0];
+      cableTower(P[2], P[1], 0.3 * t); seat(seatY, -0.02);
+      beam([0, 0.03, 0.5], [0, 0.68, 0.42], 0.07, 0.06, STEEL, Zf); beam([0, 0.68, 0.3], [0, 0.68, 0.42], 0.05, 0.05, STEEL, Y); side2(sd => cyl([sd * 0.045, 0.68, 0.3], [sd * 0.25, 0.68, 0.3], 0.05, PAD, 0.02));
+      cable([0, P[1] - 0.04, P[2]], [0, H[1] + 0.05, H[2] + 0.03]); cyl([-0.38, H[1], H[2]], [0.38, H[1], H[2]], 0.014, CHROME, 0.004); beam([0, H[1] + 0.05, H[2] + 0.03], [0, H[1], H[2]], 0.02, 0.02, STEEL2, X);
+      return Object.assign({ root: [0, seatY + 0.125, 0], pitch: lerp(9, -12, t), chest: -6 * t, head: lerp(-16, -4, t) }, LR(sd => Object.assign(sitLegs(sd, 0.42, 0.17), { hand: [sd * 0.31, H[1], H[2]], grip: X, pole: [sd * 1, -0.35, -0.5] })));
+    }
+  };
+  /* Váltott karú bicepsz: állva, a könyök a törzs mellett; a súlyzó a combtól a vállig megy, közben a tenyér felfelé fordul. Ismétlésenként másik kar. */
+  EX.alternating_dumbbell_biceps_curl = {
+    cam: { yaw: -34, pitch: 7, dist: 4.7, target: [0, 0.95, 0], rad: 2.0 },
+    build(t, rep = 0) {
+      const act = rep % 2 ? 1 : -1, shY = 0.975 + 0.48;
+      const pose = Object.assign({ root: [0, 0.975, 0], only: act }, LR(sd => {
+        const u = sd === act ? t : 0, be = rad(lerp(-84, 58, u)), el = [sd * 0.215, shY - 0.3, -0.01], H = [el[0] + sd * 0.02 * (1 - u), el[1] + 0.335 * Math.sin(be), el[2] + 0.335 * Math.cos(be)], grip = norm([lerp(0.25, 1, u), 0, lerp(1, 0.1, u)]);
+        dumbbell(H, grip);
+        return { hand: H, grip, pole: [sd * 0.12, -1, -0.35], foot: [sd * 0.12, D.ankle, 0], toe: [sd * 0.22, 0, 1] };
+      }));
+      return pose;
+    }
+  };
+  /* Fej fölötti tricepsz csigán, két kézzel: a csigának háttal, előredőlve; a felkar a fej mellett marad, az alkar a fej mögül teljesen kinyúlik. t = 0 behajlítva, 1 nyújtva. */
+  EX.overhead_cable_triceps_extension = {
+    cam: { yaw: -68, pitch: 8, dist: 5.4, target: [0, 1.0, -0.2], rad: 2.3 },
+    build(t) {
+      const p = rad(26), root = [0, 0.93, 0], sh = [0, root[1] + 0.48 * Math.cos(p), 0.48 * Math.sin(p)], ua = rad(58), el = [0, sh[1] + 0.3 * Math.sin(ua), sh[2] + 0.3 * Math.cos(ua)];
+      const fa = ua + rad(lerp(146, 6, t)), H = [0, el[1] + 0.335 * Math.sin(fa), el[2] + 0.335 * Math.cos(fa)], P = [0, 1.9, -0.72], K = [0, H[1] - 0.02, H[2] - 0.12];
+      cableTower(P[2], P[1], 0.3 * t, -1); cable([0, P[1] - 0.03, P[2] + 0.02], K); ball(K, 0.018, STEEL2);
+      side2(sd => { tube(K, [sd * 0.07, H[1], H[2] - 0.03], 0.011, ROPE); tube([sd * 0.07, H[1], H[2] - 0.03], [sd * 0.07, H[1] + 0.02, H[2] + 0.07], 0.013, ROPE); ball([sd * 0.07, H[1] + 0.02, H[2] + 0.075], 0.02, GRIP); });
+      return { root, pitch: 26, head: -14,
+        R: { hand: [-0.07, H[1], H[2]], grip: [0, 0.2, 1], pole: [-0.3, 0.6, 1], shrug: 0.01, foot: [-0.12, D.ankle, 0.3], toe: [-0.1, 0, 1], kpole: [-0.1, 0, 1] },
+        L: { hand: [0.07, H[1], H[2]], grip: [0, 0.2, 1], pole: [0.3, 0.6, 1], shrug: 0.01, foot: [0.12, D.ankle, -0.32], toe: [0.15, 0, 1], kpole: [0.1, 0, 1] } };
+    }
+  };
+
   let LV_TEST = null;
   function levels(key) {
     const raw = typeof EX_INFO !== 'undefined' && EX_INFO[key], m = {};
     if (raw) for (const p of raw[0].split(',')) { const [k, v] = p.split(':'); m[k] = Number(v); }
     return m;
   }
-  function scene(key, t, glow) {
+  function scene(key, t, glow, rep = 0) {
     const ex = EX[key]; Q = [];
     const c = ex.cam.cen || ex.cam.target;
     emit(1, [c[0], -0.02, c[2]], [1, 0, 0], [0, 1, 0], [0, 0, 1], [0.004, 0.004, 0.004], [0.004, 0.004, 0.004], [3.4, 0.016, 3.4], [3.4, 0.016, 3.4], FLOOR);
-    const pose = ex.build(t);
-    drawBody(solve(pose), LV_TEST || ex.lv || (ex.lv = levels(key)), glow, ex.side);
+    const pose = ex.build(t, rep);                                       // rep: hányadik ismétlés (váltott oldalú gyakorlatokhoz)
+    drawBody(solve(pose), LV_TEST || ex.lv || (ex.lv = levels(key)), glow, pose.only ?? ex.side);
     return Q;
   }
   const camOf = (ex, o = {}) => ({ yaw: rad(o.yaw ?? ex.cam.yaw), pitch: rad(o.pitch ?? ex.cam.pitch), dist: o.dist ?? ex.cam.dist, target: o.target || ex.cam.target, cen: ex.cam.cen, rad: ex.cam.rad, fov: ex.cam.fov, floor: ex.cam.floor });
   // állókép adat-URL-ként (ikonokhoz és ellenőrzéshez): 2× felbontáson rajzol, majd lekicsinyít
   function shot(key, o = {}) {
     const g = ensureGL(), gl = g.gl, w = o.w || o.size || 160, h = o.h || o.size || 160, W = w * 2, H = h * 2, ex = EX[key];
-    render(g, scene(key, o.t ?? 0.7, o.glow ?? 0.6), camOf(ex, o), W, H, target(g, Math.max(W, H)).fbo);
+    render(g, scene(key, o.t ?? 0.7, o.glow ?? 0.6, o.rep || 0), camOf(ex, o), W, H, target(g, Math.max(W, H)).fbo);
     const px = new Uint8ClampedArray(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     const big = document.createElement('canvas'); big.width = W; big.height = H;
     const img = new ImageData(W, H); for (let y = 0; y < H; y++) img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
@@ -567,12 +904,12 @@ void main() {}`;
   const ease = u => u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
   // „neg” gyakorlatnál (pl. guggolás) a mozdulat első fele a leengedés, a nehéz szakasz a visszaút
   function phase(ms, neg) {
-    let x = ms % (TL.conc + TL.hold + TL.ecc + TL.rest);
+    const T = TL.conc + TL.hold + TL.ecc + TL.rest, rep = Math.floor(ms / T); let x = ms % T;
     const a = neg ? TL.ecc : TL.conc, b = neg ? TL.conc : TL.ecc;
-    if (x < a) return { t: ease(x / a), glow: neg ? 0.4 : 1 };
-    x -= a; if (x < TL.hold) return { t: 1, glow: neg ? 0.6 : 1 };
-    x -= TL.hold; if (x < b) return { t: 1 - ease(x / b), glow: neg ? 1 : 0.4 };
-    return { t: 0, glow: 0.25 };
+    if (x < a) return { t: ease(x / a), glow: neg ? 0.4 : 1, rep };
+    x -= a; if (x < TL.hold) return { t: 1, glow: neg ? 0.6 : 1, rep };
+    x -= TL.hold; if (x < b) return { t: 1 - ease(x / b), glow: neg ? 1 : 0.4, rep };
+    return { t: 0, glow: 0.25, rep };
   }
   const keyOf = id => (typeof rankKeyFor === 'function' && rankKeyFor(id)) || (typeof RANK_ALIAS !== 'undefined' && RANK_ALIAS[id]) || id;
   const has = id => { const k = keyOf(id); return !failed && !!EX[k] && k[0] !== '_'; };
@@ -605,7 +942,7 @@ void main() {}`;
         if (paused && !dirty) return;
         const ph = phase((paused ? tp : now) - t0, ex.neg);
         glow += (ph.glow - glow) * (paused ? 1 : 0.1);
-        render(g, scene(key, ph.t, glow), Object.assign(camOf(ex), { yaw }), cv.width, cv.height, null);
+        render(g, scene(key, ph.t, glow, ph.rep), Object.assign(camOf(ex), { yaw }), cv.width, cv.height, null);
         dirty = false;
       } catch (e) { stop(); if (onFail) onFail(e); }
     };
