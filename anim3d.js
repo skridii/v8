@@ -929,6 +929,120 @@ void main() {}`;
     }
   };
 
+  /* ===== v39: a gyakorlat-adatbázis további gyakorlatai ===== */
+  const STAND = sd => ({ foot: [sd * 0.12, D.ankle, 0], toe: [sd * 0.22, 0, 1], kpole: [sd * 0.25, 0, 1] });
+  const shoulderOf = (pose, sd) => solve(pose).arm.find(a => a.s === sd).S;
+  // rövid rúd (bicepszhez): kis tárcsákkal
+  function curlBar(c, half = 0.62) { cyl([c[0] - half, c[1], c[2]], [c[0] + half, c[1], c[2]], 0.014, CHROME, 0.003); side2(sd => { weightPlate([c[0] + sd * (half - 0.08), c[1], c[2]], X, 0.13, 0.03); cyl([c[0] + sd * (half - 0.05), c[1], c[2]], [c[0] + sd * (half - 0.02), c[1], c[2]], 0.026, STEEL2, 0.005); }); }
+  /* Román felhúzás: egyenes háttal csípőből előre, a térd alig hajlik; a rúd a sípcsont közepéig. t = 0 fent, 1 lent. */
+  EX.romanian_deadlift = {
+    neg: true, cam: { yaw: -62, pitch: 8, dist: 4.9, target: [0, 0.8, 0], rad: 2.1 },
+    build(t) {
+      const by = lerp(0.84, 0.36, t), bz = lerp(0.12, 0.1, t);
+      barbell([0, by, bz], 1.05, [0.6, 0.648]);
+      return Object.assign({ root: [0, lerp(0.975, 0.9, t), lerp(-0.015, -0.3, t)], pitch: lerp(0, 76, t), chest: -4 * t, head: -30 * t }, LR(sd => Object.assign(STAND(sd), { hand: [sd * 0.24, by, bz], grip: X, pole: [sd * 0.3, 0, -1], foot: [sd * 0.12, D.ankle, 0] })));
+    }
+  };
+  /* Felhúzás kézisúlyzóval: a súlyzók a test mellett, egyenes háttal guggolva le és fel. t = 0 lent, 1 fent. */
+  EX.dumbbell_deadlift = {
+    cam: { yaw: -48, pitch: 8, dist: 4.7, target: [0, 0.75, 0], rad: 2.0 },
+    build(t) {
+      const hy = lerp(0.2, 0.8, t), pose = Object.assign({ root: [0, lerp(0.66, 0.975, t), lerp(-0.3, -0.015, t)], pitch: lerp(55, 0, t), head: lerp(-25, 0, t) }, LR(sd => Object.assign(STAND(sd), { foot: [sd * 0.14, D.ankle, 0], kpole: [sd * 0.4, 0, 1], hand: [sd * 0.24, hy, lerp(0.08, 0.02, t)], grip: Zf, pole: [sd * 0.4, 0, -1] })));
+      side2(sd => dumbbell([sd * 0.24, hy, lerp(0.08, 0.02, t)], Zf, 0.055));
+      return pose;
+    }
+  };
+  // bicepsz-hajlítás közös váza: a könyök a törzs mellett, az alkar a combtól a vállig; grip(u, sd) a fogás tengelye
+  function curlPose(t, gripFn, both = true) {
+    const shY = 0.975 + 0.48, Hs = {};
+    const pose = Object.assign({ root: [0, 0.975, 0] }, LR(sd => {
+      const be = rad(lerp(-84, 58, t)), el = [sd * 0.215, shY - 0.3, -0.01], H = [el[0] + sd * 0.02 * (1 - t), el[1] + 0.335 * Math.sin(be), el[2] + 0.335 * Math.cos(be)];
+      Hs[sd] = H; return Object.assign(STAND(sd), { hand: H, grip: gripFn(be, sd), pole: [sd * 0.12, -1, -0.35] });
+    }));
+    return { pose, Hs };
+  }
+  /* Bicepsz rúddal: vállszéles, tenyér előre; a rúd a combtól a vállig. t = 0 lent, 1 fent. */
+  EX.barbell_curl = {
+    cam: { yaw: -40, pitch: 7, dist: 4.6, target: [0, 1.0, 0.1], rad: 2.0 },
+    build(t) { const { pose, Hs } = curlPose(t, () => X); curlBar(mix(Hs[1], Hs[-1], 0.5)); side2(sd => { const o = sd > 0 ? pose.L : pose.R; o.hand = [sd * 0.2, Hs[sd][1], Hs[sd][2]]; }); return pose; }
+  };
+  /* Kalapács bicepsz: semleges fogás (tenyér befelé), a két kar egyszerre. t = 0 lent, 1 fent. */
+  EX.hammer_curl = {
+    cam: { yaw: -40, pitch: 7, dist: 4.6, target: [0, 1.0, 0.1], rad: 2.0 },
+    build(t) { const g = be => norm([0, -Math.cos(be), -Math.sin(be)]); const { pose, Hs } = curlPose(t, be => mul(g(be), -1)); side2(sd => dumbbell(Hs[sd], g(rad(lerp(-84, 58, t))), 0.05)); return pose; }
+  };
+  /* Döntött törzsű evezés rúddal: kb. 70°-ban előredőlve, a rúd a lógó karból a has aljához. t = 0 lent, 1 fent. */
+  EX.barbell_row = {
+    cam: { yaw: -64, pitch: 8, dist: 4.9, target: [0, 0.8, 0], rad: 2.1 },
+    build(t) {
+      const root = [0, 0.84, -0.26], pose = Object.assign({ root, pitch: 68, head: -38, chest: -4 }, LR(sd => Object.assign(STAND(sd), { foot: [sd * 0.13, D.ankle, 0], kpole: [sd * 0.3, 0, 1] })));
+      const S = shoulderOf(pose, 1), by = lerp(S[1] - 0.6, root[1] + 0.02, t), bz = lerp(S[2] + 0.03, root[2] + 0.3, t);
+      barbell([0, by, bz], 1.05, [0.6]);
+      side2(sd => Object.assign(sd > 0 ? pose.L : pose.R, { hand: [sd * 0.27, by, bz], grip: X, pole: [sd * 0.5, 0.2, -1] }));
+      return pose;
+    }
+  };
+  // guggolás közös váza (rúd / súlyzó a felsőtesten); hold(pose) teszi fel a súlyt és a kezeket
+  function squatPose(t, o, hold) {
+    const pose = Object.assign({ root: [0, lerp(0.975, o.low, t), lerp(-0.015, o.back, t)], pitch: lerp(o.p0 || 0, o.p1, t), chest: -6 * t, head: -o.p1 * 0.5 * t }, LR(sd => ({ foot: [sd * 0.17, D.ankle, 0], toe: [sd * 0.4, 0, 1], kpole: [sd * 0.45, 0, 1] })));
+    hold(pose); return pose;
+  }
+  /* Guggolás rúddal: a rúd a felső háton, a combok legalább párhuzamosig. t = 0 fent, 1 lent. */
+  EX.back_squat = {
+    neg: true, cam: { yaw: -58, pitch: 8, dist: 5.0, target: [0, 0.95, 0], rad: 2.2 },
+    build(t) { return squatPose(t, { low: 0.5, back: -0.27, p1: 42 }, pose => { const Fc = solve(pose).Fc, B = fpt(Fc, 0, 0.29, -0.09); barbell(B, 1.05, [0.62]); side2(sd => Object.assign(sd > 0 ? pose.L : pose.R, { hand: [sd * 0.4, B[1], B[2]], grip: X, pole: [sd * 0.4, -1, -0.6] })); }); }
+  };
+  /* Elöl tartott guggolás: a rúd a mellkas előtt a vállon, a könyök magasan előre; egyenesebb törzs. t = 0 fent, 1 lent. */
+  EX.front_squat = {
+    neg: true, cam: { yaw: -58, pitch: 8, dist: 5.0, target: [0, 0.95, 0], rad: 2.2 },
+    build(t) { return squatPose(t, { low: 0.5, back: -0.18, p1: 24 }, pose => { const Fc = solve(pose).Fc, B = fpt(Fc, 0, 0.27, 0.13); barbell(B, 1.05, [0.62]); side2(sd => Object.assign(sd > 0 ? pose.L : pose.R, { hand: [sd * 0.24, B[1] + 0.01, B[2] - 0.02], grip: X, pole: add(mul(Fc.z, 1), [sd * 0.2, -0.3, 0]) })); }); }
+  };
+  /* Kehely guggolás: a kézisúlyzó függőlegesen a mellkas előtt. t = 0 fent, 1 lent. */
+  EX.goblet_squat = {
+    neg: true, cam: { yaw: -50, pitch: 8, dist: 4.8, target: [0, 0.9, 0], rad: 2.1 },
+    build(t) { return squatPose(t, { low: 0.5, back: -0.2, p1: 26 }, pose => { const Fc = solve(pose).Fc, C = fpt(Fc, 0, 0.12, 0.22); dumbbell(C, Fc.y, 0.06); side2(sd => Object.assign(sd > 0 ? pose.L : pose.R, { hand: fpt(Fc, sd * 0.05, 0.05, 0.2), grip: Fc.y, pole: [sd * 0.5, -1, 0.2] })); }); }
+  };
+  /* Vállból nyomás rúddal, állva: a rúd a kulcscsont elől a fej fölé, nyújtott karig. t = 0 lent, 1 fent. */
+  EX.overhead_press = {
+    cam: { yaw: -50, pitch: 6, dist: 5.2, target: [0, 1.25, 0], rad: 2.3 },
+    build(t) {
+      const by = lerp(1.46, 2.0, t), bz = t < 0.55 ? 0.15 : lerp(0.15, 0.01, (t - 0.55) / 0.45);   // a rúd az arc előtt megy fel, csak a fej fölött kerül középre
+      barbell([0, by, bz], 1.05, [0.62]);
+      return Object.assign({ root: [0, 0.975, 0], pitch: lerp(-4, 0, t), head: t < 0.55 ? -14 : lerp(-14, 4, (t - 0.55) / 0.45) }, LR(sd => Object.assign(STAND(sd), { hand: [sd * 0.25, by, bz], grip: X, pole: [sd * 0.5, -1, 0.5] })));
+    }
+  };
+  /* Oldalemelés kézisúlyzóval: enyhén hajlított könyökkel oldalra, vállmagasságig. t = 0 lent, 1 fent. */
+  EX.lateral_raise = {
+    cam: { yaw: -22, pitch: 6, dist: 4.7, target: [0, 1.15, 0], rad: 2.1 },
+    build(t) {
+      const a = rad(lerp(10, 88, t)), pose = Object.assign({ root: [0, 0.975, 0], pitch: 4, head: -4 }, LR(sd => STAND(sd)));
+      side2(sd => { const S = shoulderOf(pose, sd), H = mad(S, norm([sd * Math.sin(a), -Math.cos(a), 0.12]), 0.6); dumbbell(H, Zf, 0.045); Object.assign(sd > 0 ? pose.L : pose.R, { hand: H, grip: Zf, pole: [sd * 0.3, 0.3, -1] }); });
+      return pose;
+    }
+  };
+  /* Hátsó váll tárogatás kézisúlyzóval: előredőlve, a lógó karok oldalra-felfelé nyílnak. t = 0 lent, 1 fent. */
+  EX.rear_delt_fly = {
+    cam: { yaw: -150, pitch: 14, dist: 4.8, target: [0, 0.95, 0], rad: 2.1 },
+    build(t) {
+      const a = rad(lerp(4, 84, t)), pose = Object.assign({ root: [0, 0.87, -0.22], pitch: 70, head: -30 }, LR(sd => Object.assign(STAND(sd), { kpole: [sd * 0.3, 0, 1] })));
+      side2(sd => { const S = shoulderOf(pose, sd), H = mad(S, norm([sd * Math.sin(a), -Math.cos(a), 0.05]), 0.6); dumbbell(H, Zf, 0.045); Object.assign(sd > 0 ? pose.L : pose.R, { hand: H, grip: Zf, pole: [sd * 0.2, 0.3, -1] }); });
+      return pose;
+    }
+  };
+  /* Egykezes evezés kézisúlyzóval: a bal térd és a bal kéz a padon, a jobb kar a súlyzót a csípő felé húzza. t = 0 lent, 1 fent. */
+  EX.dumbbell_row = {
+    side: -1, cam: { yaw: -100, pitch: 10, dist: 4.8, target: [0, 0.7, 0], rad: 2.1 },
+    build(t) {
+      const bx = 0.16; box([bx, 0.43, 0.02], [0.17, 0.035, 0.6], 0.028, W, PAD); beam([bx, 0.4, 0.02], [bx, 0.03, 0.02], 0.07, 0.07, STEEL, Zf); beam([bx, 0.03, -0.55], [bx, 0.03, 0.6], 0.08, 0.05, STEEL, Y);
+      const pose = { root: [0.04, 0.88, -0.2], pitch: 80, roll: -4, head: -40,
+        L: { hand: [0.2, 0.5, 0.52], grip: X, pole: [0.5, 0, -1], foot: [0.15, 0.55, -0.62], toe: [0, -0.5, -1], footUp: [0, 1, -0.4], kpole: [0, -1, 0.3] },
+        R: { foot: [-0.27, D.ankle, -0.05], toe: [-0.2, 0, 1], kpole: [-0.3, 0, 1] } };
+      const S = shoulderOf(pose, -1), H = [S[0] - 0.03, lerp(S[1] - 0.6, S[1] - 0.16, t), lerp(S[2] + 0.04, S[2] - 0.26, t)];
+      dumbbell(H, Zf, 0.055); Object.assign(pose.R, { hand: H, grip: Zf, pole: [-0.2, 0.3, -1] });
+      return pose;
+    }
+  };
+
   let LV_TEST = null;
   function levels(key) {
     const raw = typeof EX_INFO !== 'undefined' && EX_INFO[key], m = {};
