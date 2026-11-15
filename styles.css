@@ -395,3 +395,10 @@ button.rank-line{width:100%;text-align:left;color:#f4f6f8;cursor:pointer;font:in
 .order-btn:not(:disabled):active{background:#22301a}
 .exercise.moved{animation:exMoved .6s ease}
 @keyframes exMoved{0%{box-shadow:0 0 0 2px #9cff57}100%{box-shadow:0 0 0 0 transparent}}
+/* v38: „ne ess vissza” – minimum ismétlés nehezebb súllyal */
+.match-line{margin:-4px 0 12px;padding:8px 11px;background:#101a0c;border:1px solid #2c4220;border-radius:9px;color:#a9c79a;font-size:11px;line-height:1.45}
+.match-line b{color:#9cff57;white-space:nowrap}
+.match-hint{margin:-3px 0 2px 45px;color:#a9c79a;font-size:10.5px;line-height:1.35}
+.match-hint b{color:#9cff57}
+.set-row input.min-ph::placeholder{color:#7fbf4f;font-weight:800}
+@media(max-width:600px){.match-hint{margin-left:35px}}

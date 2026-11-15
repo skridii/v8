@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v37';
+const APP_VERSION = 'v38';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -615,6 +615,52 @@ function startNewCycle() {
   toast(`${n}. ciklus elindult. Sok sikert!`);
 }
 
+/* ---------- „Ne ess vissza”: hány ismétlés kell a nehezebb súllyal ugyanakkora terheléshez ----------
+   Az előző alkalom legjobb szettjéből becsült max (Epley: súly × (1 + ism./30)) alapján. Plusz súlyos húzódzkodásnál /
+   tolódzkodásnál a testsúly is beleszámít. Csak súlyos gyakorlatnál (a sima testsúlyos ismétléses gyakorlatnál nincs értelme). */
+function matchLoad(name, wt) {
+  const key = rankKeyFor(exId(name)), db = key ? RANK_DB[key] : null;
+  if (db?.type === 'r') { const bw = bodyWeight(); return BW_LOADED.has(key) && bw ? bw + Math.max(0, wt) : null; }
+  return wt > 0 ? wt : null;
+}
+function matchRef(c, w, d, name) {
+  const last = latestBefore(c, w, d, name); if (!last) return null;
+  let best = null;
+  for (const st of last.sets || []) {
+    if (!st?.done || !positive(st.reps)) continue;
+    const wt = toNum(st.weight) || 0, L = matchLoad(name, wt); if (!L) continue;
+    const e = L * (1 + toNum(st.reps) / 30);
+    if (!best || e > best.e) best = { w: wt, r: toNum(st.reps), e };
+  }
+  return best;
+}
+function minRepsFor(ref, name, wt) {
+  const L = matchLoad(name, wt); if (!ref || !L) return null;
+  const r = Math.max(1, Math.ceil(30 * (ref.e / L - 1) - 1e-6));
+  return r > 30 ? null : r;
+}
+// a súlyemelés lépésköze: szabadsúlynál 2,5 kg; gépnél a saját súlyaid között leggyakoribb ugrás (pl. 7 kg-os lapok), alapból 5 kg
+function weightStep(id) {
+  const key = rankKeyFor(id); if (!key || RANK_DB[key].equip !== 'machine') return 2.5;
+  const ws = [...new Set(sessionsOf(id).flatMap(x => (x.r.sets || []).filter(st => st?.done && positive(st.weight)).map(st => toNum(st.weight))))].sort((a, b) => a - b), cnt = {};
+  for (let i = 1; i < ws.length; i++) { const dlt = Math.round((ws[i] - ws[i - 1]) * 10) / 10; if (dlt >= 1 && dlt <= 10) cnt[dlt] = (cnt[dlt] || 0) + 1; }
+  const best = Object.entries(cnt).sort((a, b) => (b[1] - a[1]) || (a[0] - b[0]))[0];
+  return best ? Number(best[0]) : 5;
+}
+function matchLineHtml(c, w, d, name) {
+  const ref = matchRef(c, w, d, name); if (!ref) return '';
+  const step = weightStep(exId(name)), out = [];
+  for (let k = 1; k <= 3; k++) { const wt = Math.round((ref.w + k * step) * 100) / 100, r = minRepsFor(ref, name, wt); if (r >= 4) out.push(`<b>${showNum(wt)} kg × ${r}</b>`); }   // 4 alatt már túl nagy az ugrás
+  if (!out.length) return '';
+  return `<div class="match-line">🎯 Ha emelsz a súlyon, ennyi ismétlés kell, hogy ne ess vissza (előző: ${showNum(ref.w)} kg × ${showNum(ref.r)}): ${out.join(' · ')}</div>`;
+}
+function matchHint(slot, e, s, wtRaw) {
+  const name = slotName(state.cycle, state.week, state.day, slot), ref = matchRef(state.cycle, state.week, state.day, name), wt = toNum(wtRaw);
+  if (!ref || !(wt >= 0) || cleanNum(wtRaw) === '') return null;
+  const r = minRepsFor(ref, name, wt); if (!r) return null;
+  return { r, text: `${showNum(wt)} kg-mal legalább <b>${r} ismétlés</b> kell, hogy ne ess vissza (előző legjobb: ${showNum(ref.w)} kg × ${showNum(ref.r)})` };
+}
+
 function renderWorkout() {
   if (!ready) { workout.innerHTML = '<div class="note">Adatok betöltése…</div>'; return; }
   const c = state.cycle, w = state.week, d = state.day, day = DAYS[d], slots = curSlots();
@@ -637,11 +683,15 @@ function renderWorkout() {
     else if (rk?.needBw) h += `<div class="rank-line muted">🏅 Add meg a testsúlyodat a RANGOK fülön, és itt látod a rangodat.</div>`;
     if (pb) h += `<div class="record-badge">🏆 SZEMÉLYES REKORD · ${showNum(pb.weight)} kg × ${showNum(pb.reps)} · ${isImported(pb.c) ? 'Hevy' : (state.maxCycle > 1 ? pb.c + '. ciklus, ' : '') + pb.w + '. hét'}</div>`;
     if (last) h += `<div class="history"><div>LEGUTÓBBI ALKALOM · ${esc(sessLabel(last.c, last.w, last.d, last))}${isImported(last.c) && last.t ? ' · ' + esc(fmtDate(last.t)) : ''}</div><strong>Warm-up: ${esc(showNum(last.warmup?.weight)) || '—'} kg × ${esc(showNum(last.warmup?.reps)) || '—'} · ${esc(setsText(last))}</strong></div>`;
+    h += matchLineHtml(c, w, d, name);
     h += `<div class="sets"><div class="set-labels"><span>SET</span><span>KG</span><span>REPS</span><span></span></div>`;
     const bwx = isBwExercise(name);
     h += setRowHtml('W', e, wu, 'warmup', 0, bwx);
     const nSets = setCount(slot, rec);
-    for (let s = 0; s < nSets; s++) h += setRowHtml(String(s + 1), e, sets[s] || emptySet(), 'work', s, bwx);
+    for (let s = 0; s < nSets; s++) {
+      const sv = sets[s] || emptySet(), mh = !sv.done && cleanNum(sv.reps) === '' ? matchHint(slot, e, s, sv.weight) : null;
+      h += setRowHtml(String(s + 1), e, sv, 'work', s, bwx, mh?.r) + `<div class="match-hint${mh ? '' : ' hidden'}" data-mh="${e}-${s}">${mh ? '🎯 ' + mh.text : ''}</div>`;
+    }
     h += `<div class="set-tools"><button class="set-tool" data-addset data-e="${e}">+ SZETT</button>${nSets > 1 ? `<button class="set-tool minus" data-delset data-e="${e}">− SZETT</button>` : ''}</div>`;
     h += `</div><div class="last">Bemelegítő szett után: <strong>1:00</strong> · Munkasorozat után: <strong>2:30</strong></div></article>`;
   });
@@ -652,9 +702,9 @@ function renderWorkout() {
   bindInputs();
 }
 function isBwExercise(name) { const k = rankKeyFor(exId(name)); return !!k && RANK_DB[k].type === 'r'; }
-function setRowHtml(label, e, v, kind, s = 0, bw = false) {
+function setRowHtml(label, e, v, kind, s = 0, bw = false, minR = null) {
   const wu = kind === 'warmup', done = !!v.done;
-  return `<div class="set-row ${wu ? 'warmup-row' : ''}" data-e="${e}" data-s="${s}"><div class="set-num">${label}</div><input inputmode="decimal" data-type="weight" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.weight || ''))}" placeholder="${bw ? '0 kg' : 'kg'}" aria-label="${label} súly"><input inputmode="numeric" data-type="reps" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.reps || ''))}" placeholder="reps" aria-label="${label} ismétlés"><button class="complete ${done ? 'checked' : ''}" data-done data-kind="${kind}" data-e="${e}" data-s="${s}">${done ? '✓' : '○'}</button></div>`;
+  return `<div class="set-row ${wu ? 'warmup-row' : ''}" data-e="${e}" data-s="${s}"><div class="set-num">${label}</div><input inputmode="decimal" data-type="weight" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.weight || ''))}" placeholder="${bw ? '0 kg' : 'kg'}" aria-label="${label} súly"><input inputmode="numeric" data-type="reps" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.reps || ''))}" placeholder="${minR ? 'min ' + minR : 'reps'}" aria-label="${label} ismétlés"${minR ? ' class="min-ph"' : ''}><button class="complete ${done ? 'checked' : ''}" data-done data-kind="${kind}" data-e="${e}" data-s="${s}">${done ? '✓' : '○'}</button></div>`;
 }
 function bindInputs() {
   workout.querySelectorAll('.set-row input').forEach(inp => inp.oninput = () => {
@@ -665,6 +715,12 @@ function bindInputs() {
     const v = inp.dataset.kind === 'warmup' ? r.warmup : r.sets[s];
     v[inp.dataset.type] = cleanNum(inp.value); v.done = false; v.ts = Date.now(); r.ts = Date.now();
     if (positive(inp.value)) inp.classList.remove('invalid');
+    if (inp.dataset.kind === 'work') {
+      const row = inp.closest('.set-row'), ri = row.querySelector('[data-type="reps"]'), hint = workout.querySelector(`[data-mh="${inp.dataset.e}-${s}"]`);
+      const mh = cleanNum(ri.value) === '' ? matchHint(slot, +inp.dataset.e, s, row.querySelector('[data-type="weight"]').value) : null;
+      ri.placeholder = mh ? 'min ' + mh.r : 'reps'; ri.classList.toggle('min-ph', !!mh);
+      if (hint) { hint.innerHTML = mh ? '🎯 ' + mh.text : ''; hint.classList.toggle('hidden', !mh); }
+    }
     const btn = inp.closest('.set-row').querySelector('[data-done]');
     btn.classList.remove('checked'); btn.textContent = '○';
     save();
