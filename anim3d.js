@@ -589,6 +589,24 @@ void main() {}`;
       return Object.assign({ root: [0, seatY + 0.125, 0], pitch: lerp(-6, 4, t), spine: 34 * t, chest: 28 * t, head: 8 * t }, LR(sd => Object.assign(sitLegs(sd, 0.33, 0.16), { hand: hp(sd), grip: X, pole: [sd * 0.5, -1, 0.4] })));
     }
   };
+  /* Térdelő kötél-hasprés csigán: a magas csiga előtt térdelve, a kötél végei a fej mellett; a csípő helyben marad,
+     a gerinc felülről lefelé „gömbölyödik”, a könyök a comb felé megy. t = 0 egyenes törzs, 1 összegörbülve. */
+  EX.cable_crunch = {
+    views: { front: -42, back: -150 }, cam: { yaw: -70, pitch: 9, dist: 4.6, target: [0, 0.78, 0.3], rad: 2.0 },
+    thumb: { t: 0.75, yaw: -64, target: [0, 0.62, 0.3] },
+    build(t) {
+      const P = [0, 2.02, 0.66], root = [0, 0.545, lerp(0, -0.04, t)];
+      cableTower(P[2], P[1], 0.32 * t);
+      box([0, 0.025, -0.12], [0.26, 0.022, 0.3], 0.012, W, PAD);                       // térdelő szivacs
+      const pose = Object.assign({ root, pitch: lerp(6, 16, t), spine: 30 * t, chest: 27 * t, head: lerp(4, 16, t) }, LR(sd => ({
+        foot: [sd * 0.11, D.ankle + 0.005, -0.42], toe: [0, -0.35, -1], footUp: [0, 1, -0.3], kpole: [sd * 0.05, -1, 0.7] })));
+      const Fh = solve(pose).Fh, hand = sd => fpt(Fh, sd * 0.085, 0.115, 0.075);
+      const K = mad(mix(hand(1), hand(-1), 0.5), norm(sub(P, mix(hand(1), hand(-1), 0.5))), 0.13);
+      cable([0, P[1] - 0.04, P[2]], K); ball(K, 0.018, STEEL2);
+      side2(sd => { const H = hand(sd); tube(K, H, 0.012, ROPE); ball(mad(H, Fh.y, -0.05), 0.02, GRIP); const o = sd > 0 ? pose.L : pose.R; o.hand = H; o.grip = Fh.y; o.pole = add(mul(Fh.x, sd * 0.35), add(mul(Fh.y, -1), mul(Fh.z, 0.55))); });
+      return pose;
+    }
+  };
   /* Csípő-addukció gépen: ülve, a térd belső oldalán párna; a szétnyitott lábat összezárja. t = 0 nyitva, 1 zárva. */
   EX.machine_hip_adduction = {
     cam: { yaw: -22, pitch: 13, dist: 4.5, target: [0, 0.72, 0.1], rad: 2.0 },
@@ -713,6 +731,30 @@ void main() {}`;
       side2(sd => { beam([sd * 0.33, el[1], el[2]], [sd * 0.33, H[1], H[2]], 0.04, 0.035, STEEL, X); cyl([sd * 0.3, el[1], el[2]], [sd * 0.36, el[1], el[2]], 0.04, STEEL2, 0.008); });
       cyl([-0.35, H[1], H[2]], [0.35, H[1], H[2]], 0.014, CHROME, 0.004); side2(sd => cyl([sd * 0.1, H[1], H[2]], [sd * 0.24, H[1], H[2]], 0.02, GRIP, 0.006));
       return Object.assign({ root, pitch: 16, head: -8 }, LR(sd => Object.assign(sitLegs(sd, 0.3, 0.2), { hand: [sd * 0.17, H[1], H[2]], grip: X, pole: [0, -0.75, 0.66] })));
+    }
+  };
+  /* Scott-bicepsz kézisúlyzóval, közel függőleges (≈82°-os) pad támláján: a pad mögött, kissé oldalt fordulva állva a felkar hátsó oldala végig a támlán
+     fekszik, a hónalj a tetején; az alkar a teljes nyújtásból a váll elé hajlik. Egykezes (jobb kar), a bal kéz a támla tetején. t = 0 nyújtva, 1 fent. */
+  EX.dumbbell_preacher_curl = {
+    side: -1, cam: { yaw: -72, pitch: 8, dist: 4.4, target: [0, 1.05, 0.2], rad: 1.9 },
+    thumb: { t: 0.62, yaw: -66, target: [-0.1, 1.1, 0.25] },
+    build(t) {
+      const a = rad(8), root = [0, 0.955, -0.1];
+      const pose = Object.assign({ root, yaw: -25, pitch: 20, chest: 4, head: -10 }, LR(sd => ({ foot: [sd * 0.12, D.ankle, sd < 0 ? -0.02 : -0.12], toe: [sd * 0.2, 0, 1], kpole: [sd * 0.12, 0, 1] })));
+      const J0 = solve(Object.assign({}, pose, { R: Object.assign({}, pose.R, { hand: [-0.2, 0.7, 0.4] }) }));
+      const S = J0.arm.find(x => x.s < 0).S, d = [0, -Math.cos(a), Math.sin(a)], n = [0, Math.sin(a), Math.cos(a)];
+      const E = mad(S, d, D.uarm), ph = a + rad(lerp(4, 146, t)), fa = [0, -Math.cos(ph), Math.sin(ph)], H = mad(E, fa, D.farm + D.hand);
+      // támla: a felkar mögött (a test felől), teteje a hónaljnál
+      const top = mad(mad(S, n, -0.06), d, 0.04), pc = mad(top, d, 0.31);
+      box(mad(mad(pc, n, -0.03), X, -0.05), [0.13, 0.33, 0.03], 0.024, { x: X, y: mul(d, -1), z: n }, PAD);
+      const bot = mad(top, d, 0.66);
+      beam(mad(bot, n, -0.09), [S[0], 0.3, bot[2] + 0.22], 0.06, 0.05, STEEL, X); beam(mad(top, n, -0.09), mad(bot, n, -0.09), 0.06, 0.05, STEEL, X);
+      box([S[0], 0.44, bot[2] + 0.36], [0.16, 0.035, 0.2], 0.026, W, PAD); beam([S[0], 0.41, bot[2] + 0.36], [S[0], 0.03, bot[2] + 0.36], 0.07, 0.07, STEEL, Zf);
+      beam([S[0], 0.03, bot[2] - 0.05], [S[0], 0.03, bot[2] + 0.62], 0.08, 0.05, STEEL, Y); side2(sd => beam([S[0] + sd * 0.26, 0.03, bot[2] + 0.62], [S[0] - sd * 0.0, 0.03, bot[2] + 0.62], 0.07, 0.05, STEEL, Y));
+      const grip = norm([1, 0.12 * t, 0]); dumbbell(H, grip, 0.048);
+      Object.assign(pose.R, { hand: H, grip, pole: mul(n, -1) });
+      Object.assign(pose.L, { hand: mad(mad(top, X, 0.2), n, 0.03), grip: X, pole: [0.5, -0.6, -0.5] });
+      return pose;
     }
   };
   // kábeloszlop: magas csiga a megadott ponton, mögötte oszlop súlytoronnyal

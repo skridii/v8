@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v36';
+const APP_VERSION = 'v37';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -29,9 +29,9 @@ const LEGACY_PROGRAM = [
    [név, magyar név, ismétlés, szettszám]. A meglévő felhasználók saját tervét NEM érinti. */
 const PROGRAM = [
 {name:'LOWER 1',subtitle:'Deadlift & Quadriceps Focus',ex:[
-['Conventional Deadlift','Sima Felhúzás','2 × 5–7',2],['Hack Squat','Hack Guggolás Gépen','2 × 6–8',2],['Machine Ab Crunch','Gépes hasprés gépen','1 × 10–15',1],['Machine Hip Adduction','Csípő Addukció Gépen','2 × 10–12',2],['Standing Calf Raise','Álló Vádli Gépen','2 × 8–10',2],['Dumbbell Wrist Curl','Csuklóhajlítás','2 × 12–15',2],['Dumbbell Reverse Wrist Curl','Csuklófeszítés','2 × 12–15',2]]},
+['Conventional Deadlift','Sima Felhúzás','2 × 5–7',2],['Hack Squat','Hack Guggolás Gépen','2 × 6–8',2],['Cable Crunch','Térdelő Hasprés Csigán (kötéllel)','1 × 10–15',1],['Machine Hip Adduction','Csípő Addukció Gépen','2 × 10–12',2],['Standing Calf Raise','Álló Vádli Gépen','2 × 8–10',2],['Dumbbell Wrist Curl','Csuklóhajlítás','2 × 12–15',2],['Dumbbell Reverse Wrist Curl','Csuklófeszítés','2 × 12–15',2]]},
 {name:'UPPER 1',subtitle:'Chest & Back Thickness',ex:[
-['Bench Press','Fekvenyomás','2 × 6–8',2],['Chest-Supported Row','Mellkassal támasztott evezés – csípő felé húzva','2 × 6–8',2],['Machine Lateral Raise','Gépes Oldalemelés','2 × 10–12',2],['Reverse Pec Deck','Hátsó Váll Pec Deck Gépen','2 × 10–12',2],['Machine Preacher Curl','Gépes Scott Bicepsz (csigás)','2 × 8–10',2],['Cable Rope Triceps Pushdown','Csigás Kötél Tricepsz','2 × 8–10',2],['Single-Arm Sagittal Pulldown','Szagittális Lehúzás Egy Kézzel Gépen','1 × 8–10',1]]},
+['Bench Press','Fekvenyomás','2 × 6–8',2],['Chest-Supported Row','Mellkassal támasztott evezés – csípő felé húzva','2 × 6–8',2],['Machine Lateral Raise','Gépes Oldalemelés','2 × 10–12',2],['Reverse Pec Deck','Hátsó Váll Pec Deck Gépen','2 × 10–12',2],['Dumbbell Preacher Curl','Scott Bicepsz Kézisúlyzóval – függőleges pad','2 × 8–10',2],['Cable Rope Triceps Pushdown','Csigás Kötél Tricepsz','2 × 8–10',2],['Single-Arm Sagittal Pulldown','Szagittális Lehúzás Egy Kézzel Gépen','1 × 8–10',1]]},
 {name:'LOWER 2',subtitle:'Quadriceps, Hamstring & Soleus Focus',ex:[
 ['Smith Machine Bulgarian Split Squat','Smith Bolgár Guggolás','2 × 8–10 / láb',2],['Lying Hamstring Curl','Fekvő Combhajlítás','2 × 8–10',2],['Leg Extension','Láb Extenzió','2 × 10–12',2],['Seated Calf Raise','Ülő Vádli Gépen','2 × 10–12',2],['Hanging Oblique Leg Raise','Függeszkedős Oldalsó Lábemelés (oldalanként)','2 × 10–12',2],['Dumbbell Wrist Curl','Csuklóhajlítás','2 × 12–15',2],['Dumbbell Reverse Wrist Curl','Csuklófeszítés','2 × 12–15',2]]},
 {name:'UPPER 2',subtitle:'Shoulders & Lat Width Focus',ex:[
@@ -360,8 +360,47 @@ function migrate(old) {
         if (i !== -1 && s.variantChoice[ck] === undefined) s.variantChoice[ck] = i;
       }
     }
+    applySwaps(s);
   } finally { state = prev; }
   return s;
+}
+/* v37: gyakorlatcsere MINDENKINÉL, egyszer (s.fixes-ben jelölve): a gépes hasprés helyett térdelő kötél-hasprés csigán,
+   a gépes Scott-bicepsz helyett kézisúlyzós Scott függőleges padon. Ezek MÁS gyakorlatok, ezért a régi adatok a régi
+   néven maradnak (FEJLŐDÉS oldalon visszanézhetők); a csere az aktuális héttől érvényes, a korábbi hetek nem változnak.
+   Ha ezen a héten már a régi néven rögzítettél, az átkerül az új gyakorlathoz (azon a héten már az újat csináltad). */
+const SWAPS = [{ id: 'swap2026-11', items: [
+  ['machine_ab_crunch', 'Cable Crunch', 'Térdelő Hasprés Csigán (kötéllel)'],
+  ['machine_preacher_curl', 'Dumbbell Preacher Curl', 'Scott Bicepsz Kézisúlyzóval – függőleges pad']
+] }];
+let swapNote = '';
+function applySwaps(s) {
+  for (const f of SWAPS) {
+    if (s.fixes?.[f.id]) continue;
+    s.fixes = { ...(s.fixes || {}), [f.id]: Date.now() };
+    const isOld = (x, v) => { const id = exId(v.name); return id === x[0] || rankKeyFor(id, s) === x[0]; };
+    if (!allVariants().some(v => f.items.some(x => isOld(x, v)))) continue;
+    try { lsSet(PRE_IMPORT_PREFIX + new Date().toISOString().slice(0, 19).replace('T', ' ') + ' csere', JSON.stringify(s)); pruneSnaps(); } catch (e) {}
+    // a csere kezdete: a legutolsó ciklus legutolsó olyan hete, amelyben van adat (vagy ahol épp állsz)
+    const c = s.maxCycle; let w = s.cycle === c ? s.week : 1;
+    for (const obj of Object.values(s.exercises)) for (const [k, r] of Object.entries(obj.occurrences || {})) { const [kc, kw] = k.split('-').map(Number); if (kc === c && hasData(r)) w = Math.max(w, kw); }
+    const olds = f.items.map(() => new Set()), names = [];
+    applyFrom(c, w, L => { for (const day of L) for (const sl of day) for (const v of sl.variants) f.items.forEach((x, i) => { if (isOld(x, v)) { olds[i].add(exId(v.name)); v.name = x[1]; v.hu = x[2]; if (!names.includes(x[1])) names.push(x[1]); } }); });
+    f.items.forEach((x, i) => {
+      const nid = exId(x[1]); s.names[nid] = x[1];
+      for (const oid of olds[i]) {
+        const src = s.exercises[oid]; if (!src) continue;
+        for (const [k, r] of Object.entries(src.occurrences || {})) {
+          const [kc, kw, kd] = k.split('-').map(Number);
+          if (pos(kc, kw) < pos(c, w) || !hasData(r)) continue;
+          if (!(layoutFor(kc, kw)[kd] || []).some(sl => sl.variants.some(v => exId(v.name) === nid))) continue;
+          const dst = ensureExercise(nid);
+          if (dst.occurrences[k] && hasData(dst.occurrences[k])) continue;
+          dst.occurrences[k] = r; delete src.occurrences[k];
+        }
+      }
+    });
+    if (names.length) swapNote = `Frissült a programod: ${names.join(' és ')} került be (${c > 1 ? c + '. ciklus ' : ''}${w}. héttől). A régi gyakorlatok adatai megmaradtak.`;
+  }
 }
 
 /* ---------- tárolás ---------- */
@@ -586,7 +625,7 @@ function renderWorkout() {
     const vi = variantIndex(c, w, d, slot), v = slot.variants[vi], name = v.name, id = exId(name);
     const rec = recordFor(c, w, d, name), last = latestBefore(c, w, d, name);
     const sets = rec?.sets || [emptySet(), emptySet()], wu = rec?.warmup || emptySet(), pb = personalBest(id);
-    h += `<article class="exercise"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(name)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(name)}</button>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(showReps(slot))}</div></div><div class="head-btns"><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div></div>`;
+    h += `<article class="exercise"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(name)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(name)}</button>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(showReps(slot))}</div></div><div class="head-btns"><div class="order-btns"><button class="order-btn" data-move="-1" data-e="${e}"${e === 0 ? ' disabled' : ''} aria-label="Feljebb">▲</button><button class="order-btn" data-move="1" data-e="${e}"${e === slots.length - 1 ? ' disabled' : ''} aria-label="Lejjebb">▼</button></div><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div></div>`;
     const note = state.notes?.[id] || '';
     h += `<button class="ex-note${note ? '' : ' empty-note'}" data-note="${esc(id)}">📝 ${note ? esc(note) : 'Jegyzet a géphez (pl. ülés 4-es, támla 2. lyuk)'}</button>`;
     if (slot.variants.length > 1) {
@@ -664,6 +703,7 @@ function bindInputs() {
     toast(`Ezen a héten: ${slot.variants[1 - vi].name}`);
   });
   workout.querySelectorAll('[data-swap]').forEach(btn => btn.onclick = () => openEditor('edit', +btn.dataset.e));
+  workout.querySelectorAll('[data-move]').forEach(btn => btn.onclick = () => moveExercise(+btn.dataset.e, +btn.dataset.move));
   workout.querySelectorAll('[data-addset]').forEach(btn => btn.onclick = () => {
     const slot = curSlots()[+btn.dataset.e]; if (!slot) return;
     // A szett a gyakorlathoz rögzül: ettől a héttől minden edzésen ennyi szett lesz.
@@ -695,6 +735,23 @@ function bindInputs() {
     save(); renderWorkout();
   });
   $('addExBtn').onclick = () => openEditor('add');
+}
+
+/* Gyakorlat mozgatása a napon belül (▲/▼). Ettől a héttől minden későbbi héten (és az új ciklusokban is) így marad;
+   a korábbi hetek sorrendje nem változik. Az adatok név szerint tárolódnak, így a sorrend semmit nem kever össze. */
+function moveExercise(e, dir) {
+  const slots = curSlots(), j = e + dir;
+  if (!slots[e] || !slots[j]) return;
+  const order = slots.map(sl => sl.uid); [order[e], order[j]] = [order[j], order[e]];
+  const rank = uid => { const i = order.indexOf(uid); return i === -1 ? 1e6 : i; }, d = state.day;
+  applyFrom(state.cycle, state.week, L => {
+    if (!L[d]) return;
+    const known = L[d].filter(sl => order.includes(sl.uid)).sort((a, b) => rank(a.uid) - rank(b.uid)); let k = 0;
+    L[d] = L[d].map(sl => order.includes(sl.uid) ? known[k++] : sl);      // az ezen a héten nem szereplő gyakorlatok a helyükön maradnak
+  });
+  if (timerCtx && timerCtx.c === state.cycle && timerCtx.w === state.week && timerCtx.d === d) { if (timerCtx.e === e) timerCtx.e = j; else if (timerCtx.e === j) timerCtx.e = e; persistTimer(); }
+  save(); renderWorkout();
+  const art = workout.querySelectorAll('.exercise')[j]; if (art) { art.classList.add('moved'); try { art.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) {} }
 }
 
 /* ---------- gyakorlat csere / új gyakorlat ---------- */
@@ -1042,6 +1099,7 @@ const RANK_DB_RAW = [
   ['Incline Dumbbell Press', 'Ferde Nyomás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [16, 23, 31, 41, 52], '2 × 8–10', []],
   ['Dumbbell Shoulder Press', 'Vállból Nyomás Kézisúlyzóval (1 súlyzó)', 'w', 'free', [12, 18, 25, 33, 42], '2 × 8–10', []],
   ['Alternating Dumbbell Biceps Curl', 'Váltott Karú Bicepsz (1 súlyzó)', 'w', 'free', [10, 15, 20, 27, 34], '2 × 8–10', ['Dumbbell Curl', 'Dumbbell Biceps Curl']],
+  ['Dumbbell Preacher Curl', 'Scott Bicepsz Kézisúlyzóval – függőleges pad (1 súlyzó)', 'w', 'free', [8, 12, 17, 23, 29], '2 × 8–10', ['Dumbbell Scott Curl', 'Single Arm Dumbbell Preacher Curl', 'One Arm Dumbbell Preacher Curl', 'Vertical Bench Dumbbell Curl']],
   ['Hammer Curl', 'Kalapács Bicepsz (1 súlyzó)', 'w', 'free', [11, 16, 22, 29, 37], '2 × 8–10', []],
   ['Lateral Raise', 'Oldalemelés (1 súlyzó)', 'w', 'free', [6, 10, 14, 19, 25], '2 × 10–12', ['Dumbbell Lateral Raise']],
   ['Rear Delt Fly', 'Hátsó Váll Tárogatás (1 súlyzó)', 'w', 'free', [5, 9, 13, 18, 23], '2 × 10–12', []],
@@ -1066,9 +1124,10 @@ const RANK_DB_RAW = [
   ['Standing Calf Raise', 'Álló Vádli Gépen', 'w', 'machine', [70, 115, 165, 225, 290], '2 × 8–10', []],
   ['Seated Calf Raise', 'Ülő Vádli Gépen', 'w', 'free', [32, 55, 82, 112, 145], '2 × 10–12', []],
   ['Machine Ab Crunch', 'Gépes Hasprés', 'w', 'machine', [15, 26, 40, 54, 72], '2 × 10–15', []],
+  ['Cable Crunch', 'Térdelő Hasprés Csigán (kötéllel)', 'w', 'machine', [20, 35, 52, 72, 95], '2 × 10–15', ['Kneeling Cable Crunch', 'Rope Cable Crunch', 'Cable Rope Crunch', 'Csigás Hasprés']],
   ['Chest-Supported Row', 'Mellkassal Támasztott Evezés', 'w', 'machine', [45, 70, 100, 135, 175], '2 × 6–8', ['T-Bar Row']],
   ['Wide-Grip Lat Pulldown', 'Széles Lehúzás Csigán', 'w', 'machine', [50, 65, 85, 108, 132], '2 × 8–10', ['Lat Pulldown']],
-  ['Single-Arm Sagittal Pulldown', 'Szagittális Lehúzás Egy Kézzel Gépen', 'w', 'machine', [55, 85, 115, 145, 195], '2 × 8–10', ['Sagittal Pulldown', 'Sagittal Row', 'Single Arm Sagittal Pulldown', 'Sagital', 'Sagittal', 'Sagital Pulldown', 'Szagitalis', 'Szagitalis Lehuzas', 'Szagitális Lehúzás']],
+  ['Single-Arm Sagittal Pulldown', 'Szagittális Lehúzás Egy Kézzel Gépen (egy kéz súlya)', 'w', 'machine', [28, 43, 58, 73, 98], '2 × 8–10', ['Sagittal Pulldown', 'Sagittal Row', 'Single Arm Sagittal Pulldown', 'Sagital', 'Sagittal', 'Sagital Pulldown', 'Szagitalis', 'Szagitalis Lehuzas', 'Szagitális Lehúzás']],
   ['Straight-Arm Lat Pulldown', 'Egyeneskaros Lehúzás', 'w', 'machine', [20, 30, 42, 56, 72], '2 × 8–10', ['Straight Arm Pulldown']],
   ['Cable High Row', 'Magas Evezés Csigán', 'w', 'machine', [35, 50, 68, 88, 110], '2 × 8–10', ['High Cable Row']],
   ['Seated Cable Row', 'Ülő Csigás Evezés', 'w', 'machine', [50, 68, 90, 115, 142], '2 × 8–10', ['Cable Row']],
@@ -1303,6 +1362,7 @@ const EX_INFO = {
   barbell_row: ['lats:3,upback:3,delt_r:2,biceps:2,lowback:2,forearm:1', 'Döntsd előre a törzsed kb. 45°-ra, egyenes háttal.|Húzd a rudat a hasad felé, a könyök hátra menjen.|Lassan engedd vissza.', 'Ne rántsd a törzsedet fel minden ismétlésnél.'],
   hip_thrust: ['glutes:3,hams:2,quads:1', 'Hát a padnak, rúd (párnával) a csípőn.|Sarokkal told fel a csípőd, amíg a törzs és a comb egy vonalba kerül.|Fent szorítsd meg a farizmod 1 mp-ig.', 'Az áll maradjon behúzva, a bordák lent.'],
   barbell_curl: ['biceps:3,forearm:2', 'Állj egyenesen, alsó fogással fogd a rudat.|Könyököd a törzsed mellett marad, csak az alkar mozog felfelé.|Lassan engedd le teljesen.', 'Ne lendítsd a törzseddel.'],
+  dumbbell_preacher_curl: ['biceps:3,forearm:1', 'Állj a pad támlája mögé (közel függőleges, 80–90°), a felkarod hátsó oldala feküdjön a támlán, a hónaljad a tetején.|A kézisúlyzót teljesen nyújtott karból hajlítsd fel a vállad elé.|Lassan engedd vissza teljes nyújtásig, majd jöhet a másik kar.', 'A felkar végig a támlán marad, a könyök nem csúszik előre – így a bicepsz rövid feje kap sokat a nyújtott helyzetben.'],
   scott_bench_preacher_curl: ['biceps:3,forearm:1', 'A felkarod feküdjön végig a Scott-padon.|Hajlítsd fel a súlyt, fent szorítsd.|Lassan engedd le majdnem teljesen nyújtott karig.', 'Alul ne ejtsd le, ott a legnagyobb a terhelés.'],
   dumbbell_bench_press: ['chest:3,delt_f:2,triceps:2', 'Feküdj a padra, súlyzók a mellkasod mellett, lapockák hátra-le.|Told fel a súlyzókat, fent kicsit közelítsenek.|Engedd le mélyen, amíg nyúlást érzel a mellben.', 'Kontrolláltan engedd le, ne essenek a súlyzók.'],
   incline_dumbbell_press: ['chest:3,delt_f:3,triceps:2', 'Pad 30–45°-ban, súlyzók a felső mellkas mellett.|Told fel őket a vállad fölé.|Lassan engedd vissza.', 'A könyök ne nyíljon teljesen oldalra.'],
@@ -1331,6 +1391,7 @@ const EX_INFO = {
   machine_hip_abduction: ['glutes:3', 'Ülj be, a párnák a térdek külső oldalán.|Told szét a lábaidat.|Lassan engedd vissza.', 'Kicsit előredőlve még jobban a farizmot dolgoztatja.'],
   standing_calf_raise: ['calves:3', 'Állj a gépbe, a lábujjpárnák a lépcső szélén.|Engedd le a sarkad mélyre.|Emelkedj lábujjhegyre, fent 1 mp szorítás.', 'Ne rugózz, alul tarts egy kis szünetet.'],
   seated_calf_raise: ['calves:3', 'Ülj be, a párna a térd fölött, a lábujjpárnák a lépcsőn.|Engedd le a sarkad mélyre.|Emelkedj fel, fent szorítsd.', 'Ülve a mélyebb vádliizom (soleus) dolgozik jobban.'],
+  cable_crunch: ['abs:3,obl:1', 'Térdelj le a magas csiga elé, a kötél két végét fogd a fejed két oldalánál.|A csípőd maradjon egy helyben, a hasad összehúzásával görbülj le, a könyököd a combod felé menjen.|Lent szoríts, majd lassan egyenesedj vissza, amíg a has meg nem nyúlik.', 'Ne a karoddal húzd le, és ne üljön hátra a csípőd – a gerinc „gömbölyödjön”, a kötél a fejednél marad.'],
   machine_ab_crunch: ['abs:3,obl:1', 'Ülj be, fogd a fogantyúkat, a lábad akassz be.|A hasad összehúzásával görbülj előre.|Lassan engedd vissza.', 'Ne a karoddal húzd, a hasaddal „tekerj”.'],
   chest_supported_row: ['lats:3,upback:3,delt_r:2,biceps:2', 'Mellkas a párnának, fogd a fogantyúkat.|Húzd a csípőd felé, a könyök a test mellett hátra.|Lassan engedd ki nyújtott karig.', 'A mellkasod maradjon végig a párnán.'],
   wide_grip_lat_pulldown: ['lats:3,upback:2,biceps:2,delt_r:1', 'Ülj be, combot rögzítsd, a rudat fogd szélesen.|Húzd a rudat a felső mellkasodhoz, a könyök lefelé-hátra.|Lassan engedd fel nyújtott karig.', 'Ne dőlj nagyon hátra, ne rántsd.'],
@@ -1583,7 +1644,7 @@ const HEVY_MAP = {
   'bench press (barbell)': 'Bench Press', 'incline bench press (barbell)': 'Incline Bench Press', 'deadlift (barbell)': 'Conventional Deadlift',
   'squat (barbell)': 'Back Squat', 'front squat (barbell)': 'Front Squat', 'romanian deadlift (barbell)': 'Romanian Deadlift', 'romanian deadlift (dumbbell)': 'Dumbbell Deadlift',
   'overhead press (barbell)': 'Overhead Press', 'bent over row (barbell)': 'Barbell Row', 'hip thrust (barbell)': 'Hip Thrust', 'bicep curl (barbell)': 'Barbell Curl',
-  'ez bar biceps curl': 'Barbell Curl', 'preacher curl (barbell)': 'Scott Bench Preacher Curl', 'preacher curl (ez bar)': 'Scott Bench Preacher Curl', 'preacher curl (dumbbell)': 'Scott Bench Preacher Curl',
+  'ez bar biceps curl': 'Barbell Curl', 'preacher curl (barbell)': 'Scott Bench Preacher Curl', 'preacher curl (ez bar)': 'Scott Bench Preacher Curl', 
   'preacher curl (machine)': 'Machine Preacher Curl', 'bench press (dumbbell)': 'Dumbbell Bench Press', 'incline bench press (dumbbell)': 'Incline Dumbbell Press',
   'shoulder press (dumbbell)': 'Dumbbell Shoulder Press', 'seated overhead press (dumbbell)': 'Dumbbell Shoulder Press', 'bicep curl (dumbbell)': 'Alternating Dumbbell Biceps Curl',
   'hammer curl (dumbbell)': 'Hammer Curl', 'lateral raise (dumbbell)': 'Lateral Raise', 'lateral raise (machine)': 'Machine Lateral Raise',
@@ -1596,7 +1657,7 @@ const HEVY_MAP = {
   'single arm triceps pushdown (cable)': 'Single-Arm Overhead Cable Triceps Extension', 'bicep curl (cable)': 'Cable Curl', 'leg press (machine)': 'Leg Press', 'leg press horizontal (machine)': 'Leg Press',
   'hack squat (machine)': 'Hack Squat', 'leg extension (machine)': 'Leg Extension', 'seated leg curl (machine)': 'Seated Hamstring Curl', 'lying leg curl (machine)': 'Lying Hamstring Curl',
   'hip adduction (machine)': 'Machine Hip Adduction', 'hip abduction (machine)': 'Machine Hip Abduction', 'standing calf raise (machine)': 'Standing Calf Raise',
-  'seated calf raise': 'Seated Calf Raise', 'crunch (machine)': 'Machine Ab Crunch', 'pull up': 'Pull Up', 'pull up (weighted)': 'Pull Up', 'chin up': 'Pull Up',
+  'seated calf raise': 'Seated Calf Raise', 'crunch (machine)': 'Machine Ab Crunch', 'cable crunch': 'Cable Crunch', 'preacher curl (dumbbell)': 'Dumbbell Preacher Curl', 'pull up': 'Pull Up', 'pull up (weighted)': 'Pull Up', 'chin up': 'Pull Up',
   'chest dip': 'Dips', 'triceps dip': 'Dips', 'chest dip (weighted)': 'Dips', 'push up': 'Push Up', 'hanging leg raise': 'Hanging Leg Raise', 'goblet squat': 'Goblet Squat',
   'bulgarian split squat': 'Dumbbell Bulgarian Split Squat', 'smith machine squat': 'Smith Machine Squat', 'smith machine bench press': 'Smith Machine Bench Press',
   't bar row': 'Chest-Supported Row', 'chest supported incline row (dumbbell)': 'Chest-Supported Row', 'wrist curl (dumbbell)': 'Dumbbell Wrist Curl', 'reverse wrist curl (dumbbell)': 'Dumbbell Reverse Wrist Curl'
@@ -1846,7 +1907,7 @@ async function afterLogin(interactive) {
     if (!localHasData(state) || (srvNewer && confirm(`A fiókodban újabb mentés van (${new Date(srv.updated_at).toLocaleString('hu-HU')}), mint ezen a telefonon.\n\nBetöltöd a fiókból? (Mégse: a telefonon lévő marad, és az kerül fel a fiókba.)`))) {
       lsSet(PRE_IMPORT_PREFIX + new Date().toISOString().slice(0, 19).replace('T', ' '), JSON.stringify(state)); pruneSnaps();
       state = migrate(srv.state); await save(); render();
-      toast('Az edzésnapló betöltve a fiókodból.');
+      toast(swapNote || 'Az edzésnapló betöltve a fiókodból.'); swapNote = '';
       return;
     }
   }
@@ -2150,7 +2211,7 @@ if ('serviceWorker' in navigator) {
 }
 $('updateBtn').onclick = () => { save(); setTimeout(() => location.reload(), 150); };
 render();
-load().then(() => { render(); restoreTimer(); if (auth) afterLogin(false).then(() => renderBanner()).catch(() => {}); }).catch(() => {
+load().then(() => { render(); restoreTimer(); if (swapNote) { toast(swapNote); swapNote = ''; } if (auth) afterLogin(false).then(() => renderBanner()).catch(() => {}); }).catch(() => {
   // Ha a betöltés váratlanul elakad, NEM írunk felül semmit (ready=false marad).
   workout.innerHTML = '<div class="note">Az adatok betöltése nem sikerült. Zárd be teljesen az alkalmazást, és nyisd meg újra. Az adataid nem törlődtek.</div>';
 });

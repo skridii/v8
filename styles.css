@@ -388,3 +388,10 @@ button.rank-line{width:100%;text-align:left;color:#f4f6f8;cursor:pointer;font:in
 .wm-row .wm-ex{color:#6c7680}
 .wm-row em{font-style:normal;font-size:10px;font-weight:900;white-space:nowrap;color:#87919a;margin-top:2px}
 .wm-row.s3 em{color:#9cff57}.wm-row.s2 em{color:#cfe8b8}.wm-row.s0 b{color:#87919a}
+/* v37: gyakorlatsorrend */
+.order-btns{display:flex;flex-direction:column;gap:3px}
+.order-btn{background:#15191e;color:#9cff57;border:1px solid #2b333c;border-radius:7px;width:34px;height:22px;padding:0;font-size:11px;line-height:1;cursor:pointer}
+.order-btn:disabled{opacity:.25;cursor:default}
+.order-btn:not(:disabled):active{background:#22301a}
+.exercise.moved{animation:exMoved .6s ease}
+@keyframes exMoved{0%{box-shadow:0 0 0 2px #9cff57}100%{box-shadow:0 0 0 0 transparent}}
