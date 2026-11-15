@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v38';
+const APP_VERSION = 'v39';
 
 const DAYS = [
   { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
@@ -827,7 +827,7 @@ function openEditor(mode, e) {
     : 'A gyakorlat ettől a héttől kerül be erre az edzésnapra. Ha egy már létező nevet adsz meg, annak előzményeit folytatja.';
   $('editRemove').classList.toggle('hidden', mode !== 'edit');
   $('editRemoveAll').classList.toggle('hidden', mode !== 'edit');
-  $('libSearch').value = '';
+  $('libSearch').value = ''; libMuscle = ''; renderMuscleChips();
   const curId = slot ? exId(slot.variants[0].name) : null, cm = curId ? state.rankMap?.[curId] : null;
   $('editRank').innerHTML = `<option value="auto">Automatikus (név alapján)</option><option value="none">Nincs rang</option>` + RANK_DB_RAW.map(x => `<option value="${esc(exId(x[0]))}">${esc(x[0])}${x[3] === 'machine' ? ' ⚙️' : ''}</option>`).join('');
   $('editRank').value = cm || 'auto';
@@ -835,20 +835,58 @@ function openEditor(mode, e) {
   $('editOverlay').classList.remove('hidden');
   $('editOverlay').scrollTop = 0;
 }
+/* v39: izomcsoport szerinti szűrés a gyakorlatlistában (fő izom = 3, másodlagos = 2) + animációs ikon minden tételnél */
+const MUSCLE_GROUPS = [['chest', 'Mell', ['chest']], ['back', 'Hát', ['lats', 'upback']], ['shoulder', 'Váll', ['delt_f', 'delt_s', 'delt_r']],
+  ['biceps', 'Bicepsz', ['biceps']], ['triceps', 'Tricepsz', ['triceps']], ['forearm', 'Alkar', ['forearm']], ['abs', 'Has', ['abs', 'obl']],
+  ['quads', 'Comb elöl', ['quads']], ['hams', 'Comb hátul', ['hams']], ['glutes', 'Far', ['glutes']], ['adduct', 'Belső comb', ['adduct']],
+  ['calves', 'Vádli', ['calves']], ['lowback', 'Derék', ['lowback']], ['traps', 'Csuklyás', ['traps']]];
+let libMuscle = '';
+function muscleScore(id) {   // 3 = ennek az izomcsoportnak fő gyakorlata, 2 = másodlagosan dolgoztatja, 0 = nem
+  const g = MUSCLE_GROUPS.find(x => x[0] === libMuscle); if (!g) return 3;
+  const inf = exInfoFor(id); if (!inf) return 0;
+  return Math.max(0, ...g[2].map(k => inf.m[k] || 0));
+}
+function muscleLine(id) {
+  const inf = exInfoFor(id); if (!inf) return '';
+  const main = Object.entries(inf.m).filter(([, v]) => v >= 3).map(([k]) => MUSCLES[k]).filter(Boolean);
+  return main.length ? '💪 ' + main.join(', ') : '';
+}
+function libThumb(id, name, hu) {
+  return `<button type="button" class="ex-thumb lib-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(hu || '')}" aria-label="${esc(name)}: animáció">${typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?'}</button>`;
+}
+let libObs = null;
+function lazyThumbs(root) {   // a 3D-s ikonokat csak a látható tételekhez rajzoljuk meg, egyesével (ne akadjon a lista)
+  if (typeof ANIM3D === 'undefined' || !ANIM3D.thumbInto) return;
+  if (libObs) libObs.disconnect();
+  const queue = []; let busy = false;
+  const pump = () => { if (busy) return; busy = true; const step = () => { const b = queue.shift(); if (!b) { busy = false; return; } if (b.isConnected) ANIM3D.thumbInto(b); requestAnimationFrame(step); }; requestAnimationFrame(step); };
+  libObs = 'IntersectionObserver' in window ? new IntersectionObserver(es => { for (const e of es) if (e.isIntersecting) { libObs.unobserve(e.target); queue.push(e.target); } pump(); }, { root, rootMargin: '80px' }) : null;
+  root.querySelectorAll('.lib-thumb').forEach(b => { if (!ANIM3D.has(b.dataset.info)) return; if (libObs) libObs.observe(b); else queue.push(b); });
+  if (!libObs) pump();
+}
+function renderMuscleChips() {
+  $('libMuscles').innerHTML = `<button type="button" class="m-chip${libMuscle ? '' : ' on'}" data-mg="">Mind</button>` + MUSCLE_GROUPS.map(g => `<button type="button" class="m-chip${libMuscle === g[0] ? ' on' : ''}" data-mg="${g[0]}">${g[1]}</button>`).join('');
+  $('libMuscles').querySelectorAll('[data-mg]').forEach(b => b.onclick = () => { libMuscle = b.dataset.mg; renderMuscleChips(); renderLibrary(); $('libList').scrollTop = 0; });
+}
 function renderLibrary() {
   if (!editCtx) return;
   const { c, w, d, uid } = editCtx, q = norm($('libSearch').value);
   const onThisDay = new Set((layoutFor(c, w)[d] || []).filter(s => s.uid !== uid).flatMap(s => s.variants.map(v => exId(v.name))));
   const lib = libraryIds();
   const match = (name, hu) => !q || exId(name).includes(q) || norm(hu || '').includes(q);
-  const ids = lib.filter(id => !onThisDay.has(id) && match(nameOf(id), libMeta(id).hu));
-  const dbItems = RANK_DB_RAW.filter(x => { const k = exId(x[0]); return !lib.includes(k) && !onThisDay.has(k) && match(x[0], x[1]); });
+  const bySc = (a, b) => muscleScore(b) - muscleScore(a);
+  const ids = lib.filter(id => !onThisDay.has(id) && match(nameOf(id), libMeta(id).hu) && muscleScore(id) >= 2).sort(bySc);
+  const dbItems = RANK_DB_RAW.filter(x => { const k = exId(x[0]); return !lib.includes(k) && !onThisDay.has(k) && match(x[0], x[1]) && muscleScore(k) >= 2; }).sort((a, b) => bySc(exId(a[0]), exId(b[0])));
+  const mg = MUSCLE_GROUPS.find(x => x[0] === libMuscle), tag = id => mg && muscleScore(id) < 3 ? ' <em class="off">másodlagosan</em>' : '';
   let h = `<div class="lib-sub">SAJÁT GYAKORLATAIM</div>` + (ids.length ? ids.map(id => {
     const m = libMeta(id), where = daysWith(id, c, w), rk = rankOf(id);
-    return `<button type="button" class="lib-item" data-lib="${esc(id)}"><span class="lib-name">${esc(m.name)}${where.length ? ` <em>${esc(where.join(', '))}</em>` : ' <em class="off">nincs a programban</em>'}</span><span class="lib-last">${esc(lastSummary(id))}${rk?.label ? ' · 🏅 ' + esc(rk.label) : ''}</span></button>`;
+    return `<div role="button" tabindex="0" class="lib-item" data-lib="${esc(id)}">${libThumb(id, m.name, m.hu)}<span class="lib-txt"><span class="lib-name">${esc(m.name)}${where.length ? ` <em>${esc(where.join(', '))}</em>` : ' <em class="off">nincs a programban</em>'}${tag(id)}</span><span class="lib-last">${esc(lastSummary(id))}${rk?.label ? ' · 🏅 ' + esc(rk.label) : ''}</span>${muscleLine(id) ? `<span class="lib-mus">${esc(muscleLine(id))}</span>` : ''}</span></div>`;
   }).join('') : '<div class="empty">Nincs találat.</div>');
-  h += `<div class="lib-sub">GYAKORLAT-ADATBÁZIS · MINDEGYIKHEZ VAN RANG</div>` + (dbItems.length ? dbItems.map(x => `<button type="button" class="lib-item db" data-db="${esc(exId(x[0]))}"><span class="lib-name">${esc(x[0])} ${x[3] === 'machine' ? '<em class="off">⚙️ gépes</em>' : x[3] === 'bw' ? '<em class="off">saját testsúly</em>' : ''}</span><span class="lib-last">${esc(x[1])} · ${esc(x[5])}</span></button>`).join('') : '<div class="empty">Nincs találat. Lent saját gyakorlatot is létrehozhatsz.</div>');
+  h += `<div class="lib-sub">GYAKORLAT-ADATBÁZIS · MINDEGYIKHEZ VAN RANG</div>` + (dbItems.length ? dbItems.map(x => { const k = exId(x[0]); return `<div role="button" tabindex="0" class="lib-item db" data-db="${esc(k)}">${libThumb(k, x[0], x[1])}<span class="lib-txt"><span class="lib-name">${esc(x[0])} ${x[3] === 'machine' ? '<em class="off">⚙️ gépes</em>' : x[3] === 'bw' ? '<em class="off">saját testsúly</em>' : ''}${tag(k)}</span><span class="lib-last">${esc(x[1])} · ${esc(x[5])}</span>${muscleLine(k) ? `<span class="lib-mus">${esc(muscleLine(k))}</span>` : ''}</span></div>`; }).join('') : '<div class="empty">Nincs találat. Lent saját gyakorlatot is létrehozhatsz.</div>');
   $('libList').innerHTML = h;
+  $('libList').querySelectorAll('.lib-thumb').forEach(b => b.onclick = ev => { ev.stopPropagation(); openExInfo(b.dataset.info, b.dataset.iname, b.dataset.ihu); });
+  $('libList').querySelectorAll('.lib-item').forEach(b => b.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); b.click(); } });
+  lazyThumbs($('libList'));
   $('libList').querySelectorAll('[data-db]').forEach(b => b.onclick = () => {
     const d = RANK_DB[b.dataset.db];
     $('editName').value = d.name; $('editHu').value = d.hu; $('editReps').value = d.reps; $('editAlt').value = ''; $('editRank').value = 'auto';
@@ -2259,6 +2297,14 @@ window.addEventListener('error', () => { try { toast('Hiba történt. Ha valami 
 
 /* Frissítés: ha új verzió települt, megjelenik a FRISSÍTÉS sáv (nem kell többször bezárni az appot). */
 let swReg = null;
+/* v39: a felső menü (napok + FEJLŐDÉS/RANGOK/BARÁTOK, fölötte az INFÓ) görgetéskor is látszik; görgetve a fejléc összehúzódik. */
+(() => {
+  const tb = document.querySelector('.topbar');
+  const setTop = () => document.documentElement.style.setProperty('--tb', (tb ? tb.offsetHeight : 60) + 'px');
+  let sc = null;
+  const onScroll = () => { const s = window.scrollY > 30; if (s !== sc) { sc = s; document.body.classList.toggle('scrolled', s); requestAnimationFrame(setTop); } };
+  window.addEventListener('scroll', onScroll, { passive: true }); window.addEventListener('resize', setTop); setTop(); onScroll();
+})();
 if ('serviceWorker' in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js').then(r => { swReg = r; }).catch(() => {});

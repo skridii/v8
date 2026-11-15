@@ -402,3 +402,26 @@ button.rank-line{width:100%;text-align:left;color:#f4f6f8;cursor:pointer;font:in
 .match-hint b{color:#9cff57}
 .set-row input.min-ph::placeholder{color:#7fbf4f;font-weight:800}
 @media(max-width:600px){.match-hint{margin-left:35px}}
+/* v39: ragadós menü */
+.sticky-nav{position:sticky;top:var(--tb,64px);z-index:9;margin:0 -12px 10px;padding:8px 12px 2px;background:rgba(9,11,14,.9);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid transparent;transition:border-color .2s}
+body.scrolled .sticky-nav{border-bottom-color:#20252b}
+.sticky-nav .tabs{margin-bottom:8px}
+.sticky-nav .nav-row{margin-bottom:8px}
+.edit-card,.lib-box,.lib-list{min-width:0;max-width:100%}
+body.scrolled .topbar{padding-top:9px;padding-bottom:9px}
+body.scrolled .topbar .sub{display:none}
+body.scrolled .topbar .brand{font-size:19px}
+body.scrolled .sticky-nav .tab{padding-top:9px;padding-bottom:9px}
+body.scrolled .sticky-nav .nav-row .ghost{padding-top:7px;padding-bottom:7px}
+body.gated .sticky-nav{display:none}
+/* v39: gyakorlatlista – izomcsoport-szűrő és animációs ikonok */
+.lib-muscles{display:flex;gap:6px;overflow-x:auto;width:100%;min-width:0;padding:2px 0 8px;margin-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.lib-muscles::-webkit-scrollbar{display:none}
+.m-chip{flex-shrink:0;background:#11151a;border:1px solid #2a3037;color:#aab3bc;border-radius:999px;padding:6px 11px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap}
+.m-chip.on{background:#9cff57;border-color:#9cff57;color:#0a0e08}
+.lib-list{max-height:340px}
+.lib-item{flex-direction:row!important;align-items:center!important;gap:10px!important}
+.lib-txt{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.lib-thumb{width:46px;height:46px}
+.lib-mus{font-size:10px;color:#8fbf73}
+html,body{overflow-x:clip}
