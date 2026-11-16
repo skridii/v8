@@ -5,13 +5,13 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v41';
+const APP_VERSION = 'v42';
 
 const DAYS = [
-  { name: 'LOWER 1', subtitle: 'Deadlift & Quadriceps Focus' },
-  { name: 'UPPER 1', subtitle: 'Chest & Back Thickness' },
-  { name: 'LOWER 2', subtitle: 'Quadriceps, Hamstring & Soleus Focus' },
-  { name: 'UPPER 2', subtitle: 'Shoulders & Lat Width Focus' }
+  { name: 'ALSÓTEST 1', short: 'A1', subtitle: 'Felhúzás és combfeszítő' },
+  { name: 'FELSŐTEST 1', short: 'F1', subtitle: 'Mell és hát vastagsága' },
+  { name: 'ALSÓTEST 2', short: 'A2', subtitle: 'Comb elöl-hátul és vádli' },
+  { name: 'FELSŐTEST 2', short: 'F2', subtitle: 'Váll és hátszélesség' }
 ];
 
 /* A régi (v9 előtti) alapprogram – csak a régi mentések átalakításához kell (indexek szerinti névpárosítás). NE módosítsd! */
@@ -194,6 +194,16 @@ function prevDayVolume(c, w, d) {
 }
 const kg = n => (Math.round(n * 10) / 10).toLocaleString('hu-HU').replace(/[\u00a0\u202f]/g, ' ');
 function nameOf(id) { return state.names?.[id] || prettyId(id); }
+/* v42: a gyakorlatok MAGYAR neve elsősorban (a saját tervben megadott magyar név → saját könyvtár → adatbázis), az angol csak alatta, kicsiben */
+const huShort = x => String(x || '').replace(/\s*\((?:1 súlyzó|ismétlés|egy kéz súlya)\)/gi, '').replace(/\s+/g, ' ').trim();
+function hun(idOrName) {
+  const id = exId(idOrName);
+  let h = '';
+  for (const L of Object.values(state.layouts || {})) { for (const day of L) for (const sl of day) for (const v of sl.variants) if (v.hu && exId(v.name) === id) { h = v.hu; break; } if (h) break; }
+  if (!h) h = state.library?.[id]?.hu || '';
+  if (!h) { const k = (typeof RANK_DB !== 'undefined') && (rankKeyFor(id) || RANK_ALIAS[id] || id); h = (k && RANK_DB[k]?.hu) || ''; }
+  return huShort(h) || nameOf(id);
+}
 
 /* Váltakozó gyakorlat: az adott hét választása, alapból mindig az előző alkalom ellentéte. */
 function variantIndex(c, w, d, slot) {
@@ -472,10 +482,26 @@ function render() {
   document.body.classList.toggle('gated', gated);
   document.body.classList.toggle('must-read', mustRead);
   if (mustRead) view = 'info';
-  if (!gated) { renderWeeks(); renderTabs(); renderHistoryBtn(); renderBanner(); }
+  if (!gated) { renderWeeks(); renderTabs(); renderBanner(); }
+  renderBottomNav(gated);
+  document.body.dataset.view = view;
   if (gated && view !== 'info') renderGate();
   else if (view === 'history') renderHistory(); else if (view === 'social') renderSocial(); else if (view === 'ranks') renderRanks(); else if (view === 'info') renderInfo(); else renderWorkout();
   const ib = $('infoBtn'); if (ib) { ib.textContent = view === 'info' ? '← EDZÉS' : 'ℹ️ INFÓ'; ib.onclick = () => { if (!ready) return; view = view === 'info' ? 'workout' : 'info'; render(); window.scrollTo(0, 0); }; }
+}
+/* v42: alsó menüsáv – mindig látszik, egy koppintással bárhova */
+const NAV = [['workout', '🏋️', 'Edzés'], ['history', '📈', 'Fejlődés'], ['ranks', '🏅', 'Rangok'], ['social', '👥', 'Barátok'], ['info', 'ℹ️', 'Infó']];
+function renderBottomNav(gated) {
+  let nav = $('bottomNav');
+  if (!nav) { nav = document.createElement('nav'); nav.id = 'bottomNav'; nav.className = 'bottom-nav'; nav.setAttribute('aria-label', 'Fő menü'); document.body.appendChild(nav); }
+  nav.classList.toggle('hidden', !ready || (gated && !infoRead()));
+  nav.innerHTML = NAV.map(([v, ic, t]) => `<button type="button" class="bn-btn${view === v ? ' on' : ''}" data-nav="${v}"${view === v ? ' aria-current="page"' : ''}><span class="bn-ic">${ic}</span><span class="bn-t">${t}</span></button>`).join('');
+  nav.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => {
+    if (!ready) return; const v = b.dataset.nav;
+    if (v === view && v === 'workout') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (v === 'social') socialFriend = null;
+    view = v; render(); window.scrollTo(0, 0);
+  });
 }
 function renderWeeks() {
   weekGrid.innerHTML = '';
@@ -486,8 +512,8 @@ function renderWeeks() {
     b.onclick = () => { if (!ready) return; state.week = w; save(); render(); };
     weekGrid.appendChild(b);
   }
-  weekTitle.textContent = `WEEK ${state.week}`;
-  cycleLabel.textContent = state.maxCycle > 1 ? `CYCLE ${state.cycle}/${state.maxCycle}` : 'CURRENT CYCLE';
+  weekTitle.textContent = `${state.week}. HÉT`;
+  cycleLabel.textContent = state.maxCycle > 1 ? `${state.cycle}. CIKLUS / ${state.maxCycle}` : 'AKTUÁLIS CIKLUS';
   cyclePrev.classList.toggle('hidden', state.maxCycle < 2);
   cycleNext.classList.toggle('hidden', state.maxCycle < 2);
   cyclePrev.disabled = state.cycle <= 1;
@@ -661,50 +687,104 @@ function matchHint(slot, e, s, wtRaw) {
   return { r, text: `${showNum(wt)} kg-mal legalább <b>${r} ismétlés</b> kell, hogy ne ess vissza (előző legjobb: ${showNum(ref.w)} kg × ${showNum(ref.r)})` };
 }
 
+/* v42: átláthatóbb edzésnap – tömör fejléc napi haladással, gyakorlatkártyán a lényeg elöl, a többi lenyitható; a kész gyakorlat összecsukódik */
+const openEx = new Set();
+function exAllDone(slot, rec) { const n = setCount(slot, rec); if (!n) return false; for (let s = 0; s < n; s++) if (!rec?.sets?.[s]?.done) return false; return true; }
+function quickMatch(c, w, d, name) {
+  const ref = matchRef(c, w, d, name); if (!ref) return '';
+  const wt = Math.round((ref.w + weightStep(exId(name))) * 100) / 100, r = minRepsFor(ref, name, wt);
+  return r >= 4 ? `<span class="q-chip q-goal">🎯 ${showNum(wt)} kg → min. <b>${r}</b> ism.</span>` : '';
+}
 function renderWorkout() {
   if (!ready) { workout.innerHTML = '<div class="note">Adatok betöltése…</div>'; return; }
   const c = state.cycle, w = state.week, d = state.day, day = DAYS[d], slots = curSlots();
-  let h = `<div class="eyebrow">${cycLabel(c)}DAY ${d + 1} · 2 WORKING SETS / EXERCISE</div><div class="day-name">${day.name}</div><div class="day-meta">${day.subtitle} · Failure / RIR 0–1</div>`;
+  const recs = slots.map(slot => recordFor(c, w, d, slotName(c, w, d, slot))), doneN = slots.filter((sl, e) => exAllDone(sl, recs[e])).length;
+  const nextE = slots.findIndex((sl, e) => !exAllDone(sl, recs[e]));
   const vol = dayVolume(c, w, d), pv = prevDayVolume(c, w, d);
-  h += `<section class="volume-card"><div><div class="eyebrow">MEGMOZGATOTT SÚLY · ${day.name}</div><div class="volume-big">${kg(vol.total)} <small>kg</small></div><div class="volume-sub">Munkasorozatok: ${kg(vol.work)} kg · Bemelegítés: ${kg(vol.warm)} kg</div></div>${pv ? `<div class="volume-prev"><span>Előző ${day.name}</span><b>${kg(pv.total)} kg</b><span>${cycLabel(pv.c).toLowerCase()}${pv.w}. hét</span></div>` : ''}</section>`;
+  let h = `<section class="day-head"><div class="day-name">${day.name}</div><div class="day-meta">${esc(day.subtitle)} · ${cycLabel(c).toLowerCase()}${w}. hét · 2 munkasorozat, majdnem a kimerülésig (RIR 0–1)</div>
+    <div class="dh-prog"><div class="dh-bar"><i style="width:${slots.length ? Math.round(doneN / slots.length * 100) : 0}%"></i></div><span><b>${doneN}/${slots.length}</b> gyakorlat kész</span></div>
+    <div class="dh-vol">Megmozgatott súly: <b>${kg(vol.total)} kg</b>${pv ? ` <span>· előző ${day.name.toLowerCase()}: ${kg(pv.total)} kg</span>` : ''}</div>
+    ${nextE >= 0 && doneN > 0 ? `<button class="dh-next" data-jump="${nextE}">▶ Következő: ${esc(hun(slotName(c, w, d, slots[nextE])))}</button>` : ''}${slots.length && doneN === slots.length ? '<div class="dh-done">🎉 Minden gyakorlat kész erre a napra!</div>' : ''}</section>`;
   slots.forEach((slot, e) => {
-    const vi = variantIndex(c, w, d, slot), v = slot.variants[vi], name = v.name, id = exId(name);
-    const rec = recordFor(c, w, d, name), last = latestBefore(c, w, d, name);
+    const vi = variantIndex(c, w, d, slot), v = slot.variants[vi], name = v.name, id = exId(name), hu = huShort(v.hu) || hun(id);
+    const rec = recs[e], last = latestBefore(c, w, d, name);
     const sets = rec?.sets || [emptySet(), emptySet()], wu = rec?.warmup || emptySet(), pb = personalBest(id);
-    h += `<article class="exercise"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(name)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(name)}</button>${v.hu ? `<div class="exercise-hu">${esc(v.hu)}</div>` : ''}<div class="prescribed">${esc(showReps(slot))}</div></div><div class="head-btns"><div class="order-btns"><button class="order-btn" data-move="-1" data-e="${e}"${e === 0 ? ' disabled' : ''} aria-label="Feljebb">▲</button><button class="order-btn" data-move="1" data-e="${e}"${e === slots.length - 1 ? ' disabled' : ''} aria-label="Lejjebb">▼</button></div><button class="swap-btn" data-swap data-e="${e}">CSERE</button></div></div>`;
+    const key = `${c}-${w}-${d}-${slot.uid}`, done = exAllDone(slot, rec), collapsed = done && !openEx.has(key), rk = rankOf(id);
+    const rkMini = rk && rk.pts !== undefined ? `<span class="rk-mini" style="color:${rk.color}">${esc(rk.label)}</span>` : '';
+    h += `<article class="exercise${done ? ' ex-done' : ''}${collapsed ? ' collapsed' : ''}" id="ex-${e}"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(hu)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(hu)}</button>${hu !== name ? `<div class="exercise-en">${esc(name)}</div>` : ''}<div class="ex-meta"><span class="prescribed">${esc(showReps(slot))}</span>${rkMini}</div></div><button class="more-btn" data-more="${e}" aria-label="További lehetőségek">⋯</button></div>`;
+    if (collapsed) { h += `<button class="done-sum" data-open="${esc(key)}"><span>✓ KÉSZ · ${esc(setsText(rec))}</span><em>megnyitás ▾</em></button></article>`; return; }
     const note = state.notes?.[id] || '';
-    h += `<button class="ex-note${note ? '' : ' empty-note'}" data-note="${esc(id)}">📝 ${note ? esc(note) : 'Jegyzet a géphez (pl. ülés 4-es, támla 2. lyuk)'}</button>`;
+    if (note) h += `<button class="ex-note" data-note="${esc(id)}">📝 ${esc(note)}</button>`;
     if (slot.variants.length > 1) {
       const other = slot.variants[1 - vi];
-      h += `<div class="variant-row"><span class="variant-tag">VÁLTAKOZÓ</span><button class="variant-btn" data-variant data-e="${e}">↔ Ezen a héten inkább: ${esc(other.name)}</button></div>`;
+      h += `<div class="variant-row"><span class="variant-tag">VÁLTAKOZÓ</span><button class="variant-btn" data-variant data-e="${e}">↔ Ezen a héten inkább: ${esc(huShort(other.hu) || other.name)}</button></div>`;
     }
-    const rk = rankOf(id);
-    if (rk && rk.pts !== undefined) { h += `<button class="rank-line${flashRankId === id ? ' flash' : ''}" data-stats="${esc(id)}" style="--rc:${rk.color}">${rankBadge(rk)}<div><div class="rl-top"><b style="color:${rk.color}">${esc(rk.label)}</b><em>${esc(oneRmText(rk))}</em></div><div class="rr-bar"><i style="width:${Math.round(rk.pct * 100)}%;background:${rk.color}"></i></div><span>${esc(rankNeedText(rk))}</span></div></button>`; if (flashRankId === id) flashRankId = null; }
-    else if (rk?.needBw) h += `<div class="rank-line muted">🏅 Add meg a testsúlyodat a RANGOK fülön, és itt látod a rangodat.</div>`;
-    if (pb) h += `<div class="record-badge">🏆 SZEMÉLYES REKORD · ${showNum(pb.weight)} kg × ${showNum(pb.reps)} · ${isImported(pb.c) ? 'Hevy' : (state.maxCycle > 1 ? pb.c + '. ciklus, ' : '') + pb.w + '. hét'}</div>`;
-    if (last) h += `<div class="history"><div>LEGUTÓBBI ALKALOM · ${esc(sessLabel(last.c, last.w, last.d, last))}${isImported(last.c) && last.t ? ' · ' + esc(fmtDate(last.t)) : ''}</div><strong>Warm-up: ${esc(showNum(last.warmup?.weight)) || '—'} kg × ${esc(showNum(last.warmup?.reps)) || '—'} · ${esc(setsText(last))}</strong></div>`;
-    h += matchLineHtml(c, w, d, name);
-    h += `<div class="sets"><div class="set-labels"><span>SET</span><span>KG</span><span>REPS</span><span></span></div>`;
+    h += `<div class="quick">${last ? `<button class="q-chip" data-stats="${esc(id)}">Előző: <b>${esc(setsText(last))}</b></button>` : '<span class="q-chip q-new">Első alkalom – írd be, mennyit bírsz</span>'}${quickMatch(c, w, d, name)}</div>`;
+    h += `<div class="sets"><div class="set-labels"><span>SZETT</span><span>KG</span><span>ISMÉTLÉS</span><span></span></div>`;
     const bwx = isBwExercise(name);
-    h += setRowHtml('W', e, wu, 'warmup', 0, bwx);
+    h += setRowHtml('B', e, wu, 'warmup', 0, bwx);
     const nSets = setCount(slot, rec);
     for (let s = 0; s < nSets; s++) {
       const sv = sets[s] || emptySet(), mh = !sv.done && cleanNum(sv.reps) === '' ? matchHint(slot, e, s, sv.weight) : null;
       h += setRowHtml(String(s + 1), e, sv, 'work', s, bwx, mh?.r) + `<div class="match-hint${mh ? '' : ' hidden'}" data-mh="${e}-${s}">${mh ? '🎯 ' + mh.text : ''}</div>`;
     }
-    h += `<div class="set-tools"><button class="set-tool" data-addset data-e="${e}">+ SZETT</button>${nSets > 1 ? `<button class="set-tool minus" data-delset data-e="${e}">− SZETT</button>` : ''}</div>`;
-    h += `</div><div class="last">Bemelegítő szett után: <strong>1:00</strong> · Munkasorozat után: <strong>2:30</strong></div></article>`;
+    h += `<div class="set-tools"><button class="set-tool" data-addset data-e="${e}">+ SZETT</button>${nSets > 1 ? `<button class="set-tool minus" data-delset data-e="${e}">− SZETT</button>` : ''}</div></div>`;
+    let more = '';
+    if (rk && rk.pts !== undefined) { more += `<button class="rank-line${flashRankId === id ? ' flash' : ''}" data-stats="${esc(id)}" style="--rc:${rk.color}">${rankBadge(rk)}<div><div class="rl-top"><b style="color:${rk.color}">${esc(rk.label)}</b><em>${esc(oneRmText(rk))}</em></div><div class="rr-bar"><i style="width:${Math.round(rk.pct * 100)}%;background:${rk.color}"></i></div><span>${esc(rankNeedText(rk))}</span></div></button>`; if (flashRankId === id) flashRankId = null; }
+    else if (rk?.needBw) more += `<div class="rank-line muted">🏅 Add meg a testsúlyodat a RANGOK fülön, és itt látod a rangodat.</div>`;
+    if (pb) more += `<div class="record-badge">🏆 SZEMÉLYES REKORD · ${showNum(pb.weight)} kg × ${showNum(pb.reps)} · ${isImported(pb.c) ? 'Hevy' : (state.maxCycle > 1 ? pb.c + '. ciklus, ' : '') + pb.w + '. hét'}</div>`;
+    if (last) more += `<div class="history"><div>LEGUTÓBBI ALKALOM · ${esc(sessLabel(last.c, last.w, last.d, last))}${isImported(last.c) && last.t ? ' · ' + esc(fmtDate(last.t)) : ''}</div><strong>Bemelegítés: ${esc(showNum(last.warmup?.weight)) || '—'} kg × ${esc(showNum(last.warmup?.reps)) || '—'} · ${esc(setsText(last))}</strong></div>`;
+    more += matchLineHtml(c, w, d, name);
+    if (!note) more += `<button class="ex-note empty-note" data-note="${esc(id)}">📝 Jegyzet a géphez (pl. ülés 4-es, támla 2. lyuk)</button>`;
+    more += `<div class="last">Pihenő: bemelegítő szett után <strong>1:00</strong> · munkasorozat után <strong>2:30</strong></div>`;
+    h += `<details class="ex-more"${openEx.has(key + ':more') ? ' open' : ''} data-mkey="${esc(key)}:more"><summary>${rk && rk.pts !== undefined ? 'Rang, rekord, előzmények' : 'Rekord, előzmények, jegyzet'}</summary>${more}</details>`;
+    if (done) h += `<button class="collapse-btn" data-fold="${esc(key)}">Összecsukás ▴</button>`;
+    h += `</article>`;
   });
   if (!slots.length) h += '<div class="note">Ezen a napon nincs gyakorlat. Adj hozzá egyet!</div>';
   h += '<button class="add-ex-btn" id="addExBtn">+ ÚJ GYAKORLAT HOZZÁADÁSA</button>';
-  h += '<div class="note">Hozzáadáskor a gyakorlatlistából is választhatsz: a korábbi gyakorlatok a legutóbbi súlyaikkal és előzményeikkel együtt térnek vissza.</div>';
+  h += '<div class="note">Tipp: a gyakorlat nevére koppintva látod az előzményeit és a grafikonját, a képére koppintva az animációt; a ⋯ gombbal áthelyezheted, cserélheted, vagy jegyzetet írhatsz hozzá.</div>';
   workout.innerHTML = h;
   bindInputs();
+  workout.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { openEx.add(b.dataset.open); renderWorkout(); });
+  workout.querySelectorAll("[data-fold]").forEach(b => b.onclick = () => { openEx.delete(b.dataset.fold); renderWorkout(); });
+  workout.querySelectorAll('details.ex-more').forEach(dt => dt.ontoggle = () => { if (dt.open) openEx.add(dt.dataset.mkey); else openEx.delete(dt.dataset.mkey); });
+  workout.querySelectorAll('[data-more]').forEach(b => b.onclick = () => openMore(+b.dataset.more));
+  workout.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => { const el = $('ex-' + b.dataset.jump); if (el) { const y = el.getBoundingClientRect().top + window.scrollY - (document.querySelector('.sticky-nav')?.getBoundingClientRect().bottom || 120) - 8; window.scrollTo({ top: y, behavior: 'smooth' }); } });
+}
+/* ⋯ menü egy gyakorlathoz: nagy, könnyen eltalálható gombok */
+function openMore(e) {
+  const slots = curSlots(), slot = slots[e]; if (!slot) return;
+  const name = slotName(state.cycle, state.week, state.day, slot), id = exId(name), v = slot.variants[variantIndex(state.cycle, state.week, state.day, slot)];
+  document.getElementById('moreSheet')?.remove();
+  const el = document.createElement('div'); el.id = 'moreSheet'; el.className = 'overlay sheet-overlay';
+  el.innerHTML = `<div class="sheet" role="dialog" aria-label="${esc(hun(id))}"><div class="sheet-title">${esc(huShort(v.hu) || hun(id))}<small>${esc(name)}</small></div>
+    <button data-a="stats">📊 Előzmények és grafikon</button><button data-a="info">▶ Animáció és útmutató</button><button data-a="note">📝 Jegyzet${state.notes?.[id] ? ' szerkesztése' : ' írása'}</button>
+    <button data-a="swap">🔄 Csere / szerkesztés / törlés</button>
+    <div class="sheet-row"><button data-a="up"${e === 0 ? ' disabled' : ''}>▲ Feljebb</button><button data-a="down"${e === slots.length - 1 ? ' disabled' : ''}>▼ Lejjebb</button></div>
+    <button data-a="x" class="sheet-cancel">Mégse</button></div>`;
+  document.body.appendChild(el);
+  const close = () => el.remove();
+  el.onclick = ev => { if (ev.target === el) close(); };
+  el.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
+    const a = b.dataset.a; close();
+    if (a === 'stats') openStats(id); else if (a === 'info') openExInfo(id, name, v.hu || '');
+    else if (a === 'swap') openEditor('edit', e); else if (a === 'up') moveExercise(e, -1); else if (a === 'down') moveExercise(e, 1);
+    else if (a === 'note') editNote(id);
+  });
+}
+function editNote(id) {
+  const cur = state.notes?.[id] || '';
+  const v = prompt(`Jegyzet – ${hun(id)}\n(gépbeállítás, fogás, bármi, ami segít; minden héten látszik)`, cur);
+  if (v === null) return;
+  state.notes = state.notes || {};
+  if (v.trim()) state.notes[id] = v.trim().slice(0, 200); else delete state.notes[id];
+  save(); renderWorkout();
 }
 function isBwExercise(name) { const k = rankKeyFor(exId(name)); return !!k && RANK_DB[k].type === 'r'; }
 function setRowHtml(label, e, v, kind, s = 0, bw = false, minR = null) {
   const wu = kind === 'warmup', done = !!v.done;
-  return `<div class="set-row ${wu ? 'warmup-row' : ''}" data-e="${e}" data-s="${s}"><div class="set-num">${label}</div><input inputmode="decimal" data-type="weight" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.weight || ''))}" placeholder="${bw ? '0 kg' : 'kg'}" aria-label="${label} súly"><input inputmode="numeric" data-type="reps" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.reps || ''))}" placeholder="${minR ? 'min ' + minR : 'reps'}" aria-label="${label} ismétlés"${minR ? ' class="min-ph"' : ''}><button class="complete ${done ? 'checked' : ''}" data-done data-kind="${kind}" data-e="${e}" data-s="${s}">${done ? '✓' : '○'}</button></div>`;
+  return `<div class="set-row ${wu ? 'warmup-row' : ''}" data-e="${e}" data-s="${s}"><div class="set-num">${label}</div><input inputmode="decimal" data-type="weight" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.weight || ''))}" placeholder="${bw ? '0 kg' : 'kg'}" aria-label="${label} súly"><input inputmode="numeric" data-type="reps" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.reps || ''))}" placeholder="${minR ? 'min ' + minR : 'ism.'}" aria-label="${label} ismétlés"${minR ? ' class="min-ph"' : ''}><button class="complete ${done ? 'checked' : ''}" data-done data-kind="${kind}" data-e="${e}" data-s="${s}">${done ? '✓' : '○'}</button></div>`;
 }
 function bindInputs() {
   workout.querySelectorAll('.set-row input').forEach(inp => inp.oninput = () => {
@@ -718,7 +798,7 @@ function bindInputs() {
     if (inp.dataset.kind === 'work') {
       const row = inp.closest('.set-row'), ri = row.querySelector('[data-type="reps"]'), hint = workout.querySelector(`[data-mh="${inp.dataset.e}-${s}"]`);
       const mh = cleanNum(ri.value) === '' ? matchHint(slot, +inp.dataset.e, s, row.querySelector('[data-type="weight"]').value) : null;
-      ri.placeholder = mh ? 'min ' + mh.r : 'reps'; ri.classList.toggle('min-ph', !!mh);
+      ri.placeholder = mh ? 'min ' + mh.r : 'ism.'; ri.classList.toggle('min-ph', !!mh);
       if (hint) { hint.innerHTML = mh ? '🎯 ' + mh.text : ''; hint.classList.toggle('hidden', !mh); }
     }
     const btn = inp.closest('.set-row').querySelector('[data-done]');
@@ -756,7 +836,7 @@ function bindInputs() {
     const vi = variantIndex(state.cycle, state.week, state.day, slot);
     state.variantChoice[`${state.cycle}-${state.week}-${slot.uid}`] = 1 - vi;
     save(); renderWorkout();
-    toast(`Ezen a héten: ${slot.variants[1 - vi].name}`);
+    toast(`Ezen a héten: ${huShort(slot.variants[1 - vi].hu) || slot.variants[1 - vi].name}`);
   });
   workout.querySelectorAll('[data-swap]').forEach(btn => btn.onclick = () => openEditor('edit', +btn.dataset.e));
   workout.querySelectorAll('[data-move]').forEach(btn => btn.onclick = () => moveExercise(+btn.dataset.e, +btn.dataset.move));
@@ -782,14 +862,7 @@ function bindInputs() {
   workout.querySelectorAll('[data-stats]').forEach(btn => btn.onclick = () => openStats(btn.dataset.stats));
   workout.querySelectorAll('[data-info]').forEach(btn => btn.onclick = () => openExInfo(btn.dataset.info, btn.dataset.iname, btn.dataset.ihu));
   if (typeof ANIM3D !== 'undefined') ANIM3D.fillThumbs(workout);
-  workout.querySelectorAll('[data-note]').forEach(btn => btn.onclick = () => {
-    const id = btn.dataset.note, cur = state.notes?.[id] || '';
-    const v = prompt(`Jegyzet – ${nameOf(id)}\n(gépbeállítás, fogás, bármi, ami segít; minden héten látszik)`, cur);
-    if (v === null) return;
-    state.notes = state.notes || {};
-    if (v.trim()) state.notes[id] = v.trim().slice(0, 200); else delete state.notes[id];
-    save(); renderWorkout();
-  });
+  workout.querySelectorAll('[data-note]').forEach(btn => btn.onclick = () => editNote(btn.dataset.note));
   $('addExBtn').onclick = () => openEditor('add');
 }
 
@@ -807,7 +880,7 @@ function moveExercise(e, dir) {
   });
   if (timerCtx && timerCtx.c === state.cycle && timerCtx.w === state.week && timerCtx.d === d) { if (timerCtx.e === e) timerCtx.e = j; else if (timerCtx.e === j) timerCtx.e = e; persistTimer(); }
   save(); renderWorkout();
-  const art = workout.querySelectorAll('.exercise')[j]; if (art) { art.classList.add('moved'); try { art.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) {} }
+  const art = $('ex-' + j); if (art) { art.classList.add('moved'); try { art.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {} }
 }
 
 /* ---------- gyakorlat csere / új gyakorlat ---------- */
@@ -829,7 +902,7 @@ function openEditor(mode, e) {
   $('editRemoveAll').classList.toggle('hidden', mode !== 'edit');
   $('libSearch').value = ''; libMuscle = ''; renderMuscleChips();
   const curId = slot ? exId(slot.variants[0].name) : null, cm = curId ? state.rankMap?.[curId] : null;
-  $('editRank').innerHTML = `<option value="auto">Automatikus (név alapján)</option><option value="none">Nincs rang</option>` + RANK_DB_RAW.map(x => `<option value="${esc(exId(x[0]))}">${esc(x[0])}${x[3] === 'machine' ? ' ⚙️' : ''}</option>`).join('');
+  $('editRank').innerHTML = `<option value="auto">Automatikus (név alapján)</option><option value="none">Nincs rang</option>` + RANK_DB_RAW.map(x => `<option value="${esc(exId(x[0]))}">${esc(huShort(x[1]))} (${esc(x[0])})${x[3] === 'machine' ? ' ⚙️' : ''}</option>`).join('');
   $('editRank').value = cm || 'auto';
   renderLibrary();
   $('editOverlay').classList.remove('hidden');
@@ -880,9 +953,9 @@ function renderLibrary() {
   const mg = MUSCLE_GROUPS.find(x => x[0] === libMuscle), tag = id => mg && muscleScore(id) < 3 ? ' <em class="off">másodlagosan</em>' : '';
   let h = `<div class="lib-sub">SAJÁT GYAKORLATAIM</div>` + (ids.length ? ids.map(id => {
     const m = libMeta(id), where = daysWith(id, c, w), rk = rankOf(id);
-    return `<div role="button" tabindex="0" class="lib-item" data-lib="${esc(id)}">${libThumb(id, m.name, m.hu)}<span class="lib-txt"><span class="lib-name">${esc(m.name)}${where.length ? ` <em>${esc(where.join(', '))}</em>` : ' <em class="off">nincs a programban</em>'}${tag(id)}</span><span class="lib-last">${esc(lastSummary(id))}${rk?.label ? ' · 🏅 ' + esc(rk.label) : ''}</span>${muscleLine(id) ? `<span class="lib-mus">${esc(muscleLine(id))}</span>` : ''}</span></div>`;
+    return `<div role="button" tabindex="0" class="lib-item" data-lib="${esc(id)}">${libThumb(id, m.name, m.hu)}<span class="lib-txt"><span class="lib-name">${esc(hun(id))}${where.length ? ` <em>${esc(where.join(', '))}</em>` : ' <em class="off">nincs a programban</em>'}${tag(id)}</span><span class="lib-en">${esc(m.name)}</span><span class="lib-last">${esc(lastSummary(id))}${rk?.label ? ' · 🏅 ' + esc(rk.label) : ''}</span>${muscleLine(id) ? `<span class="lib-mus">${esc(muscleLine(id))}</span>` : ''}</span></div>`;
   }).join('') : '<div class="empty">Nincs találat.</div>');
-  h += `<div class="lib-sub">GYAKORLAT-ADATBÁZIS · MINDEGYIKHEZ VAN RANG</div>` + (dbItems.length ? dbItems.map(x => { const k = exId(x[0]); return `<div role="button" tabindex="0" class="lib-item db" data-db="${esc(k)}">${libThumb(k, x[0], x[1])}<span class="lib-txt"><span class="lib-name">${esc(x[0])} ${x[3] === 'machine' ? '<em class="off">⚙️ gépes</em>' : x[3] === 'bw' ? '<em class="off">saját testsúly</em>' : ''}${tag(k)}</span><span class="lib-last">${esc(x[1])} · ${esc(x[5])}</span>${muscleLine(k) ? `<span class="lib-mus">${esc(muscleLine(k))}</span>` : ''}</span></div>`; }).join('') : '<div class="empty">Nincs találat. Lent saját gyakorlatot is létrehozhatsz.</div>');
+  h += `<div class="lib-sub">GYAKORLAT-ADATBÁZIS · MINDEGYIKHEZ VAN RANG</div>` + (dbItems.length ? dbItems.map(x => { const k = exId(x[0]); return `<div role="button" tabindex="0" class="lib-item db" data-db="${esc(k)}">${libThumb(k, x[0], x[1])}<span class="lib-txt"><span class="lib-name">${esc(huShort(x[1]))} ${x[3] === 'machine' ? '<em class="off">⚙️ gépes</em>' : x[3] === 'bw' ? '<em class="off">saját testsúly</em>' : ''}${tag(k)}</span><span class="lib-en">${esc(x[0])}</span><span class="lib-last">${esc(x[5])}</span>${muscleLine(k) ? `<span class="lib-mus">${esc(muscleLine(k))}</span>` : ''}</span></div>`; }).join('') : '<div class="empty">Nincs találat. Lent saját gyakorlatot is létrehozhatsz.</div>');
   $('libList').innerHTML = h;
   $('libList').querySelectorAll('.lib-thumb').forEach(b => b.onclick = ev => { ev.stopPropagation(); openExInfo(b.dataset.info, b.dataset.iname, b.dataset.ihu); });
   $('libList').querySelectorAll('.lib-item').forEach(b => b.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); b.click(); } });
@@ -999,7 +1072,7 @@ function weekMuscleHtml() {
     if (L) lv[k] = L; cnt[L]++;
     const status = L === 3 ? '2× megvolt' : L === 2 ? (days3 ? '1× célzottan' : '2× másodlagosan') : L === 1 ? (sets2 ? '1× másodlagosan' : 'csak segített') : 'kimaradt';
     const parts = []; if (sets3) parts.push(`célzottan ${days3} nap · ${sets3} szett`); if (sets2) parts.push(`másodlagosan ${sets2} szett`); if (!sets3 && !sets2 && ex.length) parts.push('csak segítő izomként dolgozott');
-    const names = [...new Set(ex.filter(x => x.lv >= 2).sort((a, b) => b.lv - a.lv || a.d - b.d).map(x => x.name))];
+    const names = [...new Set(ex.filter(x => x.lv >= 2).sort((a, b) => b.lv - a.lv || a.d - b.d).map(x => hun(x.name)))];
     rows += `<div class="wm-row s${L}"><i></i><div><b>${esc(MUSCLES[k])}</b><span>${parts.length ? esc(parts.join(' · ')) : (plan ? 'nincs rá gyakorlat a heti tervben' : 'ezen a héten még nem dolgozott')}</span>${names.length ? `<span class="wm-ex">${esc(names.join(' · '))}</span>` : ''}</div><em>${status}</em></div>`;
   }
   let fig = '';
@@ -1017,15 +1090,15 @@ function monthHtml() {
   const now = monthKey(Date.now()), mk = monthSel ?? now, m = monthSummary(mk);
   let h = `<section class="summary-card month-card"><div class="month-nav"><button class="cycle-btn" id="monthPrev">‹</button><div class="summary-title">HAVI ÖSSZEFOGLALÓ · ${esc(m.label.toUpperCase())}</div><button class="cycle-btn" id="monthNext" ${mk >= now ? 'disabled' : ''}>›</button></div>`;
   h += `<div class="summary-stats three"><div><strong>${m.workouts}</strong><span>edzés</span></div><div><strong>${m.sets}</strong><span>kész szett</span></div><div><strong>${kg(m.vol)}</strong><span>kg megmozgatva</span></div></div>`;
-  if (m.ups.length) h += `<div class="month-ups"><b>💪 Itt erősödtél (becsült 1RM):</b>${m.ups.slice(0, 5).map(u => `<div class="summary-row"><span>${esc(nameOf(u.id))}</span><b>+${showNum(Math.round(u.pct * 10) / 10)}%</b></div>`).join('')}</div>`;
+  if (m.ups.length) h += `<div class="month-ups"><b>💪 Itt erősödtél (becsült 1RM):</b>${m.ups.slice(0, 5).map(u => `<div class="summary-row"><span>${esc(hun(u.id))}</span><b>+${showNum(Math.round(u.pct * 10) / 10)}%</b></div>`).join('')}</div>`;
   else if (m.workouts) h += '<div class="month-ups muted">Ebben a hónapban nem dőlt meg korábbi csúcs – a következőben jön!</div>';
   else h += '<div class="month-ups muted">Ebben a hónapban még nincs rögzített edzés.</div>';
   return h + '</section>';
 }
 function renderHistory() {
   const c = state.cycle, w = state.week, L = layoutFor(c, w);
-  let h = `<div class="eyebrow">PROGRESS & WEEKLY SUMMARY</div><div class="day-name">FEJLŐDÉS</div><div class="day-meta">Személyes rekordok, heti teljesítés és gyakorlatonkénti előzmények.</div>`;
-  h += `<section class="social-card hevy-card"><div class="eyebrow">📥 ADATOK ÁTHOZÁSA A HEVY APPBÓL</div><div class="bw-note">Ha eddig a Hevy appban vezetted az edzéseidet, itt áthozhatod őket. A Hevy-ben: <b>Profile → Settings → Export & Import Data → Export Data → Export Workouts</b>. A kapott CSV-fájlt töltsd be itt – az edzéseid dátummal bekerülnek az előzményekbe, a rangok és a görbék is számolnak velük.${state.hevyImported ? ` Eddig importálva: ${Object.keys(state.hevyImported).length} edzés.` : ''}</div><label class="primary import-label hevy-btn">HEVY ADATOK BETÖLTÉSE<input id="hevyInput" type="file" accept=".csv,text/csv,text/plain" hidden></label></section>`;
+  let h = `<div class="eyebrow">FEJLŐDÉS ÉS HETI ÖSSZESÍTŐ</div><div class="day-name">FEJLŐDÉS</div><div class="day-meta">Személyes rekordok, heti teljesítés és gyakorlatonkénti előzmények.</div>`;
+  const hevyCard = `<section class="social-card hevy-card"><div class="eyebrow">📥 ADATOK ÁTHOZÁSA A HEVY APPBÓL</div><div class="bw-note">Ha eddig a Hevy appban vezetted az edzéseidet, itt áthozhatod őket. A Hevy-ben: <b>Profile → Settings → Export & Import Data → Export Data → Export Workouts</b>. A kapott CSV-fájlt töltsd be itt – az edzéseid dátummal bekerülnek az előzményekbe, a rangok és a görbék is számolnak velük.${state.hevyImported ? ` Eddig importálva: ${Object.keys(state.hevyImported).length} edzés.` : ''}</div><label class="primary import-label hevy-btn">HEVY ADATOK BETÖLTÉSE<input id="hevyInput" type="file" accept=".csv,text/csv,text/plain" hidden></label></section>`;
   const rows = DAYS.map((day, d) => {
     let done = 0, total = 0;
     for (const slot of (L[d] || [])) { const r = recordFor(c, w, d, slotName(c, w, d, slot)); total += setCount(slot, r); done += (r?.sets || []).filter(s => s?.done).length; }
@@ -1054,7 +1127,7 @@ function renderHistory() {
     h += `<details class="history-group"><summary>Automatikus helyi másolatok (${snaps.length})</summary><div class="progress-ex">${snaps.map(k => `<div class="snap-row"><span>${esc(snapLabel(k))}</span><button class="secondary" data-snap="${esc(k)}">LETÖLTÉS</button></div>`).join('')}<div class="empty">A letöltött fájl a MENTÉS BETÖLTÉSE gombbal visszatölthető.</div></div></details>`;
   }
   h += `<div class="note">Az alkalmazás minden változást azonnal ment, és naponta külön helyi másolatot is készít. A fájlba mentés külön, letölthető másolatot ad. IRONLOG ${APP_VERSION}</div>`;
-  workout.innerHTML = h;
+  workout.innerHTML = h + hevyCard;
   $('histSearch').oninput = e => { histQuery = e.target.value; filterHistory(); };
   workout.querySelectorAll('[data-mm]').forEach(b => b.onclick = () => { muscleMode = b.dataset.mm; renderHistory(); });
   workout.querySelectorAll('.ru-row[data-rstats]').forEach(b => b.onclick = () => openStats(b.dataset.rstats));
@@ -1088,7 +1161,7 @@ function snapLabel(k) {
 }
 function historyGroup(id) {
   const pb = personalBest(id);
-  let h = `<details class="history-group" data-hname="${esc(norm(nameOf(id)) + ' ' + norm(libMeta(id).hu))}" data-gid="${esc(id)}"><summary>${rankBadge(rankOf(id))} ${esc(nameOf(id))} ${pb ? `<span class="small-record">🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}</span>` : ''}</summary><div class="progress-ex"></div></details>`;
+  let h = `<details class="history-group" data-hname="${esc(norm(nameOf(id)) + ' ' + norm(libMeta(id).hu))}" data-gid="${esc(id)}"><summary>${rankBadge(rankOf(id))} ${esc(hun(id))} ${pb ? `<span class="small-record">🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}</span>` : ''}</summary><div class="progress-ex"></div></details>`;
   return h;
 }
 /* Egy gyakorlat teljes statisztikája: görbe + minden alkalom (legújabb felül). */
@@ -1109,7 +1182,7 @@ function statsHtml(id) {
   return h + '</div>';
 }
 function chartPoints(id) {
-  return sessionsOf(id).map(x => ({ x, hs: heavierSet(x.r) })).filter(o => o.hs).map(({ x, hs }) => ({ wt: hs.weight, reps: hs.reps, set: hs.i + 1, lab: isImported(x.c) ? 'Hevy' : `${state.maxCycle > 1 ? 'C' + x.c + ' ' : ''}W${x.w} ${(DAYS[x.d]?.name || '').replace('UPPER ', 'U').replace('LOWER ', 'L')}`, date: fmtDate(x.t) }));
+  return sessionsOf(id).map(x => ({ x, hs: heavierSet(x.r) })).filter(o => o.hs).map(({ x, hs }) => ({ wt: hs.weight, reps: hs.reps, set: hs.i + 1, lab: isImported(x.c) ? 'Hevy' : `${state.maxCycle > 1 ? x.c + '.c ' : ''}${x.w}.hét ${DAYS[x.d]?.short || ''}`, date: fmtDate(x.t) }));
 }
 function chartHtml(id) {
   const pts = chartPoints(id).map(p => ({ ...p, read: [`${showNum(p.wt)} kg × ${showNum(p.reps)}`, ` · ${p.set}. szett · ${p.lab}${p.date ? ' · ' + p.date : ''}`] }));
@@ -1375,7 +1448,7 @@ function rankHistory(id) {
   });
   return out;
 }
-const sessLab = x => isImported(x.c) ? 'Hevy' : `${state.maxCycle > 1 ? 'C' + x.c + ' ' : ''}W${x.w} ${(DAYS[x.d]?.name || '').replace('UPPER ', 'U').replace('LOWER ', 'L')}`;
+const sessLab = x => isImported(x.c) ? 'Hevy' : `${state.maxCycle > 1 ? x.c + '.c ' : ''}${x.w}.hét ${DAYS[x.d]?.short || ''}`;
 function rankChartHtml(id) {
   const hist = rankHistory(id); if (!hist.length) return '';
   const W = 320, H = 170, L = 30, R = 14, T = 12, B = 24, lv = hist.map(h => h.lvl);
@@ -1424,7 +1497,7 @@ function allRanksHtml() {
   let h = `<section class="all-ranks"><div class="eyebrow">AZ ÖSSZES RANG · ALULRÓL FELFELÉ ${RANKS.length} RANG × 3 FOKOZAT</div>`;
   for (let r = RANKS.length - 1; r >= 0; r--) {
     const list = (by[r] || []).sort((a, b) => rankLvl(b.rk) - rankLvl(a.rk));
-    h += `<div class="ar-row${r === ovR ? ' me' : ''}" style="--rc:${RANKS[r].c}">${rankBadge({ pts: r * 3 + 2, label: RANKS[r].n })}<div class="ar-main"><div class="ar-name"><b>${esc(RANKS[r].n)}</b><span>${r + 1}. rang${r === ovR ? ' · ◀ itt tartasz összesítve' : ''}</span></div>${list.length ? `<div class="ar-ex">${list.map(x => `<button class="ar-chip" data-rstats="${esc(x.id)}">${esc(nameOf(x.id))} <i>${x.rk.plus ? '+' + x.rk.plus : ROMAN[x.rk.sub]} · ${esc(oneRmOf(x.rk.key, x.rk.score))}</i></button>`).join('')}</div>` : ''}</div></div>`;
+    h += `<div class="ar-row${r === ovR ? ' me' : ''}" style="--rc:${RANKS[r].c}">${rankBadge({ pts: r * 3 + 2, label: RANKS[r].n })}<div class="ar-main"><div class="ar-name"><b>${esc(RANKS[r].n)}</b><span>${r + 1}. rang${r === ovR ? ' · ◀ itt tartasz összesítve' : ''}</span></div>${list.length ? `<div class="ar-ex">${list.map(x => `<button class="ar-chip" data-rstats="${esc(x.id)}">${esc(hun(x.id))} <i>${x.rk.plus ? '+' + x.rk.plus : ROMAN[x.rk.sub]} · ${esc(oneRmOf(x.rk.key, x.rk.score))}</i></button>`).join('')}</div>` : ''}</div></div>`;
   }
   return h + '</section>';
 }
@@ -1434,7 +1507,7 @@ function recentRankUpsHtml() {
   for (const id of Object.keys(state.exercises || {})) for (const h of rankHistory(id)) if (h.up) ups.push({ id, ...h });
   if (!ups.length) return '';
   ups.sort((a, b) => later(b.x, a.x));
-  return `<section class="summary-card rankups-card"><div class="summary-title">⬆ LEGUTÓBBI RANGLÉPÉSEK</div>${ups.slice(0, 6).map(u => `<button class="ru-row" data-rstats="${esc(u.id)}">${rankBadge(u.rk)}<div><b>${esc(nameOf(u.id))}</b><span><s>${esc(u.from.label)}</s> → <em style="color:${u.rk.color}">${esc(u.rk.label)}</em></span><span>${esc(oneRmText(u.rk))} · ${esc(sessLab(u.x))}${fmtDate(u.x.t) ? ' · ' + esc(fmtDate(u.x.t)) : ''}</span></div></button>`).join('')}</section>`;
+  return `<section class="summary-card rankups-card"><div class="summary-title">⬆ LEGUTÓBBI RANGLÉPÉSEK</div>${ups.slice(0, 6).map(u => `<button class="ru-row" data-rstats="${esc(u.id)}">${rankBadge(u.rk)}<div><b>${esc(hun(u.id))}</b><span><s>${esc(u.from.label)}</s> → <em style="color:${u.rk.color}">${esc(u.rk.label)}</em></span><span>${esc(oneRmText(u.rk))} · ${esc(sessLab(u.x))}${fmtDate(u.x.t) ? ' · ' + esc(fmtDate(u.x.t)) : ''}</span></div></button>`).join('')}</section>`;
 }
 
 /* ---------- v32: gyakorlat-útmutató (izomtérkép + kivitelezés) ----------
@@ -1565,7 +1638,7 @@ function openExInfo(id, name, hu) {
   const lvl = [['FŐ CÉLIZOM', 3], ['MÁSODLAGOS', 2], ['SEGÍT, STABILIZÁL', 1]];
   const groups = info ? lvl.map(([t, v]) => { const ks = Object.keys(info.m).filter(k => info.m[k] === v); return ks.length ? `<div class="mi-group"><span class="mi-lvl mi${v}">${t}</span>${ks.map(k => `<div class="mi-row"><b>${esc(MUSCLES[k] || k)}</b><i class="mi-bar"><em class="mi${v}" style="width:${v * 33.3}%"></em></i></div>`).join('')}</div>` : ''; }).join('') : '';
   el.innerHTML = `<div class="timer-card edit-card stats-card exinfo-card"><div class="stats-top-row"><div class="eyebrow">GYAKORLAT-ÚTMUTATÓ</div><button class="secondary stats-close" data-close aria-label="Bezárás">✕</button></div>
-  <div class="edit-title">${esc(name)}</div>${hu ? `<div class="exercise-hu">${esc(hu)}</div>` : ''}
+  <div class="edit-title">${esc(huShort(hu) || hun(id))}</div><div class="exercise-hu">${esc(name)}</div>
   ${use3d || has2d ? `<div class="ex-anim" role="img" aria-label="${esc(name)} animáció"></div><div class="ei-note" id="exAnimNote">${use3d ? NOTE3D : NOTE2D}</div>` : ''}
   ${info ? `<div class="ei-sec">MELYIK IZMOT DOLGOZTATJA</div>${muscleMapSvg(info.m)}<div class="mi-legend"><span><i class="mi3"></i>fő</span><span><i class="mi2"></i>másodlagos</span><span><i class="mi1"></i>segít</span></div>${groups}
   <div class="ei-sec">HOGYAN CSINÁLD</div><ol class="ei-steps">${info.steps.map(x => `<li>${esc(x)}</li>`).join('')}</ol><div class="ei-tip">💡 ${esc(info.tip)}</div>` : `<div class="empty">Ehhez a gyakorlathoz még nincs leírás és izomtérkép. Szólj, és hozzáadom.</div>`}
@@ -1592,7 +1665,7 @@ function showRankUp(id, before, after, ovBefore, ovAfter) {
   el.id = 'rankUp'; el.className = 'rankup-overlay';
   const conf = Array.from({ length: 30 }, (_, i) => `<i style="--a:${Math.round(i * 12 + Math.random() * 8)}deg;--d:${Math.round(90 + Math.random() * 80)}px;--t:${(0.9 + Math.random() * 0.7).toFixed(2)}s;--c:${['#9cff57', after.color, '#ffffff'][i % 3]}"></i>`).join('');
   const ovUp = rankLvl(ovAfter) > rankLvl(ovBefore) && rankLvl(ovBefore) >= 0;
-  el.innerHTML = `<div class="rankup-card" style="--rc:${after.color}"><div class="rankup-rays"></div><div class="rankup-burst">${conf}</div><div class="rankup-badge">${rankBadge(after, true)}</div><div class="rankup-eyebrow">${first ? 'MEGVAN AZ ELSŐ RANGOD!' : 'RANGLÉPÉS!'}</div><div class="rankup-ex">${esc(nameOf(id))}</div>${first ? '' : `<div class="rankup-old">${esc(before.label)}</div><div class="rankup-arrow">▼</div>`}<div class="rankup-new">${esc(after.label)}</div><div class="rankup-1rm">${esc(oneRmText(after))}</div>${ovUp ? `<div class="rankup-ov">Az összesített rangod is nőtt: <b style="color:${ovAfter.color}">${esc(ovAfter.label)}</b></div>` : ''}<div class="rankup-tap">Koppints a folytatáshoz</div></div>`;
+  el.innerHTML = `<div class="rankup-card" style="--rc:${after.color}"><div class="rankup-rays"></div><div class="rankup-burst">${conf}</div><div class="rankup-badge">${rankBadge(after, true)}</div><div class="rankup-eyebrow">${first ? 'MEGVAN AZ ELSŐ RANGOD!' : 'RANGLÉPÉS!'}</div><div class="rankup-ex">${esc(hun(id))}</div>${first ? '' : `<div class="rankup-old">${esc(before.label)}</div><div class="rankup-arrow">▼</div>`}<div class="rankup-new">${esc(after.label)}</div><div class="rankup-1rm">${esc(oneRmText(after))}</div>${ovUp ? `<div class="rankup-ov">Az összesített rangod is nőtt: <b style="color:${ovAfter.color}">${esc(ovAfter.label)}</b></div>` : ''}<div class="rankup-tap">Koppints a folytatáshoz</div></div>`;
   const close = () => { if (!el.isConnected || el.classList.contains('out')) return; el.classList.add('out'); setTimeout(() => el.remove(), 300); };
   el.onclick = close;
   document.body.appendChild(el);
@@ -1625,9 +1698,9 @@ function renderRanks() {
   mine.sort((a, b) => (b.rk.pts ?? -1) - (a.rk.pts ?? -1));
   h += `<div class="history-section">SAJÁT RANGJAIM</div><input id="rankSearch" class="lib-search" placeholder="🔍 Gyakorlat keresése…" autocomplete="off">`;
   if (!bw) h += '<div class="note warn">Add meg a testsúlyodat, hogy a súlyos gyakorlatoknál is legyen rangod.</div>';
-  h += mine.map(({ id, rk }) => rk.needBw ? '' : `<button class="rank-row" data-rstats="${esc(id)}" data-hname="${esc(norm(nameOf(id)) + ' ' + norm(rk.db.hu))}">${rankBadge(rk)}<div class="rr-main"><b>${esc(nameOf(id))}</b><span class="rr-label" style="color:${rk.color}">${esc(rk.label)}</span><span class="rr-1rm">${esc(oneRmText(rk))}</span><div class="rr-bar"><i style="width:${Math.round(rk.pct * 100)}%;background:${rk.color}"></i></div><span class="rr-need">${esc(rankNeedText(rk))}</span>${rk.db.equip === 'machine' ? '<span class="rr-machine">⚙️ gépes – a terhelés gépenként eltérhet</span>' : ''}</div></button>`).join('');
+  h += mine.map(({ id, rk }) => rk.needBw ? '' : `<button class="rank-row" data-rstats="${esc(id)}" data-hname="${esc(norm(nameOf(id)) + ' ' + norm(rk.db.hu))}">${rankBadge(rk)}<div class="rr-main"><b>${esc(hun(id))}</b><span class="rr-label" style="color:${rk.color}">${esc(rk.label)}</span><span class="rr-1rm">${esc(oneRmText(rk))}</span><div class="rr-bar"><i style="width:${Math.round(rk.pct * 100)}%;background:${rk.color}"></i></div><span class="rr-need">${esc(rankNeedText(rk))}</span>${rk.db.equip === 'machine' ? '<span class="rr-machine">⚙️ gépes – a terhelés gépenként eltérhet</span>' : ''}</div></button>`).join('');
   const unranked = [...prog].filter(id => !rankKeyFor(id) && Object.values(state.exercises[id]?.occurrences || {}).some(anyDone));
-  if (unranked.length) h += `<div class="note">Rang nélküli gyakorlataid: ${unranked.map(id => esc(nameOf(id))).join(', ')}. A CSERE ablakban a „Rang alapja” mezőnél hozzárendelheted egy hasonló gyakorlathoz.</div>`;
+  if (unranked.length) h += `<div class="note">Rang nélküli gyakorlataid: ${unranked.map(id => esc(hun(id))).join(', ')}. A CSERE ablakban a „Rang alapja” mezőnél hozzárendelheted egy hasonló gyakorlathoz.</div>`;
   workout.innerHTML = h;
   bindCharts(workout);
   $('bwForm').onsubmit = ev => {
@@ -1679,8 +1752,8 @@ function boardHtml(sel) {
 /* ---------- statisztika ablak ---------- */
 function openStats(id) {
   const pb = personalBest(id), m = libMeta(id);
-  $('statsTitle').textContent = nameOf(id);
-  $('statsHu').textContent = m.hu || '';
+  $('statsTitle').textContent = hun(id);
+  $('statsHu').textContent = nameOf(id);
   $('statsPb').textContent = pb ? `🏆 Rekord: ${showNum(pb.weight)} kg × ${showNum(pb.reps)} · ${state.maxCycle > 1 ? pb.c + '. ciklus, ' : ''}${pb.w}. hét` : '';
   $('statsPb').classList.toggle('hidden', !pb);
   $('statsInfo').onclick = () => openExInfo(id, nameOf(id), m.hu || '');
@@ -2195,12 +2268,12 @@ function renderFriend() {
       const name = slotName(c, w, fd, slot), id = exId(name), l = lastDone(id), pb = personalBest(id), cur = recordFor(c, w, fd, name);
       const alt = slot.variants.length > 1 ? `<span class="pill">váltakozik: ${esc(slot.variants.map(v => v.name).join(' / '))}</span>` : '';
       const frk = rankOf(id);
-      return `<button class="friend-ex fday-ex" data-fex="${esc(id)}"><b>${frk?.label ? rankBadge(frk) + ' ' : ''}${esc(name)}${frk?.label ? ` <small style="color:${frk.color}">${esc(frk.label)}</small>` : ''}</b><span>${esc(showReps(slot))} ${alt}</span>${anyDone(cur) ? `<span class="fx-now">Ezen a héten: ${esc(setsText(cur))}</span>` : ''}<span>${l ? `Legutóbb (${esc(fmtDate(l.t) || l.w + '. hét')}): ${esc(setsText(l))}` : 'Még nincs adat'}</span>${pb ? `<span>🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}</span>` : ''}</button>`;
+      return `<button class="friend-ex fday-ex" data-fex="${esc(id)}"><b>${frk?.label ? rankBadge(frk) + ' ' : ''}${esc(hun(id))}${frk?.label ? ` <small style="color:${frk.color}">${esc(frk.label)}</small>` : ''}</b><span>${esc(showReps(slot))} ${alt}</span>${anyDone(cur) ? `<span class="fx-now">Ezen a héten: ${esc(setsText(cur))}</span>` : ''}<span>${l ? `Legutóbb (${esc(fmtDate(l.t) || l.w + '. hét')}): ${esc(setsText(l))}` : 'Még nincs adat'}</span>${pb ? `<span>🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}</span>` : ''}</button>`;
     }).join('');
   });
   const ids = withState(f.state, () => libraryIds().filter(id => Object.values(state.exercises[id]?.occurrences || {}).some(anyDone)));
   h += `<div class="history-section">ÖSSZES GYAKORLATA</div><input id="friendSearch" class="lib-search" placeholder="🔍 Gyakorlat keresése…" autocomplete="off">`;
-  h += withState(f.state, () => ids.map(id => { const pb = personalBest(id), l = lastDone(id), hs = heavierSet(l); return `<button class="friend-ex" data-fex="${esc(id)}" data-hname="${esc(norm(nameOf(id)) + ' ' + norm(libMeta(id).hu))}"><b>${esc(nameOf(id))}</b><span>${hs ? `Legutóbb: ${showNum(hs.weight)} kg × ${showNum(hs.reps)}` : ''}${pb ? ` · 🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}` : ''}</span></button>`; }).join(''));
+  h += withState(f.state, () => ids.map(id => { const pb = personalBest(id), l = lastDone(id), hs = heavierSet(l); return `<button class="friend-ex" data-fex="${esc(id)}" data-hname="${esc(norm(nameOf(id)) + ' ' + norm(libMeta(id).hu))}"><b>${esc(hun(id))}</b><span>${hs ? `Legutóbb: ${showNum(hs.weight)} kg × ${showNum(hs.reps)}` : ''}${pb ? ` · 🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}` : ''}</span></button>`; }).join(''));
   workout.innerHTML = h;
   $('friendBack').onclick = () => { socialFriend = null; friendDay = null; renderSocial(); window.scrollTo(0, 0); };
   workout.querySelectorAll('[data-fday]').forEach(b => b.onclick = () => { friendDay = +b.dataset.fday; renderFriend(); });
@@ -2245,16 +2318,17 @@ function renderInfo() {
     'Jobb fent <b>⋮</b> menü → <b>Alkalmazás telepítése</b> (vagy <b>Hozzáadás a kezdőképernyőhöz</b> → <b>Telepítés</b>).',
     'Ezután az ikonról indítsd.']);
   h += sec('🚀 ELSŐ LÉPÉSEK', [
-    '<b>👥 BARÁTOK</b> → <b>REGISZTRÁCIÓ</b>: név, e-mail, jelszó. A naplód innentől a fiókodba is mentődik.',
-    '<b>🏅 RANGOK</b> → add meg a <b>testsúlyodat</b> (ehhez igazodnak a rangok).',
-    'Ha más gyakorlatokat csinálsz, mint a programban: <b>CSERE</b> vagy <b>+ ÚJ GYAKORLAT HOZZÁADÁSA</b>.',
-    'Eddig a <b>Hevy</b> appot használtad? A Hevy-ben: Profile → Settings → Export & Import Data → Export Data → <b>Export Workouts</b>, majd itt: <b>📈 FEJLŐDÉS</b> → legfelül <b>HEVY ADATOK BETÖLTÉSE</b>. Az előzményeid átjönnek.']);
+    'Alul a menüsávban váltasz: <b>🏋️ Edzés</b>, <b>📈 Fejlődés</b>, <b>🏅 Rangok</b>, <b>👥 Barátok</b>, <b>ℹ️ Infó</b>.',
+    '<b>👥 Barátok</b> → <b>REGISZTRÁCIÓ</b>: név, e-mail, jelszó. A naplód innentől a fiókodba is mentődik.',
+    '<b>🏅 Rangok</b> → add meg a <b>testsúlyodat</b> (ehhez igazodnak a rangok).',
+    'Ha más gyakorlatokat csinálsz, mint a programban: a gyakorlat <b>⋯</b> gombja → <b>Csere</b>, vagy <b>+ ÚJ GYAKORLAT HOZZÁADÁSA</b>.',
+    'Eddig a <b>Hevy</b> appot használtad? A Hevy-ben: Profile → Settings → Export & Import Data → Export Data → <b>Export Workouts</b>, majd itt: <b>📈 Fejlődés</b> → az oldal alján <b>HEVY ADATOK BETÖLTÉSE</b>. Az előzményeid átjönnek.']);
   h += sec('🏋️ HOGYAN HASZNÁLD', [
-    'Fent válaszd ki a <b>hetet</b> (1–6) és az <b>edzésnapot</b> (LOWER 1, UPPER 1…).',
-    'Gyakorlatonként: <b>W</b> = bemelegítő szett, <b>1, 2</b> = munkasorozatok. Írd be a súlyt és az ismétlést, majd koppints a <b>○</b> gombra – indul a pihenőidő (1:00 / 2:30).',
+    'Fent válaszd ki a <b>hetet</b> (1–6) és az <b>edzésnapot</b> (ALSÓTEST 1, FELSŐTEST 1…).',
+    'Gyakorlatonként: <b>B</b> = bemelegítő szett, <b>1, 2</b> = munkasorozatok. Írd be a súlyt és az ismétlést, majd koppints a <b>○</b> gombra – indul a pihenőidő (1:00 / 2:30).',
     'Pihenő alatt a <b>KÖVETKEZŐ</b> kártya mutatja, mennyit emeltél legutóbb – minimum annyit tegyél fel.',
     '<b>+ SZETT / − SZETT</b>: a gyakorlat szettszáma, minden edzésen megmarad.',
-    '<b>CSERE</b>: másik gyakorlat (a gyakorlatlistából vagy a rangos adatbázisból), eltávolítás egy napról vagy mindenhonnan – az adatok megmaradnak.',
+    '<b>⋯ → Csere</b>: másik gyakorlat (a gyakorlatlistából vagy a rangos adatbázisból), eltávolítás egy napról vagy mindenhonnan – az adatok megmaradnak.',
     'A <b>gyakorlat nevére</b> koppintva statisztika és fejlődési görbe.',
     '<b>📝 Jegyzet</b>: gépbeállítás, fogás – minden héten ott lesz.',
     'Saját testsúlyos gyakorlatnál (húzódzkodás, lábemelés) a súly lehet <b>0</b>; plusz súlynál írd be a pluszt.',

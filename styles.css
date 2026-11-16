@@ -425,3 +425,74 @@ body.gated .sticky-nav{display:none}
 .lib-thumb{width:46px;height:46px}
 .lib-mus{font-size:10px;color:#8fbf73}
 html,body{overflow-x:clip}
+/* ===== v42: átláthatóbb felület ===== */
+/* fejléc + alsó menü */
+#infoBtn{display:none!important}
+.topbar{padding-top:max(12px,env(safe-area-inset-top));padding-bottom:10px}
+main{padding-bottom:calc(96px + env(safe-area-inset-bottom))!important}
+.bottom-nav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:grid;grid-template-columns:repeat(5,1fr);gap:2px;padding:6px max(6px,calc((100vw - 850px)/2)) calc(6px + env(safe-area-inset-bottom));background:rgba(10,12,15,.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid #222830}
+.bn-btn{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:0;color:#7d8791;padding:6px 2px;border-radius:12px;cursor:pointer;font-weight:800}
+.bn-ic{font-size:20px;line-height:1;filter:grayscale(.7);opacity:.75}
+.bn-t{font-size:10.5px;letter-spacing:.2px}
+.bn-btn.on{color:#9cff57;background:#141b12}
+.bn-btn.on .bn-ic{filter:none;opacity:1}
+.toast{bottom:calc(84px + env(safe-area-inset-bottom))!important}
+/* hét/ciklus panel tömören; csak az Edzés és a Fejlődés oldalon */
+.week-panel{margin:4px 0 12px!important;gap:12px!important}
+.week-panel h1{font-size:22px!important;margin:3px 0 0!important}
+body:not([data-view="workout"]):not([data-view="history"]) .week-panel{display:none}
+body:not([data-view="workout"]) .sticky-nav{display:none}
+body:not([data-view="workout"]) #cycleBanner{display:none}
+/* napi fejléc */
+.day-head{background:linear-gradient(145deg,#141a14,#0e1210);border:1px solid #26321f;border-radius:17px;padding:14px 15px;margin:4px 0 12px}
+.day-head .day-name{margin:0 0 3px;font-size:22px}
+.day-head .day-meta{margin-bottom:10px;font-size:11.5px}
+.dh-prog{display:flex;align-items:center;gap:10px;font-size:12px;color:#aab3bc}
+.dh-prog b{color:#9cff57}
+.dh-bar{flex:1;height:8px;background:#0a0d10;border-radius:99px;overflow:hidden;border:1px solid #232a22}
+.dh-bar i{display:block;height:100%;background:linear-gradient(90deg,#6fd13a,#9cff57);border-radius:99px;transition:width .4s}
+.dh-vol{margin-top:8px;font-size:11.5px;color:#8b949d}
+.dh-vol b{color:#e8edf1}
+.dh-next{margin-top:10px;width:100%;text-align:left;background:#9cff57;color:#0a0e08;border:0;border-radius:11px;padding:11px 13px;font-weight:900;font-size:13px;cursor:pointer}
+.dh-done{margin-top:10px;font-weight:900;color:#9cff57;font-size:13px}
+/* gyakorlatkártya */
+.exercise-head{align-items:flex-start}
+.ex-main{flex:1;min-width:0}
+.exercise-title{font-size:17px!important;line-height:1.2;text-align:left}
+.exercise-en{font-size:11px;color:#6d7781;margin-top:3px}
+.ex-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:6px}
+.ex-meta .prescribed{margin:0}
+.rk-mini{font-size:11px;font-weight:900}
+.more-btn{flex-shrink:0;width:42px;height:42px;border-radius:12px;background:#15191e;border:1px solid #2a3037;color:#dbe0e5;font-size:22px;line-height:1;font-weight:900;cursor:pointer}
+.quick{display:flex;flex-wrap:wrap;gap:6px;margin:11px 0 10px}
+.q-chip{background:#0a0d10;border:1px solid #232a31;border-radius:999px;padding:6px 11px;font-size:11.5px;color:#a8b1ba;text-align:left;cursor:pointer}
+.q-chip b{color:#e8edf1}
+.q-goal{border-color:#2c4220;background:#101a0c;color:#a9c79a;cursor:default}
+.q-goal b{color:#9cff57}
+.q-new{cursor:default;color:#7d8791}
+.ex-note{margin-top:10px}
+.ex-more{margin-top:12px;border-top:1px solid #20262c;padding-top:4px}
+.ex-more>summary{list-style:none;cursor:pointer;color:#8b949d;font-size:12px;font-weight:800;padding:8px 0}
+.ex-more>summary::-webkit-details-marker{display:none}
+.ex-more>summary::after{content:' ▾'}
+.ex-more[open]>summary::after{content:' ▴'}
+.exercise.ex-done{border-color:#2f4a22}
+.exercise.collapsed{padding-bottom:12px}
+.exercise.collapsed .ex-thumb{width:42px;height:42px}
+.done-sum{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;margin-top:10px;background:#101a0c;border:1px solid #2c4220;border-radius:11px;padding:10px 12px;color:#bdf59a;font-weight:800;font-size:12px;text-align:left;cursor:pointer}
+.done-sum em{font-style:normal;color:#7d9a6c;font-weight:700;white-space:nowrap}
+.collapse-btn{margin-top:10px;width:100%;background:none;border:1px dashed #2a3037;color:#7d8791;border-radius:10px;padding:8px;font-weight:800;cursor:pointer}
+/* ⋯ menü */
+.sheet-overlay{place-items:end center!important;padding:0!important;z-index:60}
+.sheet{width:min(520px,100%);background:#12161b;border:1px solid #2a3037;border-bottom:0;border-radius:22px 22px 0 0;padding:16px 14px calc(16px + env(safe-area-inset-bottom));display:grid;gap:8px;animation:sheetUp .2s ease}
+@keyframes sheetUp{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+.sheet-title{font-weight:900;font-size:16px;padding:2px 4px 8px}
+.sheet-title small{display:block;font-size:11px;color:#6d7781;font-weight:700;margin-top:2px}
+.sheet button{background:#181d23;border:1px solid #2a3037;color:#e8edf1;border-radius:13px;padding:14px;font-weight:800;font-size:14px;text-align:left;cursor:pointer}
+.sheet button:disabled{opacity:.35}
+.sheet-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sheet-row button{text-align:center}
+.sheet .sheet-cancel{text-align:center;background:none;color:#8b949d}
+/* gyakorlatlista: magyar név elöl, angol alatta */
+.lib-en{font-size:10.5px;color:#6d7781}
+@media(max-width:600px){.week-grid{width:52vw}.bn-t{font-size:10px}}
