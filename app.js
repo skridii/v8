@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v53';
+const APP_VERSION = 'v54';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -2234,7 +2234,7 @@ function renderGate() {
 /* ===== v48: KÖZÖSSÉG – fal posztokkal, mindenki edzéseivel, hozzászólásokkal és lájkokkal =====
    A tagok edzései AUTOMATIKUSAN megjelennek (a naplójukból, ugyanazzal a láthatósággal, mint a Barátok oldalon);
    ezek alá – és a szöveges posztok alá – bárki írhat és lájkolhat. Supabase: sql/002_kozossegi_fal.sql. */
-let feedNoPhoto = false, feedPosts = null, feedComments = [], feedLikes = [], feedErr = '', feedMissing = false, feedBusy = false, feedAt = 0, feedUnread = 0;
+let feedAuthors = {}, feedNoPhoto = false, feedPosts = null, feedComments = [], feedLikes = [], feedErr = '', feedMissing = false, feedBusy = false, feedAt = 0, feedUnread = 0;
 let feedDraft = { body: '', attach: '', photo: null, photoUrl: '' }, feedOpen = new Set();
 const FEED_SEEN_KEY = 'ironlog-feed-seen';
 const feedSeen = () => Number(localStorage.getItem(FEED_SEEN_KEY) || 0);
@@ -2259,8 +2259,9 @@ async function loadFeed(force) {
   feedBusy = true; feedErr = '';
   try {
     if (friends === null || Date.now() - friendsAt > 60000) await loadFriends();
+    // v54: a tagok neve + profilképe (004-es SQL); ha még nincs, a Barátok-lista adataiból
     const [posts, comments, likes] = await Promise.all([
-      sb('/rest/v1/feed_posts?select=id,user_id,body,workout,photo,created_at&order=created_at.desc&limit=100').catch(e => { if (e?.status === 400) { feedNoPhoto = true; return sb('/rest/v1/feed_posts?select=id,user_id,body,workout,created_at&order=created_at.desc&limit=100'); } throw e; }),
+      sb('/rest/v1/rpc/feed_authors', { method: 'POST', body: {} }).then(rows => { for (const r of rows || []) { feedAuthors[r.id] = r; if (r.avatar_path) avatarMap[r.id] = r.avatar_path; } }).catch(() => {}).then(() => sb('/rest/v1/feed_posts?select=id,user_id,body,workout,photo,created_at&order=created_at.desc&limit=100')).catch(e => { if (e?.status === 400) { feedNoPhoto = true; return sb('/rest/v1/feed_posts?select=id,user_id,body,workout,created_at&order=created_at.desc&limit=100'); } throw e; }),
       sb('/rest/v1/feed_comments?select=id,target_user,target_key,user_id,body,created_at&order=created_at.asc&limit=3000'),
       sb('/rest/v1/feed_likes?select=target_user,target_key,user_id&limit=5000')
     ]);
@@ -2278,10 +2279,25 @@ function feedPeople() {   // én + a látható tagok (állapottal)
 function feedItems() {
   const people = feedPeople(), byId = Object.fromEntries(people.map(p => [p.id, p]));
   return (feedPosts || []).map(p => {
-    const who = byId[p.user_id] || { id: p.user_id, name: (friends || []).find(f => f.id === p.user_id)?.display_name || 'Tag', state: null };
+    const who = byId[p.user_id] || { id: p.user_id, name: feedAuthors[p.user_id]?.display_name || (friends || []).find(f => f.id === p.user_id)?.display_name || 'Tag', state: null };
     const wk = p.workout?.key && /^\d+-\d+-\d+$/.test(p.workout.key) ? p.workout.key : '';
     return { type: 'p', who, post: p, wk, key: 'p:' + p.id, t: Date.parse(p.created_at) || 0 };
   }).sort((a, b) => b.t - a.t).slice(0, 80);
+}
+/* v54: posztoláskor az edzés összefoglalója a posztba kerül (pillanatkép), így az is látja, aki a szerző naplóját nem */
+function workoutSnapshot(k) {
+  const [c, w, d] = k.split('-').map(Number), slots = layoutFor(c, w)[d] || [], rows = [];
+  for (const slot of slots) {
+    const name = slotName(c, w, d, slot), id = exId(name), rec = recordFor(c, w, d, name);
+    if (!rec || !anyDone(rec)) continue;
+    const done = (rec.sets || []).filter(x => x?.done && positive(x.reps)).map(x => `${showNum(x.weight) || '0'}×${showNum(x.reps)}`);
+    const pb = personalBest(id), isPb = !!(pb && pb.c === c && pb.w === w && (rec.sets || []).some(x => x?.done && toNum(x.weight) === pb.weight && toNum(x.reps) === pb.reps));
+    rows.push([hun(id), done.join(' · '), isPb ? 1 : 0]);
+  }
+  return { key: k, day: DAYS[d]?.name || '', c, w, vol: Math.round(dayVolume(c, w, d).total), rows };
+}
+function snapshotCardHtml(ws) {
+  return `<div class="fw-card"><div class="fw-top"><b>${esc(ws.day || '')}</b><span>${ws.c > 1 ? ws.c + '. ciklus · ' : ''}${ws.w}. hét · ${kg(ws.vol || 0)} kg megmozgatva</span></div><ul class="fw-list">${(ws.rows || []).map(r => `<li><span>${esc(r[0])}${r[2] ? ' <em class="fw-pb">🏆 rekord</em>' : ''}</span><b>${esc(r[1])}</b></li>`).join('') || '<li><span>Még nincs kész szett.</span></li>'}</ul></div>`;
 }
 function workoutCardHtml(who, k) {
   if (!who.state) return '';
@@ -2394,7 +2410,7 @@ function renderComposer() {
     let photo = null;
     try {
       if (feedDraft.photo) { photo = `${auth.user.id}/posts/${newId()}.jpg`; await storageUpload(photo, feedDraft.photo); }
-      const row = { body: txt, workout: feedDraft.attach ? { key: feedDraft.attach } : null }; if (photo) row.photo = photo;
+      const row = { body: txt, workout: feedDraft.attach ? workoutSnapshot(feedDraft.attach) : null }; if (photo) row.photo = photo;
       await sb('/rest/v1/feed_posts', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: row });
       if (feedDraft.photoUrl) imgCache.set(photo, Promise.resolve(feedDraft.photoUrl));
       feedDraft = { body: '', attach: '', photo: null, photoUrl: '' }; renderComposer(); toast('Kirakva! 📣'); await loadFeed(true);
@@ -2418,11 +2434,11 @@ function renderFeedList() {
   for (const it of items) {
     const tu = it.who.id, cm = feedComments.filter(x => x.target_user === tu && x.target_key === it.key), lk = feedLikes.filter(x => x.target_user === tu && x.target_key === it.key);
     const liked = lk.some(x => x.user_id === auth.user.id), fid = tu + '|' + it.key, open = feedOpen.has(fid), shown = open ? cm : cm.slice(-2);
-    const nameOfUser = uid => uid === auth.user.id ? (me.display_name || 'Én') : ((friends || []).find(f => f.id === uid)?.display_name || 'Tag');
+    const nameOfUser = uid => uid === auth.user.id ? (me.display_name || 'Én') : (feedAuthors[uid]?.display_name || (friends || []).find(f => f.id === uid)?.display_name || 'Tag');
     h += `<article class="fd-item" data-fid="${esc(fid)}"><div class="fd-head">${avatarHtml(it.who)}<div><b>${esc(it.who.name)}</b><span>${agoText(it.t)}</span></div>${tu === auth.user.id ? `<button class="fd-del" data-delpost="${esc(it.post.id)}" aria-label="Poszt törlése">🗑</button>` : ''}</div>`;
     if (it.post.body) h += `<div class="fd-body">${esc(it.post.body).replace(/\n/g, '<br>')}</div>`;
     if (it.post.photo) h += `<button class="fd-photo" data-photo><img data-sp="${esc(it.post.photo)}" alt="Kép"></button>`;
-    if (it.wk) h += workoutCardHtml(it.who, it.wk);
+    if (it.post.workout?.rows) h += snapshotCardHtml(it.post.workout); else if (it.wk) h += workoutCardHtml(it.who, it.wk);
     h += `<div class="fd-actions"><button class="fd-like${liked ? ' on' : ''}" data-like="${esc(fid)}"${feedMissing ? ' disabled' : ''}>${liked ? '❤️' : '🤍'} ${lk.length || ''}</button><button class="fd-cbtn" data-cfocus="${esc(fid)}"${feedMissing ? ' disabled' : ''}>💬 ${cm.length || ''} Hozzászólás</button></div>`;
     if (cm.length > shown.length) h += `<button class="fd-more" data-copen="${esc(fid)}">Mind a ${cm.length} hozzászólás megjelenítése</button>`;
     if (shown.length) h += `<div class="fd-comments">${shown.map(x => `<div class="fd-c${x.target_user === auth.user.id && x.user_id !== auth.user.id && Date.parse(x.created_at) > seen ? ' new' : ''}"><b>${esc(nameOfUser(x.user_id))}</b> ${esc(x.body)}<span>${agoText(Date.parse(x.created_at))}${x.user_id === auth.user.id || x.target_user === auth.user.id ? ` · <button data-delc="${esc(x.id)}">törlés</button>` : ''}</span></div>`).join('')}</div>`;
