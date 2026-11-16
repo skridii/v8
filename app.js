@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v48';
+const APP_VERSION = 'v49';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -789,7 +789,7 @@ function renderWorkout() {
   });
   workout.querySelectorAll('details.ex-more').forEach(dt => dt.ontoggle = () => { if (dt.open) openEx.add(dt.dataset.mkey); else openEx.delete(dt.dataset.mkey); });
   workout.querySelectorAll('[data-more]').forEach(b => b.onclick = () => openMore(+b.dataset.more));
-  workout.querySelectorAll('[data-share]').forEach(b => b.onclick = () => { feedDraft = { body: '', attach: b.dataset.share }; view = 'feed'; render(); window.scrollTo(0, 0); });
+  workout.querySelectorAll('[data-share]').forEach(b => b.onclick = () => { feedDraft = { body: '', attach: b.dataset.share, photo: null, photoUrl: '' }; view = 'feed'; render(); window.scrollTo(0, 0); });
   workout.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => { const el = $('ex-' + b.dataset.jump); if (el) { const y = el.getBoundingClientRect().top + window.scrollY - (document.querySelector('.sticky-nav')?.getBoundingClientRect().bottom || 120) - 8; window.scrollTo({ top: y, behavior: 'smooth' }); } });
 }
 /* ⋯ menü egy gyakorlathoz: nagy, könnyen eltalálható gombok */
@@ -2161,10 +2161,12 @@ async function loadFriends() {
   socialBusy = true; friendsErr = '';
   try {
     const [profiles, states] = await Promise.all([
-      sb('/rest/v1/profiles?select=id,display_name,approved,share_enabled'),
+      sb('/rest/v1/profiles?select=id,display_name,approved,share_enabled,avatar_path').catch(() => sb('/rest/v1/profiles?select=id,display_name,approved,share_enabled')),
       sb('/rest/v1/user_state?select=user_id,state,updated_at')
     ]);
     const byId = Object.fromEntries((states || []).map(x => [x.user_id, x]));
+    for (const p of profiles || []) avatarMap[p.id] = p.avatar_path || '';
+    if (me) me.avatar_path = avatarMap[auth.user.id] || '';
     friends = (profiles || []).filter(p => p.id !== auth.user.id).map(p => {
       const raw = byId[p.id]; let st = null;
       try { st = raw?.state ? migrate(raw.state) : null; } catch (e) { st = null; }
@@ -2228,8 +2230,8 @@ function renderGate() {
 /* ===== v48: KÖZÖSSÉG – fal posztokkal, mindenki edzéseivel, hozzászólásokkal és lájkokkal =====
    A tagok edzései AUTOMATIKUSAN megjelennek (a naplójukból, ugyanazzal a láthatósággal, mint a Barátok oldalon);
    ezek alá – és a szöveges posztok alá – bárki írhat és lájkolhat. Supabase: sql/002_kozossegi_fal.sql. */
-let feedPosts = null, feedComments = [], feedLikes = [], feedErr = '', feedMissing = false, feedBusy = false, feedAt = 0, feedUnread = 0;
-let feedDraft = { body: '', attach: '' }, feedOpen = new Set();
+let feedNoPhoto = false, feedPosts = null, feedComments = [], feedLikes = [], feedErr = '', feedMissing = false, feedBusy = false, feedAt = 0, feedUnread = 0;
+let feedDraft = { body: '', attach: '', photo: null, photoUrl: '' }, feedOpen = new Set();
 const FEED_SEEN_KEY = 'ironlog-feed-seen';
 const feedSeen = () => Number(localStorage.getItem(FEED_SEEN_KEY) || 0);
 function agoText(t) {
@@ -2254,7 +2256,7 @@ async function loadFeed(force) {
   try {
     if (friends === null || Date.now() - friendsAt > 60000) await loadFriends();
     const [posts, comments, likes] = await Promise.all([
-      sb('/rest/v1/feed_posts?select=id,user_id,body,workout,created_at&order=created_at.desc&limit=100'),
+      sb('/rest/v1/feed_posts?select=id,user_id,body,workout,photo,created_at&order=created_at.desc&limit=100').catch(e => { if (e?.status === 400) { feedNoPhoto = true; return sb('/rest/v1/feed_posts?select=id,user_id,body,workout,created_at&order=created_at.desc&limit=100'); } throw e; }),
       sb('/rest/v1/feed_comments?select=id,target_user,target_key,user_id,body,created_at&order=created_at.asc&limit=3000'),
       sb('/rest/v1/feed_likes?select=target_user,target_key,user_id&limit=5000')
     ]);
@@ -2268,20 +2270,14 @@ function feedPeople() {   // én + a látható tagok (állapottal)
   for (const f of friends || []) if (f.approved && f.state) out.push({ id: f.id, name: f.display_name || 'Tag', state: f.state });
   return out;
 }
+// v49: a falon CSAK a kirakott posztok vannak (szöveg, kép, csatolt edzés) – senki edzése nem kerül ki magától
 function feedItems() {
-  const people = feedPeople(), byId = Object.fromEntries(people.map(p => [p.id, p])), items = [], since = Date.now() - 45 * 864e5;
-  const postedW = new Set();
-  for (const p of feedPosts || []) {
+  const people = feedPeople(), byId = Object.fromEntries(people.map(p => [p.id, p]));
+  return (feedPosts || []).map(p => {
     const who = byId[p.user_id] || { id: p.user_id, name: (friends || []).find(f => f.id === p.user_id)?.display_name || 'Tag', state: null };
     const wk = p.workout?.key && /^\d+-\d+-\d+$/.test(p.workout.key) ? p.workout.key : '';
-    if (wk) postedW.add(p.user_id + '|' + wk);
-    items.push({ type: 'p', who, post: p, wk, key: wk ? 'w:' + wk : 'p:' + p.id, t: Date.parse(p.created_at) || 0 });
-  }
-  for (const who of people) {
-    const sum = who.mine ? friendSummary(state) : (friends.find(f => f.id === who.id)?.sum || friendSummary(who.state));
-    for (const x of sum.list) { if (!x.t || x.t < since || x.c < 1 || postedW.has(who.id + '|' + x.k)) continue; items.push({ type: 'w', who, wk: x.k, key: 'w:' + x.k, t: x.t }); }
-  }
-  return items.sort((a, b) => b.t - a.t).slice(0, 60);
+    return { type: 'p', who, post: p, wk, key: 'p:' + p.id, t: Date.parse(p.created_at) || 0 };
+  }).sort((a, b) => b.t - a.t).slice(0, 80);
 }
 function workoutCardHtml(who, k) {
   if (!who.state) return '';
@@ -2299,10 +2295,39 @@ function workoutCardHtml(who, k) {
     return `<div class="fw-card"><div class="fw-top"><b>${esc(DAYS[d]?.name || '')}</b><span>${state.maxCycle > 1 || c > 1 ? c + '. ciklus · ' : ''}${w}. hét · ${kg(vol)} kg megmozgatva</span></div><ul class="fw-list">${rows.join('') || '<li><span>Még nincs kész szett.</span></li>'}</ul></div>`;
   });
 }
-function avatarHtml(who) {
-  const n = (who.name || '?').trim(), hue = [...(who.id || n)].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 360, 7);
-  return `<span class="fd-av" style="--h:${hue}">${esc(n.slice(0, 1).toUpperCase())}</span>`;
+function avatarHtml(who, big) {
+  const n = (who.name || '?').trim(), hue = [...(who.id || n)].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 360, 7), ap = avatarMap[who.id];
+  return `<span class="fd-av${big ? ' big' : ''}" style="--h:${hue}">${esc(n.slice(0, 1).toUpperCase())}${ap ? `<img data-sp="${esc(ap)}" alt="">` : ''}</span>`;
 }
+/* ---- v49: képek (privát Supabase-tárhely: csak a tagok látják, akiknek a naplóját is láthatják) ---- */
+const BUCKET = 'ironlog', avatarMap = {}, imgCache = new Map();
+async function storageUpload(path, blob) {
+  const t = await accessToken(); if (!t) throw new Error('Nincs bejelentkezve');
+  const r = await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${path}`, { method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t, 'Content-Type': blob.type || 'image/jpeg', 'x-upsert': 'true', 'cache-control': '31536000' }, body: blob });
+  if (!r.ok) { let m = 'HTTP ' + r.status; try { const j = await r.json(); m = j.message || j.error || m; } catch (e) {} const e = new Error(/bucket not found/i.test(m) ? 'A képfeltöltés még nincs bekapcsolva (admin: 003-as SQL).' : m); e.status = r.status; throw e; }
+}
+async function storageDelete(path) { try { const t = await accessToken(); await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${path}`, { method: 'DELETE', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t } }); } catch (e) {} }
+function storageUrl(path) {
+  if (imgCache.has(path)) return imgCache.get(path);
+  const pr = (async () => { const t = await accessToken(); const r = await fetch(`${SB_URL}/storage/v1/object/authenticated/${BUCKET}/${path}`, { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t } }); if (!r.ok) throw new Error('HTTP ' + r.status); return URL.createObjectURL(await r.blob()); })();
+  imgCache.set(path, pr); pr.catch(() => imgCache.delete(path)); return pr;
+}
+function hydrateImgs(root) { root.querySelectorAll('img[data-sp]:not([src])').forEach(im => storageUrl(im.dataset.sp).then(u => { im.src = u; im.classList.add('ok'); }, () => im.classList.add('err'))); }
+// kép kicsinyítése JPEG-be (a telefon fotója több MB is lehet); square = középre vágott négyzet (profilkép)
+async function shrinkImage(file, max, square) {
+  let src;
+  try { src = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+  catch (e) { src = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('Ezt a képet nem tudom megnyitni.')); im.src = URL.createObjectURL(file); }); }
+  let sw = src.width, sh = src.height, sx = 0, sy = 0;
+  if (square) { const m = Math.min(sw, sh); sx = (sw - m) / 2; sy = (sh - m) / 2; sw = sh = m; }
+  const sc = Math.min(1, max / Math.max(sw, sh)), cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(sw * sc)); cv.height = Math.max(1, Math.round(sh * sc));
+  cv.getContext('2d').drawImage(src, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+  return new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('Nem sikerült a kép feldolgozása.')), 'image/jpeg', 0.84));
+}
+const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+function pickImage(cb) { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.onchange = () => { const f = inp.files?.[0]; if (f) cb(f); }; inp.click(); }
+function openPhoto(src) { const o = document.createElement('div'); o.className = 'overlay photo-view'; o.innerHTML = `<img src="${src}" alt="">`; o.onclick = () => o.remove(); document.body.appendChild(o); }
 function renderFeed() {
   if (!auth || !me) { workout.innerHTML = '<section class="social-card"><h2>📣 Közösség</h2><div class="note">A közösségi falhoz jelentkezz be a 👥 Barátok oldalon.</div></section>'; if (auth && !me) afterLogin(false).then(() => loadFeed(true)).catch(() => {}); return; }
   if (!me.approved) { workout.innerHTML = '<section class="social-card"><h2>📣 Közösség</h2><div class="note">A fiókodat még jóvá kell hagynia az adminnak.</div></section>'; return; }
@@ -2310,19 +2335,21 @@ function renderFeed() {
   if (!feedBusy && Date.now() - feedAt > 30000) loadFeed(true);
   const myLast = friendSummary(state).list.find(x => x.c >= 1), att = feedDraft.attach || '';
   let h = `<section class="fd-compose"><div class="fd-row">${avatarHtml({ id: auth.user.id, name: me.display_name })}<textarea id="fdBody" maxlength="1000" rows="${feedDraft.body || att ? 3 : 2}" placeholder="Mi volt ma? Írj valamit a többieknek…">${esc(feedDraft.body)}</textarea></div>`;
+  if (feedDraft.photoUrl) h += `<div class="fd-prev"><img src="${feedDraft.photoUrl}" alt=""><button id="fdUnphoto" aria-label="Kép törlése">✕</button></div>`;
   if (att) h += `<div class="fd-attach">📎 Csatolt edzés: <b>${esc(DAYS[+att.split('-')[2]]?.name || '')} · ${esc(att.split('-')[1])}. hét</b> <button id="fdUnattach" aria-label="Csatolás törlése">✕</button></div>`;
-  else if (myLast) h += `<button class="fd-attach-btn" id="fdAttach">📎 Csatolom a legutóbbi edzésemet (${esc(DAYS[myLast.d]?.name || '')} · ${myLast.w}. hét)</button>`;
+  h += `<div class="fd-tools"><button id="fdPhoto">📷 ${feedDraft.photo ? 'Másik kép' : 'Kép / fotó'}</button>${!att && myLast ? `<button id="fdAttach">📎 Edzés csatolása</button>` : ''}</div>`;
   h += `<button class="fd-post" id="fdPost">📣 KIRAKOM</button></section>`;
-  if (feedMissing) h += `<div class="note warn">A hozzászólások, lájkok és posztok még nincsenek bekapcsolva: az adminnak egyszer le kell futtatnia a beállítást a Supabase-ben (sql/002_kozossegi_fal.sql). Addig is látod a tagok edzéseit.</div>`;
+  if (feedMissing) h += `<div class="note warn">A közösségi fal még nincs bekapcsolva: az adminnak egyszer le kell futtatnia a beállítást a Supabase-ben (sql/002_kozossegi_fal.sql és 003_kepek_profil.sql).</div>`;
   if (feedErr) h += `<div class="note warn">${esc(feedErr)}</div>`;
   const items = feedItems(), seen = feedSeen();
-  if (!items.length) h += '<div class="note">Még nincs mit mutatni. Ha valaki edz, itt megjelenik – a tiéd is!</div>';
+  if (!items.length && !feedMissing) h += '<div class="note">Még senki nem rakott ki semmit. Légy te az első! 📣</div>';
   for (const it of items) {
     const tu = it.who.id, cm = feedComments.filter(x => x.target_user === tu && x.target_key === it.key), lk = feedLikes.filter(x => x.target_user === tu && x.target_key === it.key);
     const liked = lk.some(x => x.user_id === auth.user.id), fid = tu + '|' + it.key, open = feedOpen.has(fid), shown = open ? cm : cm.slice(-2);
     const nameOfUser = uid => uid === auth.user.id ? (me.display_name || 'Én') : ((friends || []).find(f => f.id === uid)?.display_name || 'Tag');
-    h += `<article class="fd-item" data-fid="${esc(fid)}"><div class="fd-head">${avatarHtml(it.who)}<div><b>${esc(it.who.name)}</b><span>${it.type === 'w' ? 'edzett' : 'posztolt'} · ${agoText(it.t)}</span></div>${it.type === 'p' && tu === auth.user.id ? `<button class="fd-del" data-delpost="${esc(it.post.id)}" aria-label="Poszt törlése">🗑</button>` : ''}</div>`;
+    h += `<article class="fd-item" data-fid="${esc(fid)}"><div class="fd-head">${avatarHtml(it.who)}<div><b>${esc(it.who.name)}</b><span>${agoText(it.t)}</span></div>${it.type === 'p' && tu === auth.user.id ? `<button class="fd-del" data-delpost="${esc(it.post.id)}" aria-label="Poszt törlése">🗑</button>` : ''}</div>`;
     if (it.type === 'p' && it.post.body) h += `<div class="fd-body">${esc(it.post.body).replace(/\n/g, '<br>')}</div>`;
+    if (it.post.photo) h += `<button class="fd-photo" data-photo><img data-sp="${esc(it.post.photo)}" alt="Kép"></button>`;
     if (it.wk) h += workoutCardHtml(it.who, it.wk);
     h += `<div class="fd-actions"><button class="fd-like${liked ? ' on' : ''}" data-like="${esc(fid)}"${feedMissing ? ' disabled' : ''}>${liked ? '❤️' : '🤍'} ${lk.length || ''}</button><button class="fd-cbtn" data-cfocus="${esc(fid)}"${feedMissing ? ' disabled' : ''}>💬 ${cm.length || ''} Hozzászólás</button></div>`;
     if (cm.length > shown.length) h += `<button class="fd-more" data-copen="${esc(fid)}">Mind a ${cm.length} hozzászólás megjelenítése</button>`;
@@ -2331,17 +2358,30 @@ function renderFeed() {
     h += `</article>`;
   }
   workout.innerHTML = h;
+  hydrateImgs(workout);
+  $('fdPhoto').onclick = () => pickImage(async f => {
+    try { const b = await shrinkImage(f, 1440); if (feedDraft.photoUrl) URL.revokeObjectURL(feedDraft.photoUrl); feedDraft.photo = b; feedDraft.photoUrl = URL.createObjectURL(b); feedDraft.body = $('fdBody').value; renderFeed(); }
+    catch (e) { toast(e.message || 'Nem sikerült a kép.'); }
+  });
+  if ($('fdUnphoto')) $('fdUnphoto').onclick = () => { URL.revokeObjectURL(feedDraft.photoUrl); feedDraft.photo = null; feedDraft.photoUrl = ''; feedDraft.body = $('fdBody').value; renderFeed(); };
+  workout.querySelectorAll('[data-photo]').forEach(b => b.onclick = () => { const im = b.querySelector('img'); if (im?.src) openPhoto(im.src); });
   // olvasottnak jelöljük (a piros szám eltűnik)
   localStorage.setItem(FEED_SEEN_KEY, String(Date.now())); if (feedUnread) { feedUnread = 0; renderBottomNav(false); }
   const body = $('fdBody'); body.oninput = () => { feedDraft.body = body.value; };
-  if ($('fdAttach')) $('fdAttach').onclick = () => { feedDraft.attach = myLast.k; renderFeed(); };
-  if ($('fdUnattach')) $('fdUnattach').onclick = () => { feedDraft.attach = ''; renderFeed(); };
+  if ($('fdAttach')) $('fdAttach').onclick = () => { feedDraft.attach = myLast.k; feedDraft.body = $('fdBody').value; renderFeed(); };
+  if ($('fdUnattach')) $('fdUnattach').onclick = () => { feedDraft.attach = ''; feedDraft.body = $('fdBody').value; renderFeed(); };
   $('fdPost').onclick = async () => {
-    const txt = body.value.trim(); if (!txt && !feedDraft.attach) { toast('Írj valamit, vagy csatold az edzésedet.'); return; }
+    const txt = body.value.trim(); if (!txt && !feedDraft.attach && !feedDraft.photo) { toast('Írj valamit, tegyél be képet, vagy csatold az edzésedet.'); return; }
     if (feedMissing) { toast('A posztolás még nincs bekapcsolva (admin: SQL beállítás).'); return; }
-    $('fdPost').disabled = true;
-    try { await sb('/rest/v1/feed_posts', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: { body: txt, workout: feedDraft.attach ? { key: feedDraft.attach } : null } }); feedDraft = { body: '', attach: '' }; toast('Kirakva! 📣'); await loadFeed(true); }
-    catch (e) { $('fdPost').disabled = false; toast('Nem sikerült: ' + authErrorText(e)); }
+    $('fdPost').disabled = true; $('fdPost').textContent = feedDraft.photo ? 'KÉP FELTÖLTÉSE…' : 'KÜLDÉS…';
+    let photo = null;
+    try {
+      if (feedDraft.photo) { photo = `${auth.user.id}/posts/${newId()}.jpg`; await storageUpload(photo, feedDraft.photo); }
+      const row = { body: txt, workout: feedDraft.attach ? { key: feedDraft.attach } : null }; if (photo) row.photo = photo;
+      await sb('/rest/v1/feed_posts', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: row });
+      if (feedDraft.photoUrl) { imgCache.set(photo, Promise.resolve(feedDraft.photoUrl)); }
+      feedDraft = { body: '', attach: '', photo: null, photoUrl: '' }; toast('Kirakva! 📣'); await loadFeed(true);
+    } catch (e) { if (photo) storageDelete(photo); $('fdPost').disabled = false; $('fdPost').textContent = '📣 KIRAKOM'; toast('Nem sikerült: ' + authErrorText(e)); }
   };
   const split = fid => { const i = fid.indexOf('|'); return [fid.slice(0, i), fid.slice(i + 1)]; };
   workout.querySelectorAll('[data-like]').forEach(b => b.onclick = async () => {
@@ -2366,7 +2406,8 @@ function renderFeed() {
   });
   workout.querySelectorAll('[data-delpost]').forEach(b => b.onclick = async () => {
     if (!confirm('Törlöd ezt a posztot?')) return;
-    try { await sb(`/rest/v1/feed_posts?id=eq.${b.dataset.delpost}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } }); await loadFeed(true); } catch (e) { toast('Nem sikerült: ' + authErrorText(e)); }
+    const ph = (feedPosts || []).find(x => x.id === b.dataset.delpost)?.photo;
+    try { await sb(`/rest/v1/feed_posts?id=eq.${b.dataset.delpost}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } }); if (ph) storageDelete(ph); await loadFeed(true); } catch (e) { toast('Nem sikerült: ' + authErrorText(e)); }
   });
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { feedPing(); if (view === 'feed') loadFeed(true); } });
@@ -2380,10 +2421,12 @@ function renderSocial() {
     afterLogin(false).then(() => { if (view === 'social') renderSocial(); }).catch(e => { if (view === 'social') workout.innerHTML = h + `<div class="note">${esc(authErrorText(e))}</div><button class="secondary wide" id="retryBtn">ÚJRA</button>`; const b = $('retryBtn'); if (b) b.onclick = renderSocial; });
     return;
   }
-  h += `<section class="social-card me-card"><div class="me-top"><div><div class="me-name">${esc(me.display_name || auth.user.email)}${me.is_admin ? ' <span class="admin-tag">ADMIN</span>' : ''}</div><div class="me-mail">${esc(auth.user.email)}</div></div><button class="secondary" id="renameBtn">NÉV</button></div>
+  h += `<section class="social-card me-card"><div class="me-av-row">${avatarHtml({ id: auth.user.id, name: me.display_name || auth.user.email }, true)}<div class="me-av-btns"><button class="secondary" id="avatarBtn">📷 ${me.avatar_path ? 'PROFILKÉP CSERÉJE' : 'PROFILKÉP FELTÖLTÉSE'}</button>${me.avatar_path ? '<button class="secondary" id="avatarDel">TÖRLÉS</button>' : ''}</div></div><div class="me-top"><div><div class="me-name">${esc(me.display_name || auth.user.email)}${me.is_admin ? ' <span class="admin-tag">ADMIN</span>' : ''}</div><div class="me-mail">${esc(auth.user.email)}</div></div><button class="secondary" id="renameBtn">NÉV</button></div>
     <div class="sync-line" id="syncStatus">${esc(syncStatusText())}</div>
     ${me.approved ? `<label class="switch-row"><input type="checkbox" id="shareToggle" ${me.share_enabled ? 'checked' : ''}><span><b>Adataim megosztása a többi taggal</b><small>Ha kikapcsolod, elrejted magad a többi tag elől.</small></span></label>` : '<div class="note warn">A fiókod jelenleg nem aktív, ezért a barátok nézete és a feltöltés szünetel.</div>'}
-    <div class="me-actions"><button class="secondary" id="syncNow">FELTÖLTÉS MOST</button><button class="secondary" id="logoutBtn">KIJELENTKEZÉS</button></div></section>`;
+    <div class="me-actions"><button class="secondary" id="syncNow">FELTÖLTÉS MOST</button><button class="secondary" id="logoutBtn">KIJELENTKEZÉS</button></div>
+    <button class="secondary wide" id="pwToggle">🔑 JELSZÓ MÓDOSÍTÁSA</button>
+    <form class="pw-form hidden" id="pwForm"><input type="password" id="pw1" autocomplete="new-password" placeholder="Új jelszó (legalább 6 karakter)" minlength="6"><input type="password" id="pw2" autocomplete="new-password" placeholder="Új jelszó még egyszer" minlength="6"><button class="fd-post" id="pwSave">JELSZÓ MENTÉSE</button></form></section>`;
   if (me.approved) {
     h += `<div class="history-section">BARÁTOK</div>`;
     if (friends === null || socialBusy) h += '<div class="note">Barátok betöltése…</div>';
@@ -2391,7 +2434,7 @@ function renderSocial() {
     else if (!friends.length) h += '<div class="note">Még nincs más tag, vagy senki nem oszt meg adatot.</div>';
     else h += friends.map(f => {
       const s = f.sum, l = s?.last;
-      return `<button class="friend-card" data-friend="${esc(f.id)}"><div class="friend-top"><b>${esc(f.display_name || 'Névtelen')}</b>${me.is_admin && !f.share_enabled ? '<span class="pill">nem oszt meg</span>' : ''}<span class="friend-week">${s ? `${s.thisWeek} edzés / 7 nap` : ''}</span></div>
+      return `<button class="friend-card" data-friend="${esc(f.id)}"><div class="friend-top">${avatarHtml({ id: f.id, name: f.display_name || '?' })}<b>${esc(f.display_name || 'Névtelen')}</b>${me.is_admin && !f.share_enabled ? '<span class="pill">nem oszt meg</span>' : ''}<span class="friend-week">${s ? `${s.thisWeek} edzés / 7 nap` : ''}</span></div>
         <div class="friend-last">${l ? `Utolsó: ${fmtDate(l.t) || ''} · ${DAYS[l.d]?.name || ''} · ${kg(l.vol)} kg` : 'Még nincs rögzített edzés'}</div></button>`;
     }).join('');
     h += '<button class="secondary wide" id="reloadFriends">FRISSÍTÉS</button>';
@@ -2399,6 +2442,32 @@ function renderSocial() {
   }
   workout.innerHTML = h;
   $('logoutBtn').onclick = signOut;
+  hydrateImgs(workout);
+  $('pwToggle').onclick = () => { $('pwForm').classList.toggle('hidden'); if (!$('pwForm').classList.contains('hidden')) $('pw1').focus(); };
+  $('pwForm').onsubmit = async ev => {
+    ev.preventDefault(); const a = $('pw1').value, b2 = $('pw2').value;
+    if (a.length < 6) { toast('A jelszó legyen legalább 6 karakter.'); return; }
+    if (a !== b2) { toast('A két jelszó nem egyezik.'); return; }
+    $('pwSave').disabled = true;
+    try { await sb('/auth/v1/user', { method: 'PUT', body: { password: a } }); toast('✅ Jelszó megváltoztatva.'); $('pwForm').reset(); $('pwForm').classList.add('hidden'); }
+    catch (e) { const m = String(e.message || ''); toast(/different|same/i.test(m) ? 'Az új jelszó nem lehet ugyanaz, mint a régi.' : /reauth|nonce/i.test(m) ? 'A jelszócseréhez újra be kell lépned: jelentkezz ki és be, majd próbáld újra.' : 'Nem sikerült: ' + authErrorText(e)); }
+    $('pwSave').disabled = false;
+  };
+  $('avatarBtn').onclick = () => pickImage(async f => {
+    const btn = $('avatarBtn'); btn.disabled = true; btn.textContent = 'FELTÖLTÉS…';
+    const old = me.avatar_path, path = `${auth.user.id}/avatar-${Date.now()}.jpg`;
+    try {
+      const blob = await shrinkImage(f, 400, true); await storageUpload(path, blob);
+      await sb('/rest/v1/rpc/set_my_avatar', { method: 'POST', body: { p_path: path } });
+      imgCache.set(path, Promise.resolve(URL.createObjectURL(blob))); me.avatar_path = avatarMap[auth.user.id] = path; if (old) storageDelete(old);
+      toast('✅ Profilkép frissítve.');
+    } catch (e) { storageDelete(path); toast(/set_my_avatar|PGRST202|404/.test(String(e.message) + e.status) ? 'A profilkép még nincs bekapcsolva (admin: 003-as SQL).' : 'Nem sikerült: ' + authErrorText(e)); }
+    renderSocial();
+  });
+  if ($('avatarDel')) $('avatarDel').onclick = async () => {
+    if (!confirm('Törlöd a profilképet?')) return;
+    try { const old = me.avatar_path; await sb('/rest/v1/rpc/set_my_avatar', { method: 'POST', body: { p_path: null } }); me.avatar_path = avatarMap[auth.user.id] = ''; storageDelete(old); renderSocial(); } catch (e) { toast('Nem sikerült: ' + authErrorText(e)); }
+  };
   $('syncNow').onclick = async () => { await pushState(); toast(syncErr ? 'Feltöltés sikertelen.' : 'Feltöltve.'); };
   $('renameBtn').onclick = async () => {
     const n = prompt('Milyen néven lássanak a barátaid?', me.display_name || ''); if (n === null || !n.trim()) return;

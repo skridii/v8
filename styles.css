@@ -602,3 +602,28 @@ body:not([data-view="workout"]) #cycleBanner{display:none}
 .fd-cform input{flex:1;background:#0a0d10;border:1px solid #2a3037;border-radius:99px;color:#e8edf1;padding:10px 14px;font:inherit;font-size:14px;min-width:0}
 .fd-cform button{width:42px;border-radius:50%;background:#9cff57;border:0;color:#0a0e08;font-weight:900;font-size:16px;cursor:pointer}
 .note.warn{border-color:#5a4a20;color:#e6cf86}
+/* v49: képek, profilkép, jelszó */
+.fd-av{position:relative;overflow:hidden}
+.fd-av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .2s}
+.fd-av img.ok{opacity:1}
+.fd-av.big{width:68px;height:68px;font-size:28px}
+.fd-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fd-tools button{background:#181d23;border:1px solid #2a3037;border-radius:11px;padding:10px;color:#dbe0e5;font-weight:800;font-size:13px;cursor:pointer}
+.fd-tools button:only-child{grid-column:1/-1}
+.fd-prev{position:relative;border-radius:12px;overflow:hidden;border:1px solid #2a3037}
+.fd-prev img{display:block;width:100%;max-height:340px;object-fit:cover}
+.fd-prev button{position:absolute;top:8px;right:8px;width:32px;height:32px;border-radius:50%;border:0;background:rgba(0,0,0,.65);color:#fff;font-size:15px;cursor:pointer}
+.fd-photo{display:block;width:100%;margin-top:10px;padding:0;border:0;background:#0b0e11;border-radius:13px;overflow:hidden;cursor:zoom-in;min-height:120px}
+.fd-photo img{display:block;width:100%;max-height:520px;object-fit:cover;opacity:0;transition:opacity .25s}
+.fd-photo img.ok{opacity:1}
+.photo-view{place-items:center;background:rgba(0,0,0,.92)!important;z-index:70;padding:10px}
+.photo-view img{max-width:100%;max-height:100%;border-radius:10px}
+.me-av-row{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.me-av-btns{display:flex;flex-wrap:wrap;gap:8px}
+.me-av-btns .secondary{padding:9px 11px;font-size:11.5px}
+.pw-form{display:grid;gap:8px;margin-top:10px}
+.pw-form input{background:#0a0d10;border:1px solid #2a3037;border-radius:11px;color:#e8edf1;padding:12px;font:inherit;font-size:15px}
+#pwToggle{margin-top:10px}
+.friend-top .fd-av{width:30px;height:30px;font-size:13px}
+.friend-top{align-items:center;gap:9px}
+.fd-head .fd-av,.fd-row .fd-av{font-size:15px;color:#0a0e08;font-weight:900}
