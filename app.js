@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v45';
+const APP_VERSION = 'v46';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -749,9 +749,11 @@ function renderWorkout() {
     let info = '';
     if (hasRk) { info += `<div class="ei-rank">${rankBadge(rk)}<div class="ei-rk"><div><b style="color:${rk.color}">${esc(rk.label)}</b><span>${esc(oneRmText(rk))}</span></div><div class="rr-bar"><i style="width:${Math.round(rk.pct * 100)}%;background:${rk.color}"></i></div><small>${esc(rankNeedText(rk))}</small></div></div>`; }
     else if (rk?.needBw) info += `<div class="ei-line muted">🏅 A rangodhoz add meg a testsúlyod a Rangok oldalon.</div>`;
-    info += `<button class="ei-line ei-last" data-stats="${esc(id)}">${lastTxt ? `Előző: <b>${esc(lastTxt)}</b>` : 'Első alkalom – írd be, mennyit bírsz'}${pb ? ` <span class="ei-pb">🏆 ${showNum(pb.weight)}×${showNum(pb.reps)}</span>` : ''} <span class="ei-go">📈</span></button>`;
+    info += `<div class="ei-line ei-last">${lastTxt ? `Előző: <b>${esc(lastTxt)}</b>` : 'Első alkalom – írd be, mennyit bírsz'}${pb ? ` <span class="ei-pb">🏆 ${showNum(pb.weight)}×${showNum(pb.reps)}</span>` : ''}</div>`;
     if (goals.length) info += `<div class="ei-line ei-goal">🎯 Nehezebb súllyal min.: ${goals.map(g => `<b>${g}</b>`).join(' · ')}</div>`;
-    h += `<div class="ex-info${flashRankId === id ? ' flash' : ''}">${info}</div>`; if (flashRankId === id) flashRankId = null;
+    info += `<div class="ei-more"><span>📊 Statisztika, grafikon, régi rangok</span><b>›</b></div>`;
+    // az EGÉSZ blokk egy gomb: bárhová koppintasz rajta (rang, előző, minimum), megnyílnak a statisztikák és a rangtörténet
+    h += `<div class="ex-info${flashRankId === id ? ' flash' : ''}" role="button" tabindex="0" data-stats="${esc(id)}" aria-label="${esc(hu)}: statisztika és rangtörténet">${info}</div>`; if (flashRankId === id) flashRankId = null;
     const note = state.notes?.[id] || '';
     if (note) h += `<button class="ex-note" data-note="${esc(id)}">📝 ${esc(note)}</button>`;
     if (slot.variants.length > 1) {
@@ -770,7 +772,7 @@ function renderWorkout() {
   });
   if (!slots.length) h += '<div class="note">Ezen a napon nincs gyakorlat. Adj hozzá egyet!</div>';
   h += '<button class="add-ex-btn" id="addExBtn">+ ÚJ GYAKORLAT HOZZÁADÁSA</button>';
-  h += '<div class="note">Koppints a gyakorlat nevére a ki- és becsukáshoz, a képére az animációhoz, az „Előző” sorra a grafikonhoz; a ⋯ gombbal áthelyezheted, cserélheted, jegyzetet írhatsz.</div>';
+  h += '<div class="note">Koppints a gyakorlat nevére a ki- és becsukáshoz, a képére az animációhoz, a rangos keretre a statisztikához és a régi rangokhoz; a ⋯ gombbal áthelyezheted, cserélheted, jegyzetet írhatsz.</div>';
   workout.innerHTML = h;
   bindInputs();
   // a kártya fejlécére (vagy a becsukott kártyára) koppintva ki/becsukódik – a kép (animáció) és a ⋯ gomb kivétel
@@ -778,7 +780,7 @@ function renderWorkout() {
     const slot = slots[e]; if (!slot) return;
     const key = `${c}-${w}-${d}-${slot.uid}`, done = exAllDone(slot, recs[e]);
     const toggle = ev => {
-      if (ev.target.closest('.ex-thumb, .more-btn, input, .set-row, .set-tools, .ex-note, .variant-row, .ei-last, .match-hint')) return;
+      if (ev.target.closest('.ex-thumb, .more-btn, input, .set-row, .set-tools, .ex-note, .variant-row, .ex-info, .match-hint')) return;
       if (!art.classList.contains('collapsed') && !ev.target.closest('.exercise-head')) return;   // nyitott kártyán csak a fejléc csuk
       if (done) { if (openEx.has(key)) openEx.delete(key); else openEx.add(key); } else { if (closedEx.has(key)) closedEx.delete(key); else closedEx.add(key); }
       renderWorkout();

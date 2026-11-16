@@ -549,3 +549,9 @@ body:not([data-view="workout"]) #cycleBanner{display:none}
 .fold-sum.ok{color:#bdf59a;font-weight:800}
 .exercise.collapsed{padding-bottom:11px}
 .ex-note{margin:0 0 8px}
+/* v46: az egész infó-blokk egy egyértelmű gomb a statisztikához */
+.ex-info{cursor:pointer;transition:border-color .15s,background .15s;-webkit-tap-highlight-color:transparent}
+.ex-info:active{background:#11161b;border-color:#3a4a2e}
+.ei-last{border-top:1px solid #1a1f24;padding-top:7px}
+.ei-more{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #1a1f24;padding-top:7px;margin-top:1px;color:#9cff57;font-size:12px;font-weight:800}
+.ei-more b{font-size:18px;line-height:1}
