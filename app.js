@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v51';
+const APP_VERSION = 'v52';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -2104,6 +2104,7 @@ async function signOut() {
 }
 /* Belépés után / indításkor: profil + a saját felhőmentés egyeztetése. */
 async function afterLogin(interactive) {
+  backendCheck = null;
   setTimeout(() => feedPing(), 2500);
   const rows = await sb('/rest/v1/rpc/my_profile', { method: 'POST', body: {} });
   me = rows?.[0] || null;
@@ -2327,7 +2328,30 @@ async function shrinkImage(file, max, square) {
   return new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('Nem sikerült a kép feldolgozása.')), 'image/jpeg', 0.84));
 }
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
-function pickImage(cb) { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.onchange = () => { const f = inp.files?.[0]; if (f) cb(f); }; inp.click(); }
+function pickImage(cb) {   // iOS-en a fájlválasztó csak akkor megbízható, ha a mező a dokumentumban van
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+  document.body.appendChild(inp);
+  inp.onchange = () => { const f = inp.files?.[0]; inp.remove(); if (f) cb(f); };
+  setTimeout(() => { if (!inp.files?.length) inp.remove(); }, 120000);
+  inp.click();
+}
+/* v52: a szerveroldali beállítás (SQL) ellenőrzése – pontosan megmondja, mi hiányzik a profilképhez / a falhoz */
+let backendCheck = null, avatarErr = '';
+async function checkBackend(force) {
+  if (backendCheck && !force) return backendCheck;
+  const miss = [];
+  const t = async (fn, label) => { try { await fn(); } catch (e) { const m = String(e.message || '') + ' ' + (e.code || ''); if (e.status === 404 || e.status === 400 || /PGRST20[25]|42P01|42703|does not exist|not found/i.test(m)) miss.push(label); } };
+  await t(() => sb('/rest/v1/feed_posts?select=id&limit=1'), '002');
+  await t(() => sb(`/rest/v1/profiles?select=avatar_path&id=eq.${auth.user.id}`), '003');
+  await t(async () => { const tk = await accessToken(); const r = await fetch(`${SB_URL}/storage/v1/object/list/${BUCKET}`, { method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + tk, 'Content-Type': 'application/json' }, body: JSON.stringify({ prefix: auth.user.id + '/', limit: 1 }) }); if (!r.ok) { const j = await r.json().catch(() => ({})); const e = new Error(j.message || j.error || 'HTTP ' + r.status); e.status = r.status === 400 && /bucket/i.test(j.message || j.error || '') ? 404 : r.status; throw e; } }, '003');
+  backendCheck = [...new Set(miss)];
+  return backendCheck;
+}
+function backendNoteHtml(miss) {
+  if (!miss?.length) return '';
+  const f = miss.includes('002') ? '<b>002_kozossegi_fal.sql</b>, utána a <b>003_kepek_profil.sql</b>' : '<b>003_kepek_profil.sql</b>';
+  return `<div class="note warn" id="bkNote">⚠️ A profilképhez és a képekhez még le kell futtatni a Supabase-ben (SQL Editor → New query → Run): ${f}.${me?.is_admin ? '' : ' Ezt az adminnak kell megcsinálnia.'}</div>`;
+}
 function openPhoto(src) { const o = document.createElement('div'); o.className = 'overlay photo-view'; o.innerHTML = `<img src="${src}" alt="">`; o.onclick = () => o.remove(); document.body.appendChild(o); }
 /* v50: a posztíró rész (szövegmező) és a lista KÜLÖN frissül – a háttérbeli frissítés (pl. fotózás után visszatérve)
    soha nem rajzolja újra a szövegmezőt, így gépelés közben nem tűnik el a billentyűzet; a hozzászólás-mezők tartalma is megmarad. */
@@ -2476,6 +2500,8 @@ function renderSocial() {
     catch (e) { const m = String(e.message || ''); toast(/different|same/i.test(m) ? 'Az új jelszó nem lehet ugyanaz, mint a régi.' : /reauth|nonce/i.test(m) ? 'A jelszócseréhez újra be kell lépned: jelentkezz ki és be, majd próbáld újra.' : 'Nem sikerült: ' + authErrorText(e)); }
     $('pwSave').disabled = false;
   };
+  checkBackend().then(miss => { const c = workout.querySelector('.me-card'); if (view === 'social' && c && miss.length && !$('bkNote')) c.insertAdjacentHTML('afterbegin', backendNoteHtml(miss)); });
+  if (avatarErr) { workout.querySelector('.me-av-row')?.insertAdjacentHTML('afterend', `<div class="note warn">${esc(avatarErr)}</div>`); avatarErr = ''; }
   $('avatarBtn').onclick = () => pickImage(async f => {
     const btn = $('avatarBtn'); btn.disabled = true; btn.textContent = 'FELTÖLTÉS…';
     const old = me.avatar_path, path = `${auth.user.id}/avatar-${Date.now()}.jpg`;
@@ -2484,7 +2510,11 @@ function renderSocial() {
       await sb('/rest/v1/rpc/set_my_avatar', { method: 'POST', body: { p_path: path } });
       imgCache.set(path, Promise.resolve(URL.createObjectURL(blob))); me.avatar_path = avatarMap[auth.user.id] = path; if (old) storageDelete(old);
       toast('✅ Profilkép frissítve.');
-    } catch (e) { storageDelete(path); toast(/set_my_avatar|PGRST202|404/.test(String(e.message) + e.status) ? 'A profilkép még nincs bekapcsolva (admin: 003-as SQL).' : 'Nem sikerült: ' + authErrorText(e)); }
+    } catch (e) {
+      storageDelete(path); const miss = await checkBackend(true);
+      avatarErr = miss.length ? '' : 'Nem sikerült: ' + (/row-level|security|403|Unauthorized/i.test(String(e.message) + e.status) ? 'nincs jogosultság (jóváhagyott tag vagy? lépj ki és be).' : authErrorText(e));
+      toast(miss.length ? 'A profilkép még nincs bekapcsolva – lásd a sárga üzenetet.' : avatarErr);
+    }
     renderSocial();
   });
   if ($('avatarDel')) $('avatarDel').onclick = async () => {
