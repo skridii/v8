@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v47';
+const APP_VERSION = 'v48';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -502,16 +502,16 @@ function render() {
   renderBottomNav(gated);
   document.body.dataset.view = view;
   if (gated && view !== 'info') renderGate();
-  else if (view === 'history') renderHistory(); else if (view === 'social') renderSocial(); else if (view === 'ranks') renderRanks(); else if (view === 'info') renderInfo(); else renderWorkout();
+  else if (view === 'history') renderHistory(); else if (view === 'feed') renderFeed(); else if (view === 'social') renderSocial(); else if (view === 'ranks') renderRanks(); else if (view === 'info') renderInfo(); else renderWorkout();
   const ib = $('infoBtn'); if (ib) { ib.textContent = view === 'info' ? '← EDZÉS' : 'ℹ️ INFÓ'; ib.onclick = () => { if (!ready) return; view = view === 'info' ? 'workout' : 'info'; render(); window.scrollTo(0, 0); }; }
 }
 /* v42: alsó menüsáv – mindig látszik, egy koppintással bárhova */
-const NAV = [['workout', '🏋️', 'Edzés'], ['history', '📈', 'Fejlődés'], ['ranks', '🏅', 'Rangok'], ['social', '👥', 'Barátok'], ['info', 'ℹ️', 'Infó']];
+const NAV = [['workout', '🏋️', 'Edzés'], ['history', '📈', 'Fejlődés'], ['ranks', '🏅', 'Rangok'], ['feed', '📣', 'Közösség'], ['social', '👥', 'Barátok'], ['info', 'ℹ️', 'Infó']];
 function renderBottomNav(gated) {
   let nav = $('bottomNav');
   if (!nav) { nav = document.createElement('nav'); nav.id = 'bottomNav'; nav.className = 'bottom-nav'; nav.setAttribute('aria-label', 'Fő menü'); document.body.appendChild(nav); }
   nav.classList.toggle('hidden', !ready || (gated && !infoRead()));
-  nav.innerHTML = NAV.map(([v, ic, t]) => `<button type="button" class="bn-btn${view === v ? ' on' : ''}" data-nav="${v}"${view === v ? ' aria-current="page"' : ''}><span class="bn-ic">${ic}</span><span class="bn-t">${t}</span></button>`).join('');
+  nav.innerHTML = NAV.map(([v, ic, t]) => `<button type="button" class="bn-btn${view === v ? ' on' : ''}" data-nav="${v}"${view === v ? ' aria-current="page"' : ''}><span class="bn-ic">${ic}${v === 'feed' && feedUnread > 0 ? `<i class="bn-dot">${feedUnread > 9 ? '9+' : feedUnread}</i>` : ''}</span><span class="bn-t">${t}</span></button>`).join('');
   nav.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => {
     if (!ready) return; const v = b.dataset.nav;
     if (v === view && v === 'workout') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
@@ -734,7 +734,7 @@ function renderWorkout() {
   let h = `<section class="day-head"><div class="dh-row"><div><div class="day-name">${day.name}</div><div class="day-meta">${esc(day.subtitle)} · ${cycLabel(c).toLowerCase()}${w}. hét</div></div><div class="dh-count"><b>${doneN}/${slots.length}</b><span>kész</span></div></div>
     <div class="dh-bar"><i style="width:${slots.length ? Math.round(doneN / slots.length * 100) : 0}%"></i></div>
     <div class="dh-vol">Megmozgatott súly: <b>${kg(vol.total)} kg</b>${pv ? ` · előző: ${kg(pv.total)} kg` : ''}</div>
-    ${nextE >= 0 && doneN > 0 ? `<button class="dh-next" data-jump="${nextE}">▶ Következő: ${esc(hun(slotName(c, w, d, slots[nextE])))}</button>` : ''}${slots.length && doneN === slots.length ? '<div class="dh-done">🎉 Minden gyakorlat kész erre a napra!</div>' : ''}</section>`;
+    ${nextE >= 0 && doneN > 0 ? `<button class="dh-next" data-jump="${nextE}">▶ Következő: ${esc(hun(slotName(c, w, d, slots[nextE])))}</button>` : ''}${slots.length && doneN === slots.length ? '<div class="dh-done">🎉 Minden gyakorlat kész erre a napra!</div>' : ''}${doneN > 0 && me?.approved ? `<button class="dh-share" data-share="${c}-${w}-${d}">📣 Kirakom a Közösségbe</button>` : ''}</section>`;
   slots.forEach((slot, e) => {
     const vi = variantIndex(c, w, d, slot), v = slot.variants[vi], name = v.name, id = exId(name), hu = huShort(v.hu) || hun(id);
     const rec = recs[e], last = latestBefore(c, w, d, name);
@@ -789,6 +789,7 @@ function renderWorkout() {
   });
   workout.querySelectorAll('details.ex-more').forEach(dt => dt.ontoggle = () => { if (dt.open) openEx.add(dt.dataset.mkey); else openEx.delete(dt.dataset.mkey); });
   workout.querySelectorAll('[data-more]').forEach(b => b.onclick = () => openMore(+b.dataset.more));
+  workout.querySelectorAll('[data-share]').forEach(b => b.onclick = () => { feedDraft = { body: '', attach: b.dataset.share }; view = 'feed'; render(); window.scrollTo(0, 0); });
   workout.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => { const el = $('ex-' + b.dataset.jump); if (el) { const y = el.getBoundingClientRect().top + window.scrollY - (document.querySelector('.sticky-nav')?.getBoundingClientRect().bottom || 120) - 8; window.scrollTo({ top: y, behavior: 'smooth' }); } });
 }
 /* ⋯ menü egy gyakorlathoz: nagy, könnyen eltalálható gombok */
@@ -2102,6 +2103,7 @@ async function signOut() {
 }
 /* Belépés után / indításkor: profil + a saját felhőmentés egyeztetése. */
 async function afterLogin(interactive) {
+  setTimeout(() => feedPing(), 2500);
   const rows = await sb('/rest/v1/rpc/my_profile', { method: 'POST', body: {} });
   me = rows?.[0] || null;
   if (!me) throw new Error('A profil nem található.');
@@ -2223,6 +2225,152 @@ function renderGate() {
     () => { friends = null; view = 'workout'; render(); window.scrollTo(0, 0); if (bodyWeight()) toast(`Üdv${me?.display_name ? ', ' + me.display_name : ''}! Jó edzést!`); });
   const c2 = $('copyBtn2'); if (c2) c2.onclick = copyLink;
 }
+/* ===== v48: KÖZÖSSÉG – fal posztokkal, mindenki edzéseivel, hozzászólásokkal és lájkokkal =====
+   A tagok edzései AUTOMATIKUSAN megjelennek (a naplójukból, ugyanazzal a láthatósággal, mint a Barátok oldalon);
+   ezek alá – és a szöveges posztok alá – bárki írhat és lájkolhat. Supabase: sql/002_kozossegi_fal.sql. */
+let feedPosts = null, feedComments = [], feedLikes = [], feedErr = '', feedMissing = false, feedBusy = false, feedAt = 0, feedUnread = 0;
+let feedDraft = { body: '', attach: '' }, feedOpen = new Set();
+const FEED_SEEN_KEY = 'ironlog-feed-seen';
+const feedSeen = () => Number(localStorage.getItem(FEED_SEEN_KEY) || 0);
+function agoText(t) {
+  const s = (Date.now() - t) / 1000;
+  if (s < 60) return 'most'; if (s < 3600) return Math.floor(s / 60) + ' perce'; if (s < 86400) return Math.floor(s / 3600) + ' órája';
+  if (s < 172800) return 'tegnap'; if (s < 604800) return Math.floor(s / 86400) + ' napja';
+  return new Date(t).toLocaleDateString('hu-HU', { month: 'short', day: 'numeric' });
+}
+const isMissingTable = e => /feed_|PGRST205|42P01|does not exist|schema cache/i.test(String(e?.message || '') + String(e?.code || '')) && (e?.status === 404 || /PGRST205|42P01/.test(String(e?.code || '')));
+async function feedPing() {   // olvasatlan hozzászólások az én edzéseim / posztjaim alatt (piros szám a menüben)
+  if (!auth || !me?.approved || feedMissing) return;
+  try {
+    const since = new Date(feedSeen() || Date.now() - 7 * 864e5).toISOString();
+    const rows = await sb(`/rest/v1/feed_comments?select=id&target_user=eq.${auth.user.id}&user_id=neq.${auth.user.id}&created_at=gt.${encodeURIComponent(since)}&limit=50`);
+    const n = (rows || []).length; if (n !== feedUnread) { feedUnread = n; renderBottomNav(document.body.classList.contains('gated')); }
+  } catch (e) { if (isMissingTable(e)) feedMissing = true; }
+}
+async function loadFeed(force) {
+  if (feedBusy || !auth || !me?.approved) return;
+  if (!force && feedPosts && Date.now() - feedAt < 30000) return;
+  feedBusy = true; feedErr = '';
+  try {
+    if (friends === null || Date.now() - friendsAt > 60000) await loadFriends();
+    const [posts, comments, likes] = await Promise.all([
+      sb('/rest/v1/feed_posts?select=id,user_id,body,workout,created_at&order=created_at.desc&limit=100'),
+      sb('/rest/v1/feed_comments?select=id,target_user,target_key,user_id,body,created_at&order=created_at.asc&limit=3000'),
+      sb('/rest/v1/feed_likes?select=target_user,target_key,user_id&limit=5000')
+    ]);
+    feedPosts = posts || []; feedComments = comments || []; feedLikes = likes || []; feedMissing = false; feedAt = Date.now();
+  } catch (e) { if (isMissingTable(e)) { feedMissing = true; feedPosts = []; } else feedErr = authErrorText(e); }
+  feedBusy = false;
+  if (view === 'feed') renderFeed();
+}
+function feedPeople() {   // én + a látható tagok (állapottal)
+  const out = [{ id: auth.user.id, name: me?.display_name || 'Én', state, mine: true }];
+  for (const f of friends || []) if (f.approved && f.state) out.push({ id: f.id, name: f.display_name || 'Tag', state: f.state });
+  return out;
+}
+function feedItems() {
+  const people = feedPeople(), byId = Object.fromEntries(people.map(p => [p.id, p])), items = [], since = Date.now() - 45 * 864e5;
+  const postedW = new Set();
+  for (const p of feedPosts || []) {
+    const who = byId[p.user_id] || { id: p.user_id, name: (friends || []).find(f => f.id === p.user_id)?.display_name || 'Tag', state: null };
+    const wk = p.workout?.key && /^\d+-\d+-\d+$/.test(p.workout.key) ? p.workout.key : '';
+    if (wk) postedW.add(p.user_id + '|' + wk);
+    items.push({ type: 'p', who, post: p, wk, key: wk ? 'w:' + wk : 'p:' + p.id, t: Date.parse(p.created_at) || 0 });
+  }
+  for (const who of people) {
+    const sum = who.mine ? friendSummary(state) : (friends.find(f => f.id === who.id)?.sum || friendSummary(who.state));
+    for (const x of sum.list) { if (!x.t || x.t < since || x.c < 1 || postedW.has(who.id + '|' + x.k)) continue; items.push({ type: 'w', who, wk: x.k, key: 'w:' + x.k, t: x.t }); }
+  }
+  return items.sort((a, b) => b.t - a.t).slice(0, 60);
+}
+function workoutCardHtml(who, k) {
+  if (!who.state) return '';
+  const [c, w, d] = k.split('-').map(Number);
+  return withStateIf(who.mine ? state : who.state, () => {
+    const slots = layoutFor(c, w)[d] || [], rows = [];
+    for (const slot of slots) {
+      const name = slotName(c, w, d, slot), id = exId(name), rec = recordFor(c, w, d, name);
+      if (!rec || !anyDone(rec)) continue;
+      const done = (rec.sets || []).filter(x => x?.done && positive(x.reps)).map(x => `${showNum(x.weight) || '0'}×${showNum(x.reps)}`);
+      const pb = personalBest(id), isPb = pb && pb.c === c && pb.w === w && (rec.sets || []).some(x => x?.done && toNum(x.weight) === pb.weight && toNum(x.reps) === pb.reps);
+      rows.push(`<li><span>${esc(hun(id))}${isPb ? ' <em class="fw-pb">🏆 rekord</em>' : ''}</span><b>${esc(done.join(' · '))}</b></li>`);
+    }
+    const vol = dayVolume(c, w, d).total;
+    return `<div class="fw-card"><div class="fw-top"><b>${esc(DAYS[d]?.name || '')}</b><span>${state.maxCycle > 1 || c > 1 ? c + '. ciklus · ' : ''}${w}. hét · ${kg(vol)} kg megmozgatva</span></div><ul class="fw-list">${rows.join('') || '<li><span>Még nincs kész szett.</span></li>'}</ul></div>`;
+  });
+}
+function avatarHtml(who) {
+  const n = (who.name || '?').trim(), hue = [...(who.id || n)].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 360, 7);
+  return `<span class="fd-av" style="--h:${hue}">${esc(n.slice(0, 1).toUpperCase())}</span>`;
+}
+function renderFeed() {
+  if (!auth || !me) { workout.innerHTML = '<section class="social-card"><h2>📣 Közösség</h2><div class="note">A közösségi falhoz jelentkezz be a 👥 Barátok oldalon.</div></section>'; if (auth && !me) afterLogin(false).then(() => loadFeed(true)).catch(() => {}); return; }
+  if (!me.approved) { workout.innerHTML = '<section class="social-card"><h2>📣 Közösség</h2><div class="note">A fiókodat még jóvá kell hagynia az adminnak.</div></section>'; return; }
+  if (feedPosts === null) { workout.innerHTML = '<section class="social-card"><h2>📣 Közösség</h2><div class="note">Betöltés…</div></section>'; loadFeed(true); return; }
+  if (!feedBusy && Date.now() - feedAt > 30000) loadFeed(true);
+  const myLast = friendSummary(state).list.find(x => x.c >= 1), att = feedDraft.attach || '';
+  let h = `<section class="fd-compose"><div class="fd-row">${avatarHtml({ id: auth.user.id, name: me.display_name })}<textarea id="fdBody" maxlength="1000" rows="${feedDraft.body || att ? 3 : 2}" placeholder="Mi volt ma? Írj valamit a többieknek…">${esc(feedDraft.body)}</textarea></div>`;
+  if (att) h += `<div class="fd-attach">📎 Csatolt edzés: <b>${esc(DAYS[+att.split('-')[2]]?.name || '')} · ${esc(att.split('-')[1])}. hét</b> <button id="fdUnattach" aria-label="Csatolás törlése">✕</button></div>`;
+  else if (myLast) h += `<button class="fd-attach-btn" id="fdAttach">📎 Csatolom a legutóbbi edzésemet (${esc(DAYS[myLast.d]?.name || '')} · ${myLast.w}. hét)</button>`;
+  h += `<button class="fd-post" id="fdPost">📣 KIRAKOM</button></section>`;
+  if (feedMissing) h += `<div class="note warn">A hozzászólások, lájkok és posztok még nincsenek bekapcsolva: az adminnak egyszer le kell futtatnia a beállítást a Supabase-ben (sql/002_kozossegi_fal.sql). Addig is látod a tagok edzéseit.</div>`;
+  if (feedErr) h += `<div class="note warn">${esc(feedErr)}</div>`;
+  const items = feedItems(), seen = feedSeen();
+  if (!items.length) h += '<div class="note">Még nincs mit mutatni. Ha valaki edz, itt megjelenik – a tiéd is!</div>';
+  for (const it of items) {
+    const tu = it.who.id, cm = feedComments.filter(x => x.target_user === tu && x.target_key === it.key), lk = feedLikes.filter(x => x.target_user === tu && x.target_key === it.key);
+    const liked = lk.some(x => x.user_id === auth.user.id), fid = tu + '|' + it.key, open = feedOpen.has(fid), shown = open ? cm : cm.slice(-2);
+    const nameOfUser = uid => uid === auth.user.id ? (me.display_name || 'Én') : ((friends || []).find(f => f.id === uid)?.display_name || 'Tag');
+    h += `<article class="fd-item" data-fid="${esc(fid)}"><div class="fd-head">${avatarHtml(it.who)}<div><b>${esc(it.who.name)}</b><span>${it.type === 'w' ? 'edzett' : 'posztolt'} · ${agoText(it.t)}</span></div>${it.type === 'p' && tu === auth.user.id ? `<button class="fd-del" data-delpost="${esc(it.post.id)}" aria-label="Poszt törlése">🗑</button>` : ''}</div>`;
+    if (it.type === 'p' && it.post.body) h += `<div class="fd-body">${esc(it.post.body).replace(/\n/g, '<br>')}</div>`;
+    if (it.wk) h += workoutCardHtml(it.who, it.wk);
+    h += `<div class="fd-actions"><button class="fd-like${liked ? ' on' : ''}" data-like="${esc(fid)}"${feedMissing ? ' disabled' : ''}>${liked ? '❤️' : '🤍'} ${lk.length || ''}</button><button class="fd-cbtn" data-cfocus="${esc(fid)}"${feedMissing ? ' disabled' : ''}>💬 ${cm.length || ''} Hozzászólás</button></div>`;
+    if (cm.length > shown.length) h += `<button class="fd-more" data-copen="${esc(fid)}">Mind a ${cm.length} hozzászólás megjelenítése</button>`;
+    if (shown.length) h += `<div class="fd-comments">${shown.map(x => `<div class="fd-c${x.target_user === auth.user.id && x.user_id !== auth.user.id && Date.parse(x.created_at) > seen ? ' new' : ''}"><b>${esc(nameOfUser(x.user_id))}</b> ${esc(x.body)}<span>${agoText(Date.parse(x.created_at))}${x.user_id === auth.user.id || x.target_user === auth.user.id ? ` · <button data-delc="${esc(x.id)}">törlés</button>` : ''}</span></div>`).join('')}</div>`;
+    if (!feedMissing) h += `<form class="fd-cform" data-cform="${esc(fid)}"><input maxlength="500" placeholder="Írj hozzászólást…" aria-label="Hozzászólás"><button aria-label="Küldés">➤</button></form>`;
+    h += `</article>`;
+  }
+  workout.innerHTML = h;
+  // olvasottnak jelöljük (a piros szám eltűnik)
+  localStorage.setItem(FEED_SEEN_KEY, String(Date.now())); if (feedUnread) { feedUnread = 0; renderBottomNav(false); }
+  const body = $('fdBody'); body.oninput = () => { feedDraft.body = body.value; };
+  if ($('fdAttach')) $('fdAttach').onclick = () => { feedDraft.attach = myLast.k; renderFeed(); };
+  if ($('fdUnattach')) $('fdUnattach').onclick = () => { feedDraft.attach = ''; renderFeed(); };
+  $('fdPost').onclick = async () => {
+    const txt = body.value.trim(); if (!txt && !feedDraft.attach) { toast('Írj valamit, vagy csatold az edzésedet.'); return; }
+    if (feedMissing) { toast('A posztolás még nincs bekapcsolva (admin: SQL beállítás).'); return; }
+    $('fdPost').disabled = true;
+    try { await sb('/rest/v1/feed_posts', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: { body: txt, workout: feedDraft.attach ? { key: feedDraft.attach } : null } }); feedDraft = { body: '', attach: '' }; toast('Kirakva! 📣'); await loadFeed(true); }
+    catch (e) { $('fdPost').disabled = false; toast('Nem sikerült: ' + authErrorText(e)); }
+  };
+  const split = fid => { const i = fid.indexOf('|'); return [fid.slice(0, i), fid.slice(i + 1)]; };
+  workout.querySelectorAll('[data-like]').forEach(b => b.onclick = async () => {
+    const [tu, key] = split(b.dataset.like), on = b.classList.contains('on'); b.disabled = true;
+    try {
+      if (on) await sb(`/rest/v1/feed_likes?target_user=eq.${tu}&target_key=eq.${encodeURIComponent(key)}&user_id=eq.${auth.user.id}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+      else await sb('/rest/v1/feed_likes', { method: 'POST', headers: { Prefer: 'return=minimal,resolution=ignore-duplicates' }, body: { target_user: tu, target_key: key } });
+      await loadFeed(true);
+    } catch (e) { b.disabled = false; toast('Nem sikerült: ' + authErrorText(e)); }
+  });
+  workout.querySelectorAll('[data-cfocus]').forEach(b => b.onclick = () => workout.querySelector(`[data-cform="${CSS.escape(b.dataset.cfocus)}"] input`)?.focus());
+  workout.querySelectorAll('[data-copen]').forEach(b => b.onclick = () => { feedOpen.add(b.dataset.copen); renderFeed(); });
+  workout.querySelectorAll('[data-cform]').forEach(f => f.onsubmit = async ev => {
+    ev.preventDefault(); const inp = f.querySelector('input'), txt = inp.value.trim(); if (!txt) return;
+    const [tu, key] = split(f.dataset.cform); inp.disabled = true;
+    try { await sb('/rest/v1/feed_comments', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: { target_user: tu, target_key: key, body: txt.slice(0, 500) } }); feedOpen.add(f.dataset.cform); await loadFeed(true); }
+    catch (e) { inp.disabled = false; toast('Nem sikerült: ' + authErrorText(e)); }
+  });
+  workout.querySelectorAll('[data-delc]').forEach(b => b.onclick = async () => {
+    if (!confirm('Törlöd ezt a hozzászólást?')) return;
+    try { await sb(`/rest/v1/feed_comments?id=eq.${b.dataset.delc}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } }); await loadFeed(true); } catch (e) { toast('Nem sikerült: ' + authErrorText(e)); }
+  });
+  workout.querySelectorAll('[data-delpost]').forEach(b => b.onclick = async () => {
+    if (!confirm('Törlöd ezt a posztot?')) return;
+    try { await sb(`/rest/v1/feed_posts?id=eq.${b.dataset.delpost}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } }); await loadFeed(true); } catch (e) { toast('Nem sikerült: ' + authErrorText(e)); }
+  });
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { feedPing(); if (view === 'feed') loadFeed(true); } });
+
 function renderSocial() {
   let h = `<div class="eyebrow">PROFIL & BARÁTOK</div><div class="day-name">BARÁTOK</div>`;
   if (!auth) return renderAuth(h + `<div class="day-meta">Lépj be, és kövessétek egymás edzéseit. Az edzésnaplód a telefonon marad, a fiókba csak egy másolat kerül.</div>`, () => { friends = null; renderSocial(); });

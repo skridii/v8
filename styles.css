@@ -555,3 +555,50 @@ body:not([data-view="workout"]) #cycleBanner{display:none}
 .ei-last{border-top:1px solid #1a1f24;padding-top:7px}
 .ei-more{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #1a1f24;padding-top:7px;margin-top:1px;color:#9cff57;font-size:12px;font-weight:800}
 .ei-more b{font-size:18px;line-height:1}
+/* v48: Közösség (fal) */
+.bottom-nav{grid-template-columns:repeat(6,1fr)}
+.bn-t{font-size:9.5px}
+.bn-ic{position:relative}
+.bn-dot{position:absolute;top:-5px;right:-10px;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:#ff4d5e;color:#fff;font:900 9.5px/16px system-ui,sans-serif;font-style:normal;filter:none}
+.bn-btn .bn-dot{opacity:1}
+.dh-share{margin-top:8px;width:100%;background:#15191e;border:1px solid #2c4220;color:#9cff57;border-radius:11px;padding:10px 13px;font-weight:900;font-size:13px;cursor:pointer;text-align:left}
+.fd-compose{background:#12161b;border:1px solid #232a31;border-radius:17px;padding:12px;margin:4px 0 14px;display:grid;gap:9px}
+.fd-row{display:flex;gap:10px;align-items:flex-start}
+.fd-row textarea{flex:1;min-height:44px;resize:vertical;background:#0a0d10;border:1px solid #2a3037;border-radius:12px;color:#e8edf1;padding:10px 12px;font:inherit;font-size:14px}
+.fd-av{flex-shrink:0;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-weight:900;color:#0a0e08;background:hsl(var(--h) 70% 62%)}
+.fd-attach{font-size:12px;color:#a9c79a;background:#101a0c;border:1px solid #2c4220;border-radius:10px;padding:8px 10px;display:flex;align-items:center;gap:6px}
+.fd-attach b{color:#e8edf1}
+.fd-attach button{margin-left:auto;background:none;border:0;color:#8b949d;font-size:14px;cursor:pointer}
+.fd-attach-btn{background:none;border:1px dashed #2a3037;border-radius:10px;padding:9px 10px;color:#9aa3ac;font-size:12px;font-weight:700;text-align:left;cursor:pointer}
+.fd-post{background:#9cff57;color:#0a0e08;border:0;border-radius:12px;padding:12px;font-weight:900;font-size:14px;cursor:pointer}
+.fd-post:disabled{opacity:.5}
+.fd-item{background:#12161b;border:1px solid #20262c;border-radius:17px;padding:13px;margin-bottom:12px}
+.fd-head{display:flex;gap:10px;align-items:center}
+.fd-head>div{flex:1;min-width:0}
+.fd-head b{display:block;font-size:14.5px}
+.fd-head span{font-size:11.5px;color:#7d8791}
+.fd-del{background:none;border:0;font-size:16px;cursor:pointer;opacity:.7}
+.fd-body{margin:10px 0 2px;font-size:14px;line-height:1.5;color:#e8edf1;white-space:normal;word-break:break-word}
+.fw-card{margin-top:10px;background:#0b0e11;border:1px solid #1f252b;border-radius:12px;padding:10px 11px}
+.fw-top{display:flex;flex-direction:column;gap:2px;margin-bottom:7px}
+.fw-top b{font-size:13px;color:#9cff57}
+.fw-top span{font-size:11px;color:#7d8791}
+.fw-list{list-style:none;margin:0;padding:0;display:grid;gap:5px}
+.fw-list li{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#aab3bc}
+.fw-list li b{color:#e8edf1;text-align:right;font-weight:800;white-space:nowrap}
+.fw-pb{font-style:normal;color:#d9b84a;font-size:10.5px}
+.fd-actions{display:flex;gap:8px;margin-top:10px}
+.fd-actions button{flex:1;background:#181d23;border:1px solid #2a3037;border-radius:11px;padding:9px;color:#dbe0e5;font-weight:800;font-size:13px;cursor:pointer}
+.fd-actions button:disabled{opacity:.4}
+.fd-like.on{border-color:#5a2a33;background:#22141a;color:#ff8a9a}
+.fd-more{background:none;border:0;color:#8b949d;font-size:12px;font-weight:800;padding:8px 0 0;cursor:pointer}
+.fd-comments{display:grid;gap:6px;margin-top:9px}
+.fd-c{background:#0b0e11;border-radius:11px;padding:8px 10px;font-size:13px;color:#dbe0e5;line-height:1.4;word-break:break-word}
+.fd-c.new{box-shadow:inset 3px 0 0 #9cff57}
+.fd-c b{color:#9cff57;margin-right:4px}
+.fd-c span{display:block;font-size:10.5px;color:#6d7781;margin-top:2px}
+.fd-c span button{background:none;border:0;color:#a46a6a;font-size:10.5px;padding:0;cursor:pointer}
+.fd-cform{display:flex;gap:8px;margin-top:9px}
+.fd-cform input{flex:1;background:#0a0d10;border:1px solid #2a3037;border-radius:99px;color:#e8edf1;padding:10px 14px;font:inherit;font-size:14px;min-width:0}
+.fd-cform button{width:42px;border-radius:50%;background:#9cff57;border:0;color:#0a0e08;font-weight:900;font-size:16px;cursor:pointer}
+.note.warn{border-color:#5a4a20;color:#e6cf86}
