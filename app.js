@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v42';
+const APP_VERSION = 'v43';
 
 const DAYS = [
   { name: 'ALSÓTEST 1', short: 'A1', subtitle: 'Felhúzás és combfeszítő' },
@@ -688,12 +688,19 @@ function matchHint(slot, e, s, wtRaw) {
 }
 
 /* v42: átláthatóbb edzésnap – tömör fejléc napi haladással, gyakorlatkártyán a lényeg elöl, a többi lenyitható; a kész gyakorlat összecsukódik */
-const openEx = new Set();
+const openEx = new Set(), closedEx = new Set();   // kézzel kinyitott (kész) / kézzel becsukott (nem kész) kártyák
 function exAllDone(slot, rec) { const n = setCount(slot, rec); if (!n) return false; for (let s = 0; s < n; s++) if (!rec?.sets?.[s]?.done) return false; return true; }
-function quickMatch(c, w, d, name) {
+// „Ne ess vissza” egy sorban: a következő 3 súlylépcső minimum ismétlése (mindig látszik)
+function goalLine(c, w, d, name) {
   const ref = matchRef(c, w, d, name); if (!ref) return '';
-  const wt = Math.round((ref.w + weightStep(exId(name))) * 100) / 100, r = minRepsFor(ref, name, wt);
-  return r >= 4 ? `<span class="q-chip q-goal">🎯 ${showNum(wt)} kg → min. <b>${r}</b> ism.</span>` : '';
+  const step = weightStep(exId(name)), out = [];
+  for (let k = 1; k <= 3; k++) { const wt = Math.round((ref.w + k * step) * 100) / 100, r = minRepsFor(ref, name, wt); if (r >= 4) out.push(`<b>${showNum(wt)} kg × ${r}</b>`); }
+  return out.length ? `<div class="goal-line">🎯 <span>Nehezebb súllyal minimum:</span> ${out.join('<i>·</i>')}</div>` : '';
+}
+function rankLineHtml(id, rk) {
+  if (rk && rk.pts !== undefined) { const h = `<div class="rank-line rl-compact${flashRankId === id ? ' flash' : ''}" style="--rc:${rk.color}">${rankBadge(rk)}<div><div class="rl-top"><b style="color:${rk.color}">${esc(rk.label)}</b><em>${esc(oneRmText(rk))}</em></div><div class="rr-bar"><i style="width:${Math.round(rk.pct * 100)}%;background:${rk.color}"></i></div><span>${esc(rankNeedText(rk))}</span></div></div>`; if (flashRankId === id) flashRankId = null; return h; }
+  if (rk?.needBw) return `<div class="rank-line muted">🏅 Add meg a testsúlyodat a Rangok oldalon, és itt látod a rangodat.</div>`;
+  return '';
 }
 function renderWorkout() {
   if (!ready) { workout.innerHTML = '<div class="note">Adatok betöltése…</div>'; return; }
@@ -709,17 +716,21 @@ function renderWorkout() {
     const vi = variantIndex(c, w, d, slot), v = slot.variants[vi], name = v.name, id = exId(name), hu = huShort(v.hu) || hun(id);
     const rec = recs[e], last = latestBefore(c, w, d, name);
     const sets = rec?.sets || [emptySet(), emptySet()], wu = rec?.warmup || emptySet(), pb = personalBest(id);
-    const key = `${c}-${w}-${d}-${slot.uid}`, done = exAllDone(slot, rec), collapsed = done && !openEx.has(key), rk = rankOf(id);
+    const key = `${c}-${w}-${d}-${slot.uid}`, done = exAllDone(slot, rec), collapsed = done ? !openEx.has(key) : closedEx.has(key), rk = rankOf(id);
     const rkMini = rk && rk.pts !== undefined ? `<span class="rk-mini" style="color:${rk.color}">${esc(rk.label)}</span>` : '';
-    h += `<article class="exercise${done ? ' ex-done' : ''}${collapsed ? ' collapsed' : ''}" id="ex-${e}"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(hu)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><button class="exercise-title ex-link" data-stats="${esc(id)}">${esc(hu)}</button>${hu !== name ? `<div class="exercise-en">${esc(name)}</div>` : ''}<div class="ex-meta"><span class="prescribed">${esc(showReps(slot))}</span>${rkMini}</div></div><button class="more-btn" data-more="${e}" aria-label="További lehetőségek">⋯</button></div>`;
-    if (collapsed) { h += `<button class="done-sum" data-open="${esc(key)}"><span>✓ KÉSZ · ${esc(setsText(rec))}</span><em>megnyitás ▾</em></button></article>`; return; }
+    h += `<article class="exercise${done ? ' ex-done' : ''}${collapsed ? ' collapsed' : ''}" id="ex-${e}"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(hu)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><div class="exercise-title">${esc(hu)}</div>${hu !== name ? `<div class="exercise-en">${esc(name)}</div>` : ''}<div class="ex-meta"><span class="prescribed">${esc(showReps(slot))}</span>${rkMini}</div></div><span class="fold-ic" aria-hidden="true">${collapsed ? '▾' : '▴'}</span><button class="more-btn" data-more="${e}" aria-label="További lehetőségek">⋯</button></div>`;
+    if (collapsed) {
+      h += done ? `<div class="done-sum"><span>✓ KÉSZ · ${esc(setsText(rec))}</span></div>` : `<div class="done-sum todo">${last ? `Előző: <b>${esc(setsText(last))}</b>` : 'Még nincs előzmény'}</div>${goalLine(c, w, d, name)}`;
+      h += `</article>`; return;
+    }
+    h += rankLineHtml(id, rk) + goalLine(c, w, d, name);
     const note = state.notes?.[id] || '';
     if (note) h += `<button class="ex-note" data-note="${esc(id)}">📝 ${esc(note)}</button>`;
     if (slot.variants.length > 1) {
       const other = slot.variants[1 - vi];
       h += `<div class="variant-row"><span class="variant-tag">VÁLTAKOZÓ</span><button class="variant-btn" data-variant data-e="${e}">↔ Ezen a héten inkább: ${esc(huShort(other.hu) || other.name)}</button></div>`;
     }
-    h += `<div class="quick">${last ? `<button class="q-chip" data-stats="${esc(id)}">Előző: <b>${esc(setsText(last))}</b></button>` : '<span class="q-chip q-new">Első alkalom – írd be, mennyit bírsz</span>'}${quickMatch(c, w, d, name)}</div>`;
+    h += `<div class="quick">${last ? `<button class="q-chip" data-stats="${esc(id)}">Előző: <b>${esc(setsText(last))}</b> 📈</button>` : '<span class="q-chip q-new">Első alkalom – írd be, mennyit bírsz</span>'}</div>`;
     h += `<div class="sets"><div class="set-labels"><span>SZETT</span><span>KG</span><span>ISMÉTLÉS</span><span></span></div>`;
     const bwx = isBwExercise(name);
     h += setRowHtml('B', e, wu, 'warmup', 0, bwx);
@@ -730,24 +741,31 @@ function renderWorkout() {
     }
     h += `<div class="set-tools"><button class="set-tool" data-addset data-e="${e}">+ SZETT</button>${nSets > 1 ? `<button class="set-tool minus" data-delset data-e="${e}">− SZETT</button>` : ''}</div></div>`;
     let more = '';
-    if (rk && rk.pts !== undefined) { more += `<button class="rank-line${flashRankId === id ? ' flash' : ''}" data-stats="${esc(id)}" style="--rc:${rk.color}">${rankBadge(rk)}<div><div class="rl-top"><b style="color:${rk.color}">${esc(rk.label)}</b><em>${esc(oneRmText(rk))}</em></div><div class="rr-bar"><i style="width:${Math.round(rk.pct * 100)}%;background:${rk.color}"></i></div><span>${esc(rankNeedText(rk))}</span></div></button>`; if (flashRankId === id) flashRankId = null; }
-    else if (rk?.needBw) more += `<div class="rank-line muted">🏅 Add meg a testsúlyodat a RANGOK fülön, és itt látod a rangodat.</div>`;
     if (pb) more += `<div class="record-badge">🏆 SZEMÉLYES REKORD · ${showNum(pb.weight)} kg × ${showNum(pb.reps)} · ${isImported(pb.c) ? 'Hevy' : (state.maxCycle > 1 ? pb.c + '. ciklus, ' : '') + pb.w + '. hét'}</div>`;
     if (last) more += `<div class="history"><div>LEGUTÓBBI ALKALOM · ${esc(sessLabel(last.c, last.w, last.d, last))}${isImported(last.c) && last.t ? ' · ' + esc(fmtDate(last.t)) : ''}</div><strong>Bemelegítés: ${esc(showNum(last.warmup?.weight)) || '—'} kg × ${esc(showNum(last.warmup?.reps)) || '—'} · ${esc(setsText(last))}</strong></div>`;
-    more += matchLineHtml(c, w, d, name);
     if (!note) more += `<button class="ex-note empty-note" data-note="${esc(id)}">📝 Jegyzet a géphez (pl. ülés 4-es, támla 2. lyuk)</button>`;
     more += `<div class="last">Pihenő: bemelegítő szett után <strong>1:00</strong> · munkasorozat után <strong>2:30</strong></div>`;
-    h += `<details class="ex-more"${openEx.has(key + ':more') ? ' open' : ''} data-mkey="${esc(key)}:more"><summary>${rk && rk.pts !== undefined ? 'Rang, rekord, előzmények' : 'Rekord, előzmények, jegyzet'}</summary>${more}</details>`;
-    if (done) h += `<button class="collapse-btn" data-fold="${esc(key)}">Összecsukás ▴</button>`;
+    h += `<details class="ex-more"${openEx.has(key + ':more') ? ' open' : ''} data-mkey="${esc(key)}:more"><summary>Rekord, részletes előzmények${note ? '' : ', jegyzet'}</summary>${more}</details>`;
     h += `</article>`;
   });
   if (!slots.length) h += '<div class="note">Ezen a napon nincs gyakorlat. Adj hozzá egyet!</div>';
   h += '<button class="add-ex-btn" id="addExBtn">+ ÚJ GYAKORLAT HOZZÁADÁSA</button>';
-  h += '<div class="note">Tipp: a gyakorlat nevére koppintva látod az előzményeit és a grafikonját, a képére koppintva az animációt; a ⋯ gombbal áthelyezheted, cserélheted, vagy jegyzetet írhatsz hozzá.</div>';
+  h += '<div class="note">Tipp: a gyakorlat fejlécére koppintva kinyitod / becsukod, a képére koppintva látod az animációt, az „Előző” sorra koppintva az előzményeket és a grafikont; a ⋯ gombbal áthelyezheted, cserélheted, vagy jegyzetet írhatsz hozzá.</div>';
   workout.innerHTML = h;
   bindInputs();
-  workout.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { openEx.add(b.dataset.open); renderWorkout(); });
-  workout.querySelectorAll("[data-fold]").forEach(b => b.onclick = () => { openEx.delete(b.dataset.fold); renderWorkout(); });
+  // a kártya fejlécére (vagy a becsukott kártyára) koppintva ki/becsukódik – a kép (animáció) és a ⋯ gomb kivétel
+  workout.querySelectorAll('.exercise').forEach((art, e) => {
+    const slot = slots[e]; if (!slot) return;
+    const key = `${c}-${w}-${d}-${slot.uid}`, done = exAllDone(slot, recs[e]);
+    const toggle = ev => {
+      if (ev.target.closest('.ex-thumb, .more-btn, input, .set-row, .set-tools, details, .ex-note, .variant-row, .q-chip')) return;
+      if (!art.classList.contains('collapsed') && !ev.target.closest('.exercise-head')) return;   // nyitott kártyán csak a fejléc csuk
+      if (done) { if (openEx.has(key)) openEx.delete(key); else openEx.add(key); } else { if (closedEx.has(key)) closedEx.delete(key); else closedEx.add(key); }
+      renderWorkout();
+      const el = $('ex-' + e); if (el && el.getBoundingClientRect().top < 110) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+    art.onclick = toggle;
+  });
   workout.querySelectorAll('details.ex-more').forEach(dt => dt.ontoggle = () => { if (dt.open) openEx.add(dt.dataset.mkey); else openEx.delete(dt.dataset.mkey); });
   workout.querySelectorAll('[data-more]').forEach(b => b.onclick = () => openMore(+b.dataset.more));
   workout.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => { const el = $('ex-' + b.dataset.jump); if (el) { const y = el.getBoundingClientRect().top + window.scrollY - (document.querySelector('.sticky-nav')?.getBoundingClientRect().bottom || 120) - 8; window.scrollTo({ top: y, behavior: 'smooth' }); } });

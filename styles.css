@@ -496,3 +496,18 @@ body:not([data-view="workout"]) #cycleBanner{display:none}
 /* gyakorlatlista: magyar név elöl, angol alatta */
 .lib-en{font-size:10.5px;color:#6d7781}
 @media(max-width:600px){.week-grid{width:52vw}.bn-t{font-size:10px}}
+/* v43: koppintásra ki/becsukódó kártya, mindig látható rang és minimum ismétlés */
+.exercise-head{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.exercise.collapsed{cursor:pointer}
+.exercise-title{color:#f4f6f8}
+.fold-ic{flex-shrink:0;align-self:center;color:#6d7781;font-size:14px;padding:0 2px}
+.exercise.collapsed .fold-ic{color:#9cff57}
+.rl-compact{margin:11px 0 0;padding:9px 11px;cursor:default}
+.goal-line{margin:8px 0 0;padding:8px 11px;background:#101a0c;border:1px solid #2c4220;border-radius:10px;color:#a9c79a;font-size:12px;line-height:1.5}
+.goal-line span{color:#8fb37c}
+.goal-line b{color:#9cff57;white-space:nowrap}
+.goal-line i{font-style:normal;color:#4f6b40;margin:0 5px}
+.done-sum{cursor:pointer}
+.done-sum.todo{background:#0a0d10;border-color:#232a31;color:#a8b1ba;font-weight:600}
+.done-sum.todo b{color:#e8edf1}
+.quick{margin:8px 0 10px}
