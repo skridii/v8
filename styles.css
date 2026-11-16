@@ -427,7 +427,7 @@ body.gated .sticky-nav{display:none}
 html,body{overflow-x:clip}
 /* ===== v42: átláthatóbb felület ===== */
 /* fejléc + alsó menü */
-#infoBtn{display:none!important}
+#infoBtn{display:none}
 .topbar{padding-top:max(12px,env(safe-area-inset-top));padding-bottom:10px}
 main{padding-bottom:calc(96px + env(safe-area-inset-bottom))!important}
 .bottom-nav{position:fixed;left:0;right:0;bottom:0;z-index:40;display:grid;grid-template-columns:repeat(5,1fr);gap:2px;padding:6px max(6px,calc((100vw - 850px)/2)) calc(6px + env(safe-area-inset-bottom));background:rgba(10,12,15,.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid #222830}
@@ -629,3 +629,14 @@ body:not([data-view="workout"]) #cycleBanner{display:none}
 .fd-head .fd-av,.fd-row .fd-av{font-size:15px;color:#0a0e08;font-weight:900}
 /* v50: iPhone-on 16 px alatti betűméretnél a mezőre koppintva ráközelít és ugrál – minden beviteli mező legalább 16 px */
 .fd-row textarea,.fd-cform input,.pw-form input,.lib-search{font-size:16px!important}
+/* v51: 5 gombos alsó menü, középen kiemelt Edzés; Infó a fejlécben */
+.bottom-nav{grid-template-columns:1fr 1fr 1.15fr 1fr 1fr;align-items:end;overflow:visible}
+.bn-t{font-size:10.5px}
+.bn-btn.bn-main{position:relative;margin-top:-26px;padding:0 0 4px;background:none!important}
+.bn-main .bn-ic{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;font-size:27px;background:linear-gradient(145deg,#2a3a20,#18210f);border:2px solid #3f5a2c;box-shadow:0 6px 18px rgba(0,0,0,.55);filter:none;opacity:1;transition:transform .15s}
+.bn-main.on .bn-ic{background:linear-gradient(145deg,#b6ff7a,#7fe03f);border-color:#c9ff9b;box-shadow:0 6px 22px rgba(156,255,87,.35)}
+.bn-main .bn-t{margin-top:3px;font-weight:900}
+.bn-main:active .bn-ic{transform:scale(.94)}
+#infoBtn{display:grid!important;place-items:center;width:40px;height:40px;padding:0;border-radius:50%;font-size:18px}
+#infoBtn.on{background:#9cff57;color:#0a0e08;border-color:#9cff57}
+body.must-read #infoBtn{display:none!important}

@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v50';
+const APP_VERSION = 'v51';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -503,15 +503,16 @@ function render() {
   document.body.dataset.view = view;
   if (gated && view !== 'info') renderGate();
   else if (view === 'history') renderHistory(); else if (view === 'feed') renderFeed(); else if (view === 'social') renderSocial(); else if (view === 'ranks') renderRanks(); else if (view === 'info') renderInfo(); else renderWorkout();
-  const ib = $('infoBtn'); if (ib) { ib.textContent = view === 'info' ? '← EDZÉS' : 'ℹ️ INFÓ'; ib.onclick = () => { if (!ready) return; view = view === 'info' ? 'workout' : 'info'; render(); window.scrollTo(0, 0); }; }
+  const ib = $('infoBtn'); if (ib) { ib.textContent = view === 'info' ? '✕' : 'ℹ️'; ib.setAttribute('aria-label', view === 'info' ? 'Infó bezárása' : 'Infó és útmutató'); ib.classList.toggle('on', view === 'info'); ib.onclick = () => { if (!ready) return; view = view === 'info' ? 'workout' : 'info'; render(); window.scrollTo(0, 0); }; }
 }
 /* v42: alsó menüsáv – mindig látszik, egy koppintással bárhova */
-const NAV = [['workout', '🏋️', 'Edzés'], ['history', '📈', 'Fejlődés'], ['ranks', '🏅', 'Rangok'], ['feed', '📣', 'Közösség'], ['social', '👥', 'Barátok'], ['info', 'ℹ️', 'Infó']];
+// v51: 5 gomb – középen kiemelve az Edzés, mellette Fejlődés és Rangok, a szélén Közösség és Barátok; az Infó a fejlécbe került (ℹ️ jobb fent)
+const NAV = [['feed', '📣', 'Közösség'], ['history', '📈', 'Fejlődés'], ['workout', '🏋️', 'Edzés'], ['ranks', '🏅', 'Rangok'], ['social', '👥', 'Barátok']];
 function renderBottomNav(gated) {
   let nav = $('bottomNav');
   if (!nav) { nav = document.createElement('nav'); nav.id = 'bottomNav'; nav.className = 'bottom-nav'; nav.setAttribute('aria-label', 'Fő menü'); document.body.appendChild(nav); }
   nav.classList.toggle('hidden', !ready || (gated && !infoRead()));
-  nav.innerHTML = NAV.map(([v, ic, t]) => `<button type="button" class="bn-btn${view === v ? ' on' : ''}" data-nav="${v}"${view === v ? ' aria-current="page"' : ''}><span class="bn-ic">${ic}${v === 'feed' && feedUnread > 0 ? `<i class="bn-dot">${feedUnread > 9 ? '9+' : feedUnread}</i>` : ''}</span><span class="bn-t">${t}</span></button>`).join('');
+  nav.innerHTML = NAV.map(([v, ic, t]) => `<button type="button" class="bn-btn${v === 'workout' ? ' bn-main' : ''}${view === v ? ' on' : ''}" data-nav="${v}"${view === v ? ' aria-current="page"' : ''}><span class="bn-ic">${ic}${v === 'feed' && feedUnread > 0 ? `<i class="bn-dot">${feedUnread > 9 ? '9+' : feedUnread}</i>` : ''}</span><span class="bn-t">${t}</span></button>`).join('');
   nav.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => {
     if (!ready) return; const v = b.dataset.nav;
     if (v === view && v === 'workout') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
@@ -2596,7 +2597,7 @@ function renderInfo() {
     'Jobb fent <b>⋮</b> menü → <b>Alkalmazás telepítése</b> (vagy <b>Hozzáadás a kezdőképernyőhöz</b> → <b>Telepítés</b>).',
     'Ezután az ikonról indítsd.']);
   h += sec('🚀 ELSŐ LÉPÉSEK', [
-    'Alul a menüsávban váltasz: <b>🏋️ Edzés</b>, <b>📈 Fejlődés</b>, <b>🏅 Rangok</b>, <b>👥 Barátok</b>, <b>ℹ️ Infó</b>.',
+    'Alul a menüsávban váltasz: középen a <b>🏋️ Edzés</b>, mellette <b>📈 Fejlődés</b> és <b>🏅 Rangok</b>, a szélén <b>📣 Közösség</b> és <b>👥 Barátok</b>. Ezt az Infót jobb fent a <b>ℹ️</b> gombbal éred el.',
     '<b>👥 Barátok</b> → <b>REGISZTRÁCIÓ</b>: név, e-mail, jelszó. A naplód innentől a fiókodba is mentődik.',
     '<b>🏅 Rangok</b> → add meg a <b>testsúlyodat</b> (ehhez igazodnak a rangok).',
     'Ha más gyakorlatokat csinálsz, mint a programban: a gyakorlat <b>⋯</b> gombja → <b>Csere</b>, vagy <b>+ ÚJ GYAKORLAT HOZZÁADÁSA</b>.',
