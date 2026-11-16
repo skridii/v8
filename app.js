@@ -5,13 +5,14 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v44';
+const APP_VERSION = 'v45';
 
+// v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
-  { name: 'ALSÓTEST 1', short: 'A1', subtitle: 'Felhúzás és combfeszítő' },
   { name: 'FELSŐTEST 1', short: 'F1', subtitle: 'Mell és hát vastagsága' },
-  { name: 'ALSÓTEST 2', short: 'A2', subtitle: 'Comb elöl-hátul és vádli' },
-  { name: 'FELSŐTEST 2', short: 'F2', subtitle: 'Váll és hátszélesség' }
+  { name: 'ALSÓTEST 1', short: 'A1', subtitle: 'Felhúzás és combfeszítő' },
+  { name: 'FELSŐTEST 2', short: 'F2', subtitle: 'Váll és hátszélesség' },
+  { name: 'ALSÓTEST 2', short: 'A2', subtitle: 'Comb elöl-hátul és vádli' }
 ];
 
 /* A régi (v9 előtti) alapprogram – csak a régi mentések átalakításához kell (indexek szerinti névpárosítás). NE módosítsd! */
@@ -28,14 +29,14 @@ const LEGACY_PROGRAM = [
 /* Alap edzésterv az új felhasználóknak (v31-től: Ádám 2026-11 programja).
    [név, magyar név, ismétlés, szettszám]. A meglévő felhasználók saját tervét NEM érinti. */
 const PROGRAM = [
-{name:'LOWER 1',subtitle:'Deadlift & Quadriceps Focus',ex:[
-['Conventional Deadlift','Sima Felhúzás','2 × 5–7',2],['Hack Squat','Hack Guggolás Gépen','2 × 6–8',2],['Cable Crunch','Térdelő Hasprés Csigán (kötéllel)','1 × 10–15',1],['Machine Hip Adduction','Csípő Addukció Gépen','2 × 10–12',2],['Standing Calf Raise','Álló Vádli Gépen','2 × 8–10',2],['Dumbbell Wrist Curl','Csuklóhajlítás','2 × 12–15',2],['Dumbbell Reverse Wrist Curl','Csuklófeszítés','2 × 12–15',2]]},
 {name:'UPPER 1',subtitle:'Chest & Back Thickness',ex:[
 ['Bench Press','Fekvenyomás','2 × 6–8',2],['Chest-Supported Row','Mellkassal támasztott evezés – csípő felé húzva','2 × 6–8',2],['Machine Lateral Raise','Gépes Oldalemelés','2 × 10–12',2],['Reverse Pec Deck','Hátsó Váll Pec Deck Gépen','2 × 10–12',2],['Dumbbell Preacher Curl','Scott Bicepsz Kézisúlyzóval – függőleges pad','2 × 8–10',2],['Cable Rope Triceps Pushdown','Csigás Kötél Tricepsz','2 × 8–10',2],['Single-Arm Sagittal Pulldown','Szagittális Lehúzás Egy Kézzel Gépen','1 × 8–10',1]]},
-{name:'LOWER 2',subtitle:'Quadriceps, Hamstring & Soleus Focus',ex:[
-['Smith Machine Bulgarian Split Squat','Smith Bolgár Guggolás','2 × 8–10 / láb',2],['Lying Hamstring Curl','Fekvő Combhajlítás','2 × 8–10',2],['Leg Extension','Láb Extenzió','2 × 10–12',2],['Seated Calf Raise','Ülő Vádli Gépen','2 × 10–12',2],['Hanging Oblique Leg Raise','Függeszkedős Oldalsó Lábemelés (oldalanként)','2 × 10–12',2],['Dumbbell Wrist Curl','Csuklóhajlítás','2 × 12–15',2],['Dumbbell Reverse Wrist Curl','Csuklófeszítés','2 × 12–15',2]]},
+{name:'LOWER 1',subtitle:'Deadlift & Quadriceps Focus',ex:[
+['Conventional Deadlift','Sima Felhúzás','2 × 5–7',2],['Hack Squat','Hack Guggolás Gépen','2 × 6–8',2],['Cable Crunch','Térdelő Hasprés Csigán (kötéllel)','1 × 10–15',1],['Machine Hip Adduction','Csípő Addukció Gépen','2 × 10–12',2],['Standing Calf Raise','Álló Vádli Gépen','2 × 8–10',2],['Dumbbell Wrist Curl','Csuklóhajlítás','2 × 12–15',2],['Dumbbell Reverse Wrist Curl','Csuklófeszítés','2 × 12–15',2]]},
 {name:'UPPER 2',subtitle:'Shoulders & Lat Width Focus',ex:[
-['Smith Machine Overhead Shoulder Press','Smith Vállból Nyomás','2 × 6–8',2],['Pull Up','Húzódzkodás','2 × 8–10',2],['Chest Fly','Mell Tárogatás / Pec Deck','2 × 8–10',2],['Cable High Row','Magas Evezés Csigán','2 × 8–10',2],['Alternating Dumbbell Biceps Curl','Váltott Karú Bicepsz','2 × 8–10',2],['Overhead Cable Triceps Extension','Fejfeletti Tricepsz Csigán (2 kézzel)','2 × 8–10',2]]}
+['Smith Machine Overhead Shoulder Press','Smith Vállból Nyomás','2 × 6–8',2],['Pull Up','Húzódzkodás','2 × 8–10',2],['Chest Fly','Mell Tárogatás / Pec Deck','2 × 8–10',2],['Cable High Row','Magas Evezés Csigán','2 × 8–10',2],['Alternating Dumbbell Biceps Curl','Váltott Karú Bicepsz','2 × 8–10',2],['Overhead Cable Triceps Extension','Fejfeletti Tricepsz Csigán (2 kézzel)','2 × 8–10',2]]},
+{name:'LOWER 2',subtitle:'Quadriceps, Hamstring & Soleus Focus',ex:[
+['Smith Machine Bulgarian Split Squat','Smith Bolgár Guggolás','2 × 8–10 / láb',2],['Lying Hamstring Curl','Fekvő Combhajlítás','2 × 8–10',2],['Leg Extension','Láb Extenzió','2 × 10–12',2],['Seated Calf Raise','Ülő Vádli Gépen','2 × 10–12',2],['Hanging Oblique Leg Raise','Függeszkedős Oldalsó Lábemelés (oldalanként)','2 × 10–12',2],['Dumbbell Wrist Curl','Csuklóhajlítás','2 × 12–15',2],['Dumbbell Reverse Wrist Curl','Csuklófeszítés','2 × 12–15',2]]}
 ];
 const INCLINE = { name: 'Incline Bench Press', hu: 'Ferde Fekvenyomás' };
 
@@ -105,7 +106,7 @@ function defaultLayout(exerciseNames = {}, legacy = false) {
   }));
 }
 function blankState() {
-  return { version: 6, cycle: 1, maxCycle: 1, week: 1, day: 0, exercises: {}, layouts: { '1-1': defaultLayout() }, variantChoice: {}, names: {}, library: {}, exerciseNames: {}, savedAt: 0 };
+  return { version: 6, cycle: 1, maxCycle: 1, week: 1, day: 0, exercises: {}, layouts: { '1-1': defaultLayout() }, variantChoice: {}, names: {}, library: {}, exerciseNames: {}, savedAt: 0, fixes: { dayorder2026: 1 } };
 }
 function layoutKeysSorted() {
   return Object.keys(state.layouts).map(k => { const [c, w] = k.split('-').map(Number); return { k, c, w, p: pos(c, w) }; }).sort((a, b) => a.p - b.p);
@@ -371,6 +372,7 @@ function migrate(old) {
       }
     }
     applySwaps(s);
+    applyDayOrder(s);
   } finally { state = prev; }
   return s;
 }
@@ -378,6 +380,20 @@ function migrate(old) {
    a gépes Scott-bicepsz helyett kézisúlyzós Scott függőleges padon. Ezek MÁS gyakorlatok, ezért a régi adatok a régi
    néven maradnak (FEJLŐDÉS oldalon visszanézhetők); a csere az aktuális héttől érvényes, a korábbi hetek nem változnak.
    Ha ezen a héten már a régi néven rögzítettél, az átkerül az új gyakorlathoz (azon a héten már az újat csináltad). */
+/* v45: napsorrend-csere (egyszer, s.fixes.dayorder2026): régen ALSÓ 1 · FELSŐ 1 · ALSÓ 2 · FELSŐ 2 volt, most FELSŐ 1 · ALSÓ 1 · FELSŐ 2 · ALSÓ 2.
+   A heti tervekben a napok, az edzésbejegyzések kulcsában (ciklus-hét-nap) a nap sorszáma és az aktuális nap is átfordul; a Hevy-import (0. ciklus) nem napfüggő. */
+const DAY_PERM = [1, 0, 3, 2];
+function applyDayOrder(s) {
+  if (s.fixes?.dayorder2026) return;
+  s.fixes = { ...(s.fixes || {}), dayorder2026: Date.now() };
+  for (const k of Object.keys(s.layouts || {})) { const L = s.layouts[k]; if (Array.isArray(L) && L.length >= 4) s.layouts[k] = [L[1], L[0], L[3], L[2], ...L.slice(4)]; }
+  for (const obj of Object.values(s.exercises || {})) {
+    const o = {};
+    for (const [k, r] of Object.entries(obj.occurrences || {})) { const p = k.split('-'); if (p.length === 3 && Number(p[0]) >= 1) { const d = Number(p[2]); if (d >= 0 && d < 4) p[2] = String(DAY_PERM[d]); } o[p.join('-')] = r; }
+    obj.occurrences = o;
+  }
+  s.day = DAY_PERM[s.day] ?? 0;
+}
 const SWAPS = [{ id: 'swap2026-11', items: [
   ['machine_ab_crunch', 'Cable Crunch', 'Térdelő Hasprés Csigán (kötéllel)'],
   ['machine_preacher_curl', 'Dumbbell Preacher Curl', 'Scott Bicepsz Kézisúlyzóval – függőleges pad']
@@ -690,6 +706,13 @@ function matchHint(slot, e, s, wtRaw) {
 /* v42: átláthatóbb edzésnap – tömör fejléc napi haladással, gyakorlatkártyán a lényeg elöl, a többi lenyitható; a kész gyakorlat összecsukódik */
 const openEx = new Set(), closedEx = new Set();   // kézzel kinyitott (kész) / kézzel becsukott (nem kész) kártyák
 function exAllDone(slot, rec) { const n = setCount(slot, rec); if (!n) return false; for (let s = 0; s < n; s++) if (!rec?.sets?.[s]?.done) return false; return true; }
+// „Ne ess vissza”: a következő 3 súlylépcső minimum ismétlése (szövegként)
+function goalList(c, w, d, name) {
+  const ref = matchRef(c, w, d, name); if (!ref) return [];
+  const step = weightStep(exId(name)), out = [];
+  for (let k = 1; k <= 3; k++) { const wt = Math.round((ref.w + k * step) * 100) / 100, r = minRepsFor(ref, name, wt); if (r >= 4) out.push(`${showNum(wt)}×${r}`); }
+  return out;
+}
 // „Ne ess vissza” egy sorban: a következő 3 súlylépcső minimum ismétlése (mindig látszik)
 function goalLine(c, w, d, name) {
   const ref = matchRef(c, w, d, name); if (!ref) return '';
@@ -708,30 +731,34 @@ function renderWorkout() {
   const recs = slots.map(slot => recordFor(c, w, d, slotName(c, w, d, slot))), doneN = slots.filter((sl, e) => exAllDone(sl, recs[e])).length;
   const nextE = slots.findIndex((sl, e) => !exAllDone(sl, recs[e]));
   const vol = dayVolume(c, w, d), pv = prevDayVolume(c, w, d);
-  let h = `<section class="day-head"><div class="day-name">${day.name}</div><div class="day-meta">${esc(day.subtitle)} · ${cycLabel(c).toLowerCase()}${w}. hét · 2 munkasorozat, majdnem a kimerülésig (RIR 0–1)</div>
-    <div class="dh-prog"><div class="dh-bar"><i style="width:${slots.length ? Math.round(doneN / slots.length * 100) : 0}%"></i></div><span><b>${doneN}/${slots.length}</b> gyakorlat kész</span></div>
-    <div class="dh-vol">Megmozgatott súly: <b>${kg(vol.total)} kg</b>${pv ? ` <span>· előző ${day.name.toLowerCase()}: ${kg(pv.total)} kg</span>` : ''}</div>
+  let h = `<section class="day-head"><div class="dh-row"><div><div class="day-name">${day.name}</div><div class="day-meta">${esc(day.subtitle)} · ${cycLabel(c).toLowerCase()}${w}. hét</div></div><div class="dh-count"><b>${doneN}/${slots.length}</b><span>kész</span></div></div>
+    <div class="dh-bar"><i style="width:${slots.length ? Math.round(doneN / slots.length * 100) : 0}%"></i></div>
+    <div class="dh-vol">Megmozgatott súly: <b>${kg(vol.total)} kg</b>${pv ? ` · előző: ${kg(pv.total)} kg` : ''}</div>
     ${nextE >= 0 && doneN > 0 ? `<button class="dh-next" data-jump="${nextE}">▶ Következő: ${esc(hun(slotName(c, w, d, slots[nextE])))}</button>` : ''}${slots.length && doneN === slots.length ? '<div class="dh-done">🎉 Minden gyakorlat kész erre a napra!</div>' : ''}</section>`;
   slots.forEach((slot, e) => {
     const vi = variantIndex(c, w, d, slot), v = slot.variants[vi], name = v.name, id = exId(name), hu = huShort(v.hu) || hun(id);
     const rec = recs[e], last = latestBefore(c, w, d, name);
     const sets = rec?.sets || [emptySet(), emptySet()], wu = rec?.warmup || emptySet(), pb = personalBest(id);
-    const key = `${c}-${w}-${d}-${slot.uid}`, done = exAllDone(slot, rec), collapsed = done ? !openEx.has(key) : closedEx.has(key), rk = rankOf(id);
-    const rkMini = rk && rk.pts !== undefined ? `<span class="rk-mini" style="color:${rk.color}">${esc(rk.label)}</span>` : '';
-    h += `<article class="exercise${done ? ' ex-done' : ''}${collapsed ? ' collapsed' : ''}" id="ex-${e}"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(hu)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><div class="exercise-title">${esc(hu)}</div>${hu !== name ? `<div class="exercise-en">${esc(name)}</div>` : ''}<div class="ex-meta"><span class="prescribed">${esc(showReps(slot))}</span>${rkMini}</div></div><span class="fold-ic" aria-hidden="true">${collapsed ? '▾' : '▴'}</span><button class="more-btn" data-more="${e}" aria-label="További lehetőségek">⋯</button></div>`;
+    const key = `${c}-${w}-${d}-${slot.uid}`, done = exAllDone(slot, rec), collapsed = done ? !openEx.has(key) : closedEx.has(key), rk = rankOf(id), hasRk = rk && rk.pts !== undefined;
+    const goals = goalList(c, w, d, name), lastTxt = last ? setsText(last) : '';
+    h += `<article class="exercise${done ? ' ex-done' : ''}${collapsed ? ' collapsed' : ''}" id="ex-${e}"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(hu)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><div class="exercise-title">${esc(hu)}</div>${hu !== name ? `<div class="exercise-en">${esc(name)}</div>` : ''}<div class="ex-meta"><span class="prescribed">${esc(showReps(slot))}</span>${collapsed && hasRk ? `<span class="rk-mini" style="color:${rk.color}">${esc(rk.label)}</span>` : ''}</div></div><span class="fold-ic" aria-hidden="true">${collapsed ? '▾' : '▴'}</span><button class="more-btn" data-more="${e}" aria-label="További lehetőségek">⋯</button></div>`;
     if (collapsed) {
-      h += done ? `<div class="done-sum"><span>✓ KÉSZ · ${esc(setsText(rec))}</span></div>` : `<div class="done-sum todo">${last ? `Előző: <b>${esc(setsText(last))}</b>` : 'Még nincs előzmény'}</div>${goalLine(c, w, d, name)}`;
-      h += `</article>`; return;
+      h += `<div class="fold-sum${done ? ' ok' : ''}">${done ? `✓ Kész · ${esc(setsText(rec))}` : `${lastTxt ? `Előző: <b>${esc(lastTxt)}</b>` : 'Még nincs előzmény'}${goals[0] ? ` · 🎯 <b>${goals[0]}</b>` : ''}`}</div></article>`; return;
     }
-    h += rankLineHtml(id, rk) + goalLine(c, w, d, name);
+    // EGY tömör infó-blokk: rang, előző + rekord, minimum ismétlés (a részletes előzmény a ⋯ / az „Előző” sor mögött)
+    let info = '';
+    if (hasRk) { info += `<div class="ei-rank">${rankBadge(rk)}<div class="ei-rk"><div><b style="color:${rk.color}">${esc(rk.label)}</b><span>${esc(oneRmText(rk))}</span></div><div class="rr-bar"><i style="width:${Math.round(rk.pct * 100)}%;background:${rk.color}"></i></div><small>${esc(rankNeedText(rk))}</small></div></div>`; }
+    else if (rk?.needBw) info += `<div class="ei-line muted">🏅 A rangodhoz add meg a testsúlyod a Rangok oldalon.</div>`;
+    info += `<button class="ei-line ei-last" data-stats="${esc(id)}">${lastTxt ? `Előző: <b>${esc(lastTxt)}</b>` : 'Első alkalom – írd be, mennyit bírsz'}${pb ? ` <span class="ei-pb">🏆 ${showNum(pb.weight)}×${showNum(pb.reps)}</span>` : ''} <span class="ei-go">📈</span></button>`;
+    if (goals.length) info += `<div class="ei-line ei-goal">🎯 Nehezebb súllyal min.: ${goals.map(g => `<b>${g}</b>`).join(' · ')}</div>`;
+    h += `<div class="ex-info${flashRankId === id ? ' flash' : ''}">${info}</div>`; if (flashRankId === id) flashRankId = null;
     const note = state.notes?.[id] || '';
     if (note) h += `<button class="ex-note" data-note="${esc(id)}">📝 ${esc(note)}</button>`;
     if (slot.variants.length > 1) {
       const other = slot.variants[1 - vi];
       h += `<div class="variant-row"><span class="variant-tag">VÁLTAKOZÓ</span><button class="variant-btn" data-variant data-e="${e}">↔ Ezen a héten inkább: ${esc(huShort(other.hu) || other.name)}</button></div>`;
     }
-    h += `<div class="quick">${last ? `<button class="q-chip" data-stats="${esc(id)}">Előző: <b>${esc(setsText(last))}</b> 📈</button>` : '<span class="q-chip q-new">Első alkalom – írd be, mennyit bírsz</span>'}</div>`;
-    h += `<div class="sets"><div class="set-labels"><span>SZETT</span><span>KG</span><span>ISMÉTLÉS</span><span></span></div>`;
+    h += `<div class="sets">`;
     const bwx = isBwExercise(name);
     h += setRowHtml('B', e, wu, 'warmup', 0, bwx);
     const nSets = setCount(slot, rec);
@@ -739,18 +766,11 @@ function renderWorkout() {
       const sv = sets[s] || emptySet(), mh = !sv.done && cleanNum(sv.reps) === '' ? matchHint(slot, e, s, sv.weight) : null;
       h += setRowHtml(String(s + 1), e, sv, 'work', s, bwx, mh?.r) + `<div class="match-hint${mh ? '' : ' hidden'}" data-mh="${e}-${s}">${mh ? '🎯 ' + mh.text : ''}</div>`;
     }
-    h += `<div class="set-tools"><button class="set-tool" data-addset data-e="${e}">+ SZETT</button>${nSets > 1 ? `<button class="set-tool minus" data-delset data-e="${e}">− SZETT</button>` : ''}</div></div>`;
-    let more = '';
-    if (pb) more += `<div class="record-badge">🏆 SZEMÉLYES REKORD · ${showNum(pb.weight)} kg × ${showNum(pb.reps)} · ${isImported(pb.c) ? 'Hevy' : (state.maxCycle > 1 ? pb.c + '. ciklus, ' : '') + pb.w + '. hét'}</div>`;
-    if (last) more += `<div class="history"><div>LEGUTÓBBI ALKALOM · ${esc(sessLabel(last.c, last.w, last.d, last))}${isImported(last.c) && last.t ? ' · ' + esc(fmtDate(last.t)) : ''}</div><strong>Bemelegítés: ${esc(showNum(last.warmup?.weight)) || '—'} kg × ${esc(showNum(last.warmup?.reps)) || '—'} · ${esc(setsText(last))}</strong></div>`;
-    if (!note) more += `<button class="ex-note empty-note" data-note="${esc(id)}">📝 Jegyzet a géphez (pl. ülés 4-es, támla 2. lyuk)</button>`;
-    more += `<div class="last">Pihenő: bemelegítő szett után <strong>1:00</strong> · munkasorozat után <strong>2:30</strong></div>`;
-    h += `<details class="ex-more"${openEx.has(key + ':more') ? ' open' : ''} data-mkey="${esc(key)}:more"><summary>Rekord, részletes előzmények${note ? '' : ', jegyzet'}</summary>${more}</details>`;
-    h += `</article>`;
+    h += `<div class="set-tools slim"><button class="set-tool" data-addset data-e="${e}">+ szett</button>${nSets > 1 ? `<button class="set-tool minus" data-delset data-e="${e}">− szett</button>` : ''}</div></div></article>`;
   });
   if (!slots.length) h += '<div class="note">Ezen a napon nincs gyakorlat. Adj hozzá egyet!</div>';
   h += '<button class="add-ex-btn" id="addExBtn">+ ÚJ GYAKORLAT HOZZÁADÁSA</button>';
-  h += '<div class="note">Tipp: a gyakorlat fejlécére koppintva kinyitod / becsukod, a képére koppintva látod az animációt, az „Előző” sorra koppintva az előzményeket és a grafikont; a ⋯ gombbal áthelyezheted, cserélheted, vagy jegyzetet írhatsz hozzá.</div>';
+  h += '<div class="note">Koppints a gyakorlat nevére a ki- és becsukáshoz, a képére az animációhoz, az „Előző” sorra a grafikonhoz; a ⋯ gombbal áthelyezheted, cserélheted, jegyzetet írhatsz.</div>';
   workout.innerHTML = h;
   bindInputs();
   // a kártya fejlécére (vagy a becsukott kártyára) koppintva ki/becsukódik – a kép (animáció) és a ⋯ gomb kivétel
@@ -758,7 +778,7 @@ function renderWorkout() {
     const slot = slots[e]; if (!slot) return;
     const key = `${c}-${w}-${d}-${slot.uid}`, done = exAllDone(slot, recs[e]);
     const toggle = ev => {
-      if (ev.target.closest('.ex-thumb, .more-btn, input, .set-row, .set-tools, details, .ex-note, .variant-row, .q-chip')) return;
+      if (ev.target.closest('.ex-thumb, .more-btn, input, .set-row, .set-tools, .ex-note, .variant-row, .ei-last, .match-hint')) return;
       if (!art.classList.contains('collapsed') && !ev.target.closest('.exercise-head')) return;   // nyitott kártyán csak a fejléc csuk
       if (done) { if (openEx.has(key)) openEx.delete(key); else openEx.add(key); } else { if (closedEx.has(key)) closedEx.delete(key); else closedEx.add(key); }
       renderWorkout();
