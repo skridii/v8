@@ -627,3 +627,5 @@ body:not([data-view="workout"]) #cycleBanner{display:none}
 .friend-top .fd-av{width:30px;height:30px;font-size:13px}
 .friend-top{align-items:center;gap:9px}
 .fd-head .fd-av,.fd-row .fd-av{font-size:15px;color:#0a0e08;font-weight:900}
+/* v50: iPhone-on 16 px alatti betűméretnél a mezőre koppintva ráközelít és ugrál – minden beviteli mező legalább 16 px */
+.fd-row textarea,.fd-cform input,.pw-form input,.lib-search{font-size:16px!important}

@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v49';
+const APP_VERSION = 'v50';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -2263,7 +2263,7 @@ async function loadFeed(force) {
     feedPosts = posts || []; feedComments = comments || []; feedLikes = likes || []; feedMissing = false; feedAt = Date.now();
   } catch (e) { if (isMissingTable(e)) { feedMissing = true; feedPosts = []; } else feedErr = authErrorText(e); }
   feedBusy = false;
-  if (view === 'feed') renderFeed();
+  if (view === 'feed') { if ($('feedList')) renderFeedList(); else renderFeed(); }
 }
 function feedPeople() {   // én + a látható tagok (állapottal)
   const out = [{ id: auth.user.id, name: me?.display_name || 'Én', state, mine: true }];
@@ -2328,17 +2328,57 @@ async function shrinkImage(file, max, square) {
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 function pickImage(cb) { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.onchange = () => { const f = inp.files?.[0]; if (f) cb(f); }; inp.click(); }
 function openPhoto(src) { const o = document.createElement('div'); o.className = 'overlay photo-view'; o.innerHTML = `<img src="${src}" alt="">`; o.onclick = () => o.remove(); document.body.appendChild(o); }
+/* v50: a posztíró rész (szövegmező) és a lista KÜLÖN frissül – a háttérbeli frissítés (pl. fotózás után visszatérve)
+   soha nem rajzolja újra a szövegmezőt, így gépelés közben nem tűnik el a billentyűzet; a hozzászólás-mezők tartalma is megmarad. */
+let feedListPending = false; const commentDrafts = {};
 function renderFeed() {
   if (!auth || !me) { workout.innerHTML = '<section class="social-card"><h2>📣 Közösség</h2><div class="note">A közösségi falhoz jelentkezz be a 👥 Barátok oldalon.</div></section>'; if (auth && !me) afterLogin(false).then(() => loadFeed(true)).catch(() => {}); return; }
   if (!me.approved) { workout.innerHTML = '<section class="social-card"><h2>📣 Közösség</h2><div class="note">A fiókodat még jóvá kell hagynia az adminnak.</div></section>'; return; }
-  if (feedPosts === null) { workout.innerHTML = '<section class="social-card"><h2>📣 Közösség</h2><div class="note">Betöltés…</div></section>'; loadFeed(true); return; }
-  if (!feedBusy && Date.now() - feedAt > 30000) loadFeed(true);
+  workout.innerHTML = '<section class="fd-compose" id="fdCompose"></section><div id="feedList"></div>';
+  renderComposer(); renderFeedList();
+  if (feedPosts === null || (!feedBusy && Date.now() - feedAt > 30000)) loadFeed(true);
+}
+function renderComposer() {
+  const box = $('fdCompose'); if (!box) return;
   const myLast = friendSummary(state).list.find(x => x.c >= 1), att = feedDraft.attach || '';
-  let h = `<section class="fd-compose"><div class="fd-row">${avatarHtml({ id: auth.user.id, name: me.display_name })}<textarea id="fdBody" maxlength="1000" rows="${feedDraft.body || att ? 3 : 2}" placeholder="Mi volt ma? Írj valamit a többieknek…">${esc(feedDraft.body)}</textarea></div>`;
-  if (feedDraft.photoUrl) h += `<div class="fd-prev"><img src="${feedDraft.photoUrl}" alt=""><button id="fdUnphoto" aria-label="Kép törlése">✕</button></div>`;
-  if (att) h += `<div class="fd-attach">📎 Csatolt edzés: <b>${esc(DAYS[+att.split('-')[2]]?.name || '')} · ${esc(att.split('-')[1])}. hét</b> <button id="fdUnattach" aria-label="Csatolás törlése">✕</button></div>`;
-  h += `<div class="fd-tools"><button id="fdPhoto">📷 ${feedDraft.photo ? 'Másik kép' : 'Kép / fotó'}</button>${!att && myLast ? `<button id="fdAttach">📎 Edzés csatolása</button>` : ''}</div>`;
-  h += `<button class="fd-post" id="fdPost">📣 KIRAKOM</button></section>`;
+  let h = `<div class="fd-row">${avatarHtml({ id: auth.user.id, name: me.display_name })}<textarea id="fdBody" maxlength="1000" rows="${feedDraft.body || att || feedDraft.photo ? 3 : 2}" placeholder="${feedDraft.photo ? 'Írj valamit a képhez…' : 'Mi volt ma? Írj valamit a többieknek…'}">${esc(feedDraft.body)}</textarea></div>`;
+  if (feedDraft.photoUrl) h += `<div class="fd-prev"><img src="${feedDraft.photoUrl}" alt=""><button type="button" id="fdUnphoto" aria-label="Kép törlése">✕</button></div>`;
+  if (att) h += `<div class="fd-attach">📎 Csatolt edzés: <b>${esc(DAYS[+att.split('-')[2]]?.name || '')} · ${esc(att.split('-')[1])}. hét</b> <button type="button" id="fdUnattach" aria-label="Csatolás törlése">✕</button></div>`;
+  h += `<div class="fd-tools"><button type="button" id="fdPhoto">📷 ${feedDraft.photo ? 'Másik kép' : 'Kép / fotó'}</button>${!att && myLast ? `<button type="button" id="fdAttach">📎 Edzés csatolása</button>` : ''}</div>`;
+  h += `<button type="button" class="fd-post" id="fdPost">📣 KIRAKOM</button>`;
+  box.innerHTML = h; hydrateImgs(box);
+  const body = $('fdBody'); body.oninput = () => { feedDraft.body = body.value; };
+  $('fdPhoto').onclick = () => pickImage(async f => {
+    try { const b = await shrinkImage(f, 1440); if (feedDraft.photoUrl) URL.revokeObjectURL(feedDraft.photoUrl); feedDraft.photo = b; feedDraft.photoUrl = URL.createObjectURL(b); renderComposer(); }
+    catch (e) { toast(e.message || 'Nem sikerült a kép.'); }
+  });
+  if ($('fdUnphoto')) $('fdUnphoto').onclick = () => { URL.revokeObjectURL(feedDraft.photoUrl); feedDraft.photo = null; feedDraft.photoUrl = ''; renderComposer(); };
+  if ($('fdAttach')) $('fdAttach').onclick = () => { feedDraft.attach = myLast.k; renderComposer(); };
+  if ($('fdUnattach')) $('fdUnattach').onclick = () => { feedDraft.attach = ''; renderComposer(); };
+  $('fdPost').onclick = async () => {
+    const txt = (feedDraft.body || '').trim(); if (!txt && !feedDraft.attach && !feedDraft.photo) { toast('Írj valamit, tegyél be képet, vagy csatold az edzésedet.'); return; }
+    if (feedMissing) { toast('A posztolás még nincs bekapcsolva (admin: SQL beállítás).'); return; }
+    const btn = $('fdPost'); btn.disabled = true; btn.textContent = feedDraft.photo ? 'KÉP FELTÖLTÉSE…' : 'KÜLDÉS…';
+    let photo = null;
+    try {
+      if (feedDraft.photo) { photo = `${auth.user.id}/posts/${newId()}.jpg`; await storageUpload(photo, feedDraft.photo); }
+      const row = { body: txt, workout: feedDraft.attach ? { key: feedDraft.attach } : null }; if (photo) row.photo = photo;
+      await sb('/rest/v1/feed_posts', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: row });
+      if (feedDraft.photoUrl) imgCache.set(photo, Promise.resolve(feedDraft.photoUrl));
+      feedDraft = { body: '', attach: '', photo: null, photoUrl: '' }; renderComposer(); toast('Kirakva! 📣'); await loadFeed(true);
+    } catch (e) { if (photo) storageDelete(photo); btn.disabled = false; btn.textContent = '📣 KIRAKOM'; toast('Nem sikerült: ' + authErrorText(e)); }
+  };
+}
+function renderFeedList() {
+  const list = $('feedList'); if (!list) return;
+  // ha épp hozzászólást írsz, nem rajzoljuk újra alattad – a mező elhagyásakor frissül
+  if (list.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') {
+    if (!feedListPending) { feedListPending = true; document.activeElement.addEventListener('blur', () => setTimeout(() => { if (feedListPending) { feedListPending = false; renderFeedList(); } }, 200), { once: true }); }
+    return;
+  }
+  feedListPending = false;
+  let h = '';
+  if (feedPosts === null) { list.innerHTML = '<div class="note">Betöltés…</div>'; return; }
   if (feedMissing) h += `<div class="note warn">A közösségi fal még nincs bekapcsolva: az adminnak egyszer le kell futtatnia a beállítást a Supabase-ben (sql/002_kozossegi_fal.sql és 003_kepek_profil.sql).</div>`;
   if (feedErr) h += `<div class="note warn">${esc(feedErr)}</div>`;
   const items = feedItems(), seen = feedSeen();
@@ -2347,44 +2387,23 @@ function renderFeed() {
     const tu = it.who.id, cm = feedComments.filter(x => x.target_user === tu && x.target_key === it.key), lk = feedLikes.filter(x => x.target_user === tu && x.target_key === it.key);
     const liked = lk.some(x => x.user_id === auth.user.id), fid = tu + '|' + it.key, open = feedOpen.has(fid), shown = open ? cm : cm.slice(-2);
     const nameOfUser = uid => uid === auth.user.id ? (me.display_name || 'Én') : ((friends || []).find(f => f.id === uid)?.display_name || 'Tag');
-    h += `<article class="fd-item" data-fid="${esc(fid)}"><div class="fd-head">${avatarHtml(it.who)}<div><b>${esc(it.who.name)}</b><span>${agoText(it.t)}</span></div>${it.type === 'p' && tu === auth.user.id ? `<button class="fd-del" data-delpost="${esc(it.post.id)}" aria-label="Poszt törlése">🗑</button>` : ''}</div>`;
-    if (it.type === 'p' && it.post.body) h += `<div class="fd-body">${esc(it.post.body).replace(/\n/g, '<br>')}</div>`;
+    h += `<article class="fd-item" data-fid="${esc(fid)}"><div class="fd-head">${avatarHtml(it.who)}<div><b>${esc(it.who.name)}</b><span>${agoText(it.t)}</span></div>${tu === auth.user.id ? `<button class="fd-del" data-delpost="${esc(it.post.id)}" aria-label="Poszt törlése">🗑</button>` : ''}</div>`;
+    if (it.post.body) h += `<div class="fd-body">${esc(it.post.body).replace(/\n/g, '<br>')}</div>`;
     if (it.post.photo) h += `<button class="fd-photo" data-photo><img data-sp="${esc(it.post.photo)}" alt="Kép"></button>`;
     if (it.wk) h += workoutCardHtml(it.who, it.wk);
     h += `<div class="fd-actions"><button class="fd-like${liked ? ' on' : ''}" data-like="${esc(fid)}"${feedMissing ? ' disabled' : ''}>${liked ? '❤️' : '🤍'} ${lk.length || ''}</button><button class="fd-cbtn" data-cfocus="${esc(fid)}"${feedMissing ? ' disabled' : ''}>💬 ${cm.length || ''} Hozzászólás</button></div>`;
     if (cm.length > shown.length) h += `<button class="fd-more" data-copen="${esc(fid)}">Mind a ${cm.length} hozzászólás megjelenítése</button>`;
     if (shown.length) h += `<div class="fd-comments">${shown.map(x => `<div class="fd-c${x.target_user === auth.user.id && x.user_id !== auth.user.id && Date.parse(x.created_at) > seen ? ' new' : ''}"><b>${esc(nameOfUser(x.user_id))}</b> ${esc(x.body)}<span>${agoText(Date.parse(x.created_at))}${x.user_id === auth.user.id || x.target_user === auth.user.id ? ` · <button data-delc="${esc(x.id)}">törlés</button>` : ''}</span></div>`).join('')}</div>`;
-    if (!feedMissing) h += `<form class="fd-cform" data-cform="${esc(fid)}"><input maxlength="500" placeholder="Írj hozzászólást…" aria-label="Hozzászólás"><button aria-label="Küldés">➤</button></form>`;
+    if (!feedMissing) h += `<form class="fd-cform" data-cform="${esc(fid)}"><input maxlength="500" placeholder="Írj hozzászólást…" aria-label="Hozzászólás" value="${esc(commentDrafts[fid] || '')}"><button aria-label="Küldés">➤</button></form>`;
     h += `</article>`;
   }
-  workout.innerHTML = h;
-  hydrateImgs(workout);
-  $('fdPhoto').onclick = () => pickImage(async f => {
-    try { const b = await shrinkImage(f, 1440); if (feedDraft.photoUrl) URL.revokeObjectURL(feedDraft.photoUrl); feedDraft.photo = b; feedDraft.photoUrl = URL.createObjectURL(b); feedDraft.body = $('fdBody').value; renderFeed(); }
-    catch (e) { toast(e.message || 'Nem sikerült a kép.'); }
-  });
-  if ($('fdUnphoto')) $('fdUnphoto').onclick = () => { URL.revokeObjectURL(feedDraft.photoUrl); feedDraft.photo = null; feedDraft.photoUrl = ''; feedDraft.body = $('fdBody').value; renderFeed(); };
-  workout.querySelectorAll('[data-photo]').forEach(b => b.onclick = () => { const im = b.querySelector('img'); if (im?.src) openPhoto(im.src); });
+  list.innerHTML = h;
+  hydrateImgs(list);
   // olvasottnak jelöljük (a piros szám eltűnik)
   localStorage.setItem(FEED_SEEN_KEY, String(Date.now())); if (feedUnread) { feedUnread = 0; renderBottomNav(false); }
-  const body = $('fdBody'); body.oninput = () => { feedDraft.body = body.value; };
-  if ($('fdAttach')) $('fdAttach').onclick = () => { feedDraft.attach = myLast.k; feedDraft.body = $('fdBody').value; renderFeed(); };
-  if ($('fdUnattach')) $('fdUnattach').onclick = () => { feedDraft.attach = ''; feedDraft.body = $('fdBody').value; renderFeed(); };
-  $('fdPost').onclick = async () => {
-    const txt = body.value.trim(); if (!txt && !feedDraft.attach && !feedDraft.photo) { toast('Írj valamit, tegyél be képet, vagy csatold az edzésedet.'); return; }
-    if (feedMissing) { toast('A posztolás még nincs bekapcsolva (admin: SQL beállítás).'); return; }
-    $('fdPost').disabled = true; $('fdPost').textContent = feedDraft.photo ? 'KÉP FELTÖLTÉSE…' : 'KÜLDÉS…';
-    let photo = null;
-    try {
-      if (feedDraft.photo) { photo = `${auth.user.id}/posts/${newId()}.jpg`; await storageUpload(photo, feedDraft.photo); }
-      const row = { body: txt, workout: feedDraft.attach ? { key: feedDraft.attach } : null }; if (photo) row.photo = photo;
-      await sb('/rest/v1/feed_posts', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: row });
-      if (feedDraft.photoUrl) { imgCache.set(photo, Promise.resolve(feedDraft.photoUrl)); }
-      feedDraft = { body: '', attach: '', photo: null, photoUrl: '' }; toast('Kirakva! 📣'); await loadFeed(true);
-    } catch (e) { if (photo) storageDelete(photo); $('fdPost').disabled = false; $('fdPost').textContent = '📣 KIRAKOM'; toast('Nem sikerült: ' + authErrorText(e)); }
-  };
+  list.querySelectorAll('[data-photo]').forEach(b => b.onclick = () => { const im = b.querySelector('img'); if (im?.src) openPhoto(im.src); });
   const split = fid => { const i = fid.indexOf('|'); return [fid.slice(0, i), fid.slice(i + 1)]; };
-  workout.querySelectorAll('[data-like]').forEach(b => b.onclick = async () => {
+  list.querySelectorAll('[data-like]').forEach(b => b.onclick = async () => {
     const [tu, key] = split(b.dataset.like), on = b.classList.contains('on'); b.disabled = true;
     try {
       if (on) await sb(`/rest/v1/feed_likes?target_user=eq.${tu}&target_key=eq.${encodeURIComponent(key)}&user_id=eq.${auth.user.id}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
@@ -2392,19 +2411,22 @@ function renderFeed() {
       await loadFeed(true);
     } catch (e) { b.disabled = false; toast('Nem sikerült: ' + authErrorText(e)); }
   });
-  workout.querySelectorAll('[data-cfocus]').forEach(b => b.onclick = () => workout.querySelector(`[data-cform="${CSS.escape(b.dataset.cfocus)}"] input`)?.focus());
-  workout.querySelectorAll('[data-copen]').forEach(b => b.onclick = () => { feedOpen.add(b.dataset.copen); renderFeed(); });
-  workout.querySelectorAll('[data-cform]').forEach(f => f.onsubmit = async ev => {
-    ev.preventDefault(); const inp = f.querySelector('input'), txt = inp.value.trim(); if (!txt) return;
-    const [tu, key] = split(f.dataset.cform); inp.disabled = true;
-    try { await sb('/rest/v1/feed_comments', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: { target_user: tu, target_key: key, body: txt.slice(0, 500) } }); feedOpen.add(f.dataset.cform); await loadFeed(true); }
-    catch (e) { inp.disabled = false; toast('Nem sikerült: ' + authErrorText(e)); }
+  list.querySelectorAll('[data-cfocus]').forEach(b => b.onclick = () => list.querySelector(`[data-cform="${CSS.escape(b.dataset.cfocus)}"] input`)?.focus());
+  list.querySelectorAll('[data-copen]').forEach(b => b.onclick = () => { feedOpen.add(b.dataset.copen); renderFeedList(); });
+  list.querySelectorAll('[data-cform]').forEach(f => {
+    const inp = f.querySelector('input'); inp.oninput = () => { commentDrafts[f.dataset.cform] = inp.value; };
+    f.onsubmit = async ev => {
+      ev.preventDefault(); const txt = inp.value.trim(); if (!txt) return;
+      const [tu, key] = split(f.dataset.cform); inp.disabled = true;
+      try { await sb('/rest/v1/feed_comments', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: { target_user: tu, target_key: key, body: txt.slice(0, 500) } }); delete commentDrafts[f.dataset.cform]; feedOpen.add(f.dataset.cform); inp.blur(); feedListPending = false; await loadFeed(true); }
+      catch (e) { inp.disabled = false; toast('Nem sikerült: ' + authErrorText(e)); }
+    };
   });
-  workout.querySelectorAll('[data-delc]').forEach(b => b.onclick = async () => {
+  list.querySelectorAll('[data-delc]').forEach(b => b.onclick = async () => {
     if (!confirm('Törlöd ezt a hozzászólást?')) return;
     try { await sb(`/rest/v1/feed_comments?id=eq.${b.dataset.delc}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } }); await loadFeed(true); } catch (e) { toast('Nem sikerült: ' + authErrorText(e)); }
   });
-  workout.querySelectorAll('[data-delpost]').forEach(b => b.onclick = async () => {
+  list.querySelectorAll('[data-delpost]').forEach(b => b.onclick = async () => {
     if (!confirm('Törlöd ezt a posztot?')) return;
     const ph = (feedPosts || []).find(x => x.id === b.dataset.delpost)?.photo;
     try { await sb(`/rest/v1/feed_posts?id=eq.${b.dataset.delpost}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } }); if (ph) storageDelete(ph); await loadFeed(true); } catch (e) { toast('Nem sikerült: ' + authErrorText(e)); }
