@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v46';
+const APP_VERSION = 'v47';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -751,7 +751,6 @@ function renderWorkout() {
     else if (rk?.needBw) info += `<div class="ei-line muted">🏅 A rangodhoz add meg a testsúlyod a Rangok oldalon.</div>`;
     info += `<div class="ei-line ei-last">${lastTxt ? `Előző: <b>${esc(lastTxt)}</b>` : 'Első alkalom – írd be, mennyit bírsz'}${pb ? ` <span class="ei-pb">🏆 ${showNum(pb.weight)}×${showNum(pb.reps)}</span>` : ''}</div>`;
     if (goals.length) info += `<div class="ei-line ei-goal">🎯 Nehezebb súllyal min.: ${goals.map(g => `<b>${g}</b>`).join(' · ')}</div>`;
-    info += `<div class="ei-more"><span>📊 Statisztika, grafikon, régi rangok</span><b>›</b></div>`;
     // az EGÉSZ blokk egy gomb: bárhová koppintasz rajta (rang, előző, minimum), megnyílnak a statisztikák és a rangtörténet
     h += `<div class="ex-info${flashRankId === id ? ' flash' : ''}" role="button" tabindex="0" data-stats="${esc(id)}" aria-label="${esc(hu)}: statisztika és rangtörténet">${info}</div>`; if (flashRankId === id) flashRankId = null;
     const note = state.notes?.[id] || '';
