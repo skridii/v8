@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v52';
+const APP_VERSION = 'v53';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -2167,7 +2167,9 @@ async function loadFriends() {
       sb('/rest/v1/user_state?select=user_id,state,updated_at')
     ]);
     const byId = Object.fromEntries((states || []).map(x => [x.user_id, x]));
-    for (const p of profiles || []) avatarMap[p.id] = p.avatar_path || '';
+    // v53: a profilkép útvonala a profilban ÉS a naplóban (state.avatar) is ott van – ha a profil oszlopa nem olvasható, a naplóból jön
+    for (const p of profiles || []) avatarMap[p.id] = p.avatar_path || byId[p.id]?.state?.avatar || '';
+    if (avatarMap[auth.user.id] === '' || avatarMap[auth.user.id] === undefined) avatarMap[auth.user.id] = state.avatar || '';
     if (me) me.avatar_path = avatarMap[auth.user.id] || '';
     friends = (profiles || []).filter(p => p.id !== auth.user.id).map(p => {
       const raw = byId[p.id]; let st = null;
@@ -2298,11 +2300,16 @@ function workoutCardHtml(who, k) {
   });
 }
 function avatarHtml(who, big) {
-  const n = (who.name || '?').trim(), hue = [...(who.id || n)].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 360, 7), ap = avatarMap[who.id];
+  const n = (who.name || '?').trim(), hue = [...(who.id || n)].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 360, 7), ap = avatarOf(who.id);
   return `<span class="fd-av${big ? ' big' : ''}" style="--h:${hue}">${esc(n.slice(0, 1).toUpperCase())}${ap ? `<img data-sp="${esc(ap)}" alt="">` : ''}</span>`;
 }
 /* ---- v49: képek (privát Supabase-tárhely: csak a tagok látják, akiknek a naplóját is láthatják) ---- */
 const BUCKET = 'ironlog', avatarMap = {}, imgCache = new Map();
+function avatarOf(uid) {
+  if (avatarMap[uid]) return avatarMap[uid];
+  if (auth && uid === auth.user.id) return state.avatar || me?.avatar_path || '';
+  return (friends || []).find(f => f.id === uid)?.state?.avatar || '';
+}
 async function storageUpload(path, blob) {
   const t = await accessToken(); if (!t) throw new Error('Nincs bejelentkezve');
   const r = await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${path}`, { method: 'POST', headers: { apikey: SB_KEY, Authorization: 'Bearer ' + t, 'Content-Type': blob.type || 'image/jpeg', 'x-upsert': 'true', 'cache-control': '31536000' }, body: blob });
@@ -2468,7 +2475,7 @@ function renderSocial() {
     afterLogin(false).then(() => { if (view === 'social') renderSocial(); }).catch(e => { if (view === 'social') workout.innerHTML = h + `<div class="note">${esc(authErrorText(e))}</div><button class="secondary wide" id="retryBtn">ÚJRA</button>`; const b = $('retryBtn'); if (b) b.onclick = renderSocial; });
     return;
   }
-  h += `<section class="social-card me-card"><div class="me-av-row">${avatarHtml({ id: auth.user.id, name: me.display_name || auth.user.email }, true)}<div class="me-av-btns"><button class="secondary" id="avatarBtn">📷 ${me.avatar_path ? 'PROFILKÉP CSERÉJE' : 'PROFILKÉP FELTÖLTÉSE'}</button>${me.avatar_path ? '<button class="secondary" id="avatarDel">TÖRLÉS</button>' : ''}</div></div><div class="me-top"><div><div class="me-name">${esc(me.display_name || auth.user.email)}${me.is_admin ? ' <span class="admin-tag">ADMIN</span>' : ''}</div><div class="me-mail">${esc(auth.user.email)}</div></div><button class="secondary" id="renameBtn">NÉV</button></div>
+  h += `<section class="social-card me-card"><div class="me-av-row">${avatarHtml({ id: auth.user.id, name: me.display_name || auth.user.email }, true)}<div class="me-av-btns"><button class="secondary" id="avatarBtn">📷 ${avatarOf(auth.user.id) ? 'PROFILKÉP CSERÉJE' : 'PROFILKÉP FELTÖLTÉSE'}</button>${avatarOf(auth.user.id) ? '<button class="secondary" id="avatarDel">TÖRLÉS</button>' : ''}</div></div><div class="me-top"><div><div class="me-name">${esc(me.display_name || auth.user.email)}${me.is_admin ? ' <span class="admin-tag">ADMIN</span>' : ''}</div><div class="me-mail">${esc(auth.user.email)}</div></div><button class="secondary" id="renameBtn">NÉV</button></div>
     <div class="sync-line" id="syncStatus">${esc(syncStatusText())}</div>
     ${me.approved ? `<label class="switch-row"><input type="checkbox" id="shareToggle" ${me.share_enabled ? 'checked' : ''}><span><b>Adataim megosztása a többi taggal</b><small>Ha kikapcsolod, elrejted magad a többi tag elől.</small></span></label>` : '<div class="note warn">A fiókod jelenleg nem aktív, ezért a barátok nézete és a feltöltés szünetel.</div>'}
     <div class="me-actions"><button class="secondary" id="syncNow">FELTÖLTÉS MOST</button><button class="secondary" id="logoutBtn">KIJELENTKEZÉS</button></div>
@@ -2504,11 +2511,11 @@ function renderSocial() {
   if (avatarErr) { workout.querySelector('.me-av-row')?.insertAdjacentHTML('afterend', `<div class="note warn">${esc(avatarErr)}</div>`); avatarErr = ''; }
   $('avatarBtn').onclick = () => pickImage(async f => {
     const btn = $('avatarBtn'); btn.disabled = true; btn.textContent = 'FELTÖLTÉS…';
-    const old = me.avatar_path, path = `${auth.user.id}/avatar-${Date.now()}.jpg`;
+    const old = avatarOf(auth.user.id), path = `${auth.user.id}/avatar-${Date.now()}.jpg`;
     try {
       const blob = await shrinkImage(f, 400, true); await storageUpload(path, blob);
       await sb('/rest/v1/rpc/set_my_avatar', { method: 'POST', body: { p_path: path } });
-      imgCache.set(path, Promise.resolve(URL.createObjectURL(blob))); me.avatar_path = avatarMap[auth.user.id] = path; if (old) storageDelete(old);
+      imgCache.set(path, Promise.resolve(URL.createObjectURL(blob))); me.avatar_path = avatarMap[auth.user.id] = path; state.avatar = path; save(); pushState().catch(() => {}); if (old && old !== path) storageDelete(old);
       toast('✅ Profilkép frissítve.');
     } catch (e) {
       storageDelete(path); const miss = await checkBackend(true);
@@ -2519,7 +2526,7 @@ function renderSocial() {
   });
   if ($('avatarDel')) $('avatarDel').onclick = async () => {
     if (!confirm('Törlöd a profilképet?')) return;
-    try { const old = me.avatar_path; await sb('/rest/v1/rpc/set_my_avatar', { method: 'POST', body: { p_path: null } }); me.avatar_path = avatarMap[auth.user.id] = ''; storageDelete(old); renderSocial(); } catch (e) { toast('Nem sikerült: ' + authErrorText(e)); }
+    try { const old = avatarOf(auth.user.id); await sb('/rest/v1/rpc/set_my_avatar', { method: 'POST', body: { p_path: null } }); me.avatar_path = avatarMap[auth.user.id] = ''; state.avatar = ''; save(); pushState().catch(() => {}); storageDelete(old); renderSocial(); } catch (e) { toast('Nem sikerült: ' + authErrorText(e)); }
   };
   $('syncNow').onclick = async () => { await pushState(); toast(syncErr ? 'Feltöltés sikertelen.' : 'Feltöltve.'); };
   $('renameBtn').onclick = async () => {
