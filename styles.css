@@ -511,3 +511,5 @@ body:not([data-view="workout"]) #cycleBanner{display:none}
 .done-sum.todo{background:#0a0d10;border-color:#232a31;color:#a8b1ba;font-weight:600}
 .done-sum.todo b{color:#e8edf1}
 .quick{margin:8px 0 10px}
+/* v44: a FRISSÍTÉS sáv az alsó menü FÖLÖTT (eddig a menü eltakarta) */
+.update-bar{bottom:calc(84px + env(safe-area-inset-bottom))!important;z-index:55!important}

@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v43';
+const APP_VERSION = 'v44';
 
 const DAYS = [
   { name: 'ALSÓTEST 1', short: 'A1', subtitle: 'Felhúzás és combfeszítő' },
@@ -2360,7 +2360,7 @@ function renderInfo() {
     'Belépve a fiókodba is felkerül egy másolat – új telefonon belépve visszakapod.',
     'Hetente készíts <b>mentést fájlba</b> (FEJLŐDÉS oldal alja) – az app emlékeztet is.']);
   h += `<section class="credit-card"><div class="eyebrow">KÉSZÍTETTE</div><div class="credit-name">Sarkadi Ádám</div><div class="credit-nick">„Skridi”</div>
-    <a class="primary insta-btn" href="${INSTA_URL}" target="_blank" rel="noopener">📸 Instagram · @skridi_</a><div class="bw-date">IRONLOG ${APP_VERSION}</div></section>`;
+    <a class="primary insta-btn" href="${INSTA_URL}" target="_blank" rel="noopener">📸 Instagram · @skridi_</a><div class="bw-date">IRONLOG ${APP_VERSION}</div><button class="secondary wide" id="checkUpdBtn">🔄 FRISSÍTÉS KERESÉSE</button></section>`;
   if (first) h += `<button class="primary wide read-btn" id="infoDoneBtn">✓ ELOLVASTAM – TOVÁBB</button>`;
   workout.innerHTML = inAppWarning() + h;
   const c2 = $('copyBtn2'); if (c2) c2.onclick = copyLink;
@@ -2404,6 +2404,13 @@ if ('serviceWorker' in navigator) {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) try { swReg?.update().catch(() => {}); } catch (e) {} });
 }
 $('updateBtn').onclick = () => { save(); setTimeout(() => location.reload(), 150); };
+/* v44: kézi frissítéskeresés az Infó oldalon (ha a sáv nem jelenne meg) – a service worker letölti az új verziót, utána újratölt */
+document.addEventListener('click', ev => {
+  if (!ev.target.closest('#checkUpdBtn')) return;
+  const b = ev.target.closest('#checkUpdBtn'); b.disabled = true; b.textContent = 'KERESÉS…'; save();
+  const done = () => setTimeout(() => location.reload(), 300);
+  try { if (swReg) swReg.update().then(done, done); else done(); } catch (e) { done(); }
+});
 render();
 load().then(() => { render(); restoreTimer(); if (swapNote) { toast(swapNote); swapNote = ''; } if (auth) afterLogin(false).then(() => renderBanner()).catch(() => {}); }).catch(() => {
   // Ha a betöltés váratlanul elakad, NEM írunk felül semmit (ready=false marad).
