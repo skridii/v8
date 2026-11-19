@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v54';
+const APP_VERSION = 'v55';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -298,6 +298,9 @@ function migrate(old) {
   let s;
   if (old.version === 6 && old.exercises && old.layouts) {
     s = { ...blankState(), ...old };
+    // v55 HIBAJAVÍTÁS: a blankState napsorrend-jelzője NEM öröklődhet egy régi mentésre (akinek nem volt „fixes” mezője,
+    // annál emiatt elmaradt a napok átfordítása → a FELSŐTEST fülön a lábgyakorlatok voltak)
+    s.fixes = old.fixes ? { ...old.fixes } : {};
   } else if (old.exercises) {
     // v4 / v5: occurrence kulcs "hét-nap" → "1-hét-nap"
     const exercises = {};
@@ -373,6 +376,7 @@ function migrate(old) {
     }
     applySwaps(s);
     applyDayOrder(s);
+    repairDayOrder(s);
   } finally { state = prev; }
   return s;
 }
@@ -383,6 +387,32 @@ function migrate(old) {
 /* v45: napsorrend-csere (egyszer, s.fixes.dayorder2026): régen ALSÓ 1 · FELSŐ 1 · ALSÓ 2 · FELSŐ 2 volt, most FELSŐ 1 · ALSÓ 1 · FELSŐ 2 · ALSÓ 2.
    A heti tervekben a napok, az edzésbejegyzések kulcsában (ciklus-hét-nap) a nap sorszáma és az aktuális nap is átfordul; a Hevy-import (0. ciklus) nem napfüggő. */
 const DAY_PERM = [1, 0, 3, 2];
+/* v55: javítás azoknak, akiknél a v45–v54 hibája miatt a napok nem fordultak át (a jelző a blankState-ből jött: értéke 1, nem időbélyeg).
+   Ha a heti tervben a 0. és 2. nap láb-, az 1. és 3. nap felsőtest-gyakorlatokból áll, a napokat (tervek + bejegyzések + aktuális nap) átfordítjuk. Egyszer fut. */
+const LEG_M = ['quads', 'hams', 'glutes', 'calves', 'adduct', 'abduct'], UP_M = ['chest', 'lats', 'upback', 'delt_f', 'delt_s', 'delt_r', 'biceps', 'triceps'];
+function dayLegScore(day) {
+  let leg = 0, up = 0;
+  for (const sl of day || []) { const inf = exInfoFor(exId(sl.variants[0]?.name || '')); if (!inf) continue; for (const [k, v] of Object.entries(inf.m)) if (v >= 3) { if (LEG_M.includes(k)) leg++; else if (UP_M.includes(k)) up++; } }
+  return leg - up;
+}
+function repairDayOrder(s) {
+  if (s.fixes?.dayfix2026b) return;
+  const flag = s.fixes?.dayorder2026;
+  s.fixes = { ...(s.fixes || {}), dayfix2026b: Date.now() };
+  if (flag !== 1) return;                     // valódi átfordítás történt (időbélyeg) → rendben van
+  const keys = Object.keys(s.layouts || {}).sort((a, b) => { const [c1, w1] = a.split('-').map(Number), [c2, w2] = b.split('-').map(Number); return c2 - c1 || w2 - w1; });
+  const L = keys.length ? s.layouts[keys[0]] : null; if (!Array.isArray(L) || L.length < 4) return;
+  const oldOrder = dayLegScore(L[0]) + dayLegScore(L[2]) - dayLegScore(L[1]) - dayLegScore(L[3]);
+  if (oldOrder <= 0) return;                  // a felsőtest már elöl van
+  for (const k of Object.keys(s.layouts)) { const X = s.layouts[k]; if (Array.isArray(X) && X.length >= 4) s.layouts[k] = [X[1], X[0], X[3], X[2], ...X.slice(4)]; }
+  for (const obj of Object.values(s.exercises || {})) {
+    const o = {};
+    for (const [k, r] of Object.entries(obj.occurrences || {})) { const p = k.split('-'); if (p.length === 3 && Number(p[0]) >= 1) { const d = Number(p[2]); if (d >= 0 && d < 4) p[2] = String(DAY_PERM[d]); } o[p.join('-')] = r; }
+    obj.occurrences = o;
+  }
+  s.day = DAY_PERM[s.day] ?? 0;
+  s.fixes.dayorder2026 = Date.now();
+}
 function applyDayOrder(s) {
   if (s.fixes?.dayorder2026) return;
   s.fixes = { ...(s.fixes || {}), dayorder2026: Date.now() };
