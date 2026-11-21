@@ -707,3 +707,53 @@ body.must-read #infoBtn{display:none!important}
 .sheet .chip,.chip{background:#181d23;border:1px solid #2a3037;color:#aab2ba;border-radius:99px;padding:8px 12px;font-size:12px;font-weight:800;text-align:center}
 .sheet .chip.on,.chip.on{background:#9cff57;color:#081006;border-color:#9cff57}
 .warm-body{display:grid;gap:8px}
+/* v57: Hevy-szerű, tömör gyakorlatkártya */
+.exercise{padding:12px 12px 8px}
+.ex-thumb{width:44px;height:44px}
+.exercise-title{font-size:16px!important}
+.exercise-en{font-size:11px;line-height:1.3}
+.ex-meta{margin-top:5px;gap:6px}
+.more-btn{width:38px;height:38px;font-size:20px;border-radius:11px}
+.var-chip{background:#0f1a0b;border:1px solid #34502a;color:#bafc8f;border-radius:99px;padding:3px 9px;font-size:11px;font-weight:800;cursor:pointer;max-width:58vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ex-info{margin:9px 0 8px;padding:8px 10px;gap:5px;cursor:pointer}
+.ei-rank{gap:9px}
+.ei-rank .rank-badge,.ei-rank svg{width:26px;height:26px}
+.ei-rk .rr-bar{margin:4px 0 0}
+.ei-go{color:#6d7781;font-size:18px;font-weight:900;padding-left:2px}
+.ei-line{font-size:11.5px}
+.sets{gap:5px}
+.st-head,.set-row{display:grid;grid-template-columns:26px 62px 1fr 1fr 40px;gap:6px;align-items:center}
+.st-head{font-size:9.5px;font-weight:900;letter-spacing:.8px;color:#5f6872;padding:0 0 1px}
+.st-head span{text-align:center}.st-head span:nth-child(2){text-align:left;padding-left:2px}
+.set-row{border-radius:10px;padding:2px 0;transition:background .2s}
+.set-row input{padding:9px 6px!important;text-align:center;font-weight:800;font-size:16px;height:40px}
+.set-row input::placeholder{color:#4e5862;font-weight:700}
+.set-num{font-size:12px}
+.prev-cell{background:none;border:0;color:#8b949d;font-size:12px;font-weight:700;text-align:left;padding:0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;height:40px}
+.prev-cell:disabled{color:#3e464e;cursor:default}
+.complete{height:40px;color:#4e5862;font-size:17px}
+.set-row.is-done{background:rgba(156,255,87,.09)}
+.set-row.is-done input{background:transparent;border-color:transparent;color:#e8f9dc}
+.warmup-row{border:0;padding:2px 0;background:none}
+.warmup-row .set-num{color:#ffb35c}
+.warmup-row.is-done{background:rgba(255,179,92,.08)}
+.match-hint{margin:-2px 0 2px 94px;font-size:11px}
+@media(max-width:360px){.st-head,.set-row{grid-template-columns:22px 54px 1fr 1fr 38px;gap:5px}.match-hint{margin-left:81px}}
+.dh-clock{display:inline-block;background:#9cff57;color:#081006;border-radius:99px;padding:2px 9px;font-weight:900;margin-right:8px;font-variant-numeric:tabular-nums}
+.rest-default{font-size:11.5px;color:#7e8791;margin:-8px 0 16px}
+.timer-actions button{min-width:0;flex:1}
+#minus15,#add30{flex:0 0 72px}
+.hevy-welcome{position:relative;background:linear-gradient(145deg,#132012,#0e1311);border:1px solid #2f4a24;border-radius:17px;padding:16px 15px;margin:0 0 12px}
+.hw-x{position:absolute;top:8px;right:8px;background:none;border:0;color:#6d7781;font-size:16px;padding:6px;cursor:pointer}
+.hw-title{font-weight:950;font-size:18px;margin-bottom:6px}
+.hw-text{font-size:13px;color:#c2cac2;line-height:1.45}
+.hw-how{margin:10px 0}
+.hw-how summary{color:#9cff57;font-weight:800;font-size:12.5px;cursor:pointer}
+.hw-how ol{margin:8px 0 0;padding-left:20px;font-size:12.5px;color:#cfd5da;line-height:1.6}
+.hw-btn{display:block;text-align:center;padding:13px;border-radius:12px;font-size:13px;margin-top:6px}
+.hm-row{display:grid;gap:5px;margin:12px 0;font-size:12.5px;color:#cfd5da;font-weight:700}
+.hm-row select{width:100%;font-size:16px}
+.set-row input::placeholder{color:#3d454d}
+.ei-rl{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ei-rk small{color:#7e8791;font-size:10.5px;margin-top:3px}
+.ex-info .ei-line{border-top:0!important;padding-top:0!important;margin-top:0!important}

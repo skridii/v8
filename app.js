@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v56';
+const APP_VERSION = 'v57';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -762,9 +762,9 @@ function renderWorkout() {
   const recs = slots.map(slot => recordFor(c, w, d, slotName(c, w, d, slot))), doneN = slots.filter((sl, e) => exAllDone(sl, recs[e])).length;
   const nextE = slots.findIndex((sl, e) => !exAllDone(sl, recs[e]));
   const vol = dayVolume(c, w, d), pv = prevDayVolume(c, w, d);
-  let h = `<section class="day-head"><div class="dh-row"><div><div class="day-name">${day.name}</div><div class="day-meta">${esc(day.subtitle)} · ${cycLabel(c).toLowerCase()}${w}. hét</div></div><div class="dh-count"><b>${doneN}/${slots.length}</b><span>kész</span></div></div>
+  let h = hevyWelcomeHtml() + `<section class="day-head"><div class="dh-row"><div><div class="day-name">${day.name}</div><div class="day-meta">${esc(day.subtitle)} · ${cycLabel(c).toLowerCase()}${w}. hét</div></div><div class="dh-count"><b>${doneN}/${slots.length}</b><span>kész</span></div></div>
     <div class="dh-bar"><i style="width:${slots.length ? Math.round(doneN / slots.length * 100) : 0}%"></i></div>
-    <div class="dh-vol">Megmozgatott súly: <b>${kg(vol.total)} kg</b>${pv ? ` · előző: ${kg(pv.total)} kg` : ''}</div>
+    <div class="dh-vol">${liveClockHtml(c, w, d, slots, doneN)}Megmozgatott súly: <b>${kg(vol.total)} kg</b>${pv ? ` · előző: ${kg(pv.total)} kg` : ''}</div>
     ${nextE >= 0 && doneN > 0 ? `<button class="dh-next" data-jump="${nextE}">▶ Következő: ${esc(hun(slotName(c, w, d, slots[nextE])))}</button>` : ''}${slots.length && doneN === slots.length ? '<div class="dh-done">🎉 Minden gyakorlat kész erre a napra!</div>' : ''}${doneN > 0 ? `<div class="dh-actions"><button class="dh-sum" data-sum>📋 Összegzés</button>${me?.approved ? `<button class="dh-share" data-share="${c}-${w}-${d}">📣 Közösségbe</button>` : ''}</div>` : ''}</section>`;
   slots.forEach((slot, e) => {
     const vi = variantIndex(c, w, d, slot), v = slot.variants[vi], name = v.name, id = exId(name), hu = huShort(v.hu) || hun(id);
@@ -772,37 +772,37 @@ function renderWorkout() {
     const sets = rec?.sets || [emptySet(), emptySet()], wu = rec?.warmup || emptySet(), pb = personalBest(id);
     const key = `${c}-${w}-${d}-${slot.uid}`, done = exAllDone(slot, rec), collapsed = done ? !openEx.has(key) : closedEx.has(key), rk = rankOf(id), hasRk = rk && rk.pts !== undefined;
     const goals = goalList(c, w, d, name), lastTxt = last ? setsText(last) : '';
-    h += `<article class="exercise${done ? ' ex-done' : ''}${collapsed ? ' collapsed' : ''}" id="ex-${e}"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(hu)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><div class="exercise-title">${esc(hu)}</div>${hu !== name ? `<div class="exercise-en">${esc(name)}</div>` : ''}<div class="ex-meta"><span class="prescribed">${esc(showReps(slot))}</span>${collapsed && hasRk ? `<span class="rk-mini" style="color:${rk.color}">${esc(rk.label)}</span>` : ''}</div></div><span class="fold-ic" aria-hidden="true">${collapsed ? '▾' : '▴'}</span><button class="more-btn" data-more="${e}" aria-label="További lehetőségek">⋯</button></div>`;
+    const [huMain, huExtra] = splitHu(hu), sub = [huExtra, hu !== name ? name : ''].filter(Boolean).join(' · ');
+    const other = slot.variants.length > 1 ? slot.variants[1 - vi] : null;
+    h += `<article class="exercise${done ? ' ex-done' : ''}${collapsed ? ' collapsed' : ''}" id="ex-${e}"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(hu)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><div class="exercise-title">${esc(huMain)}</div>${sub ? `<div class="exercise-en">${esc(sub)}</div>` : ''}<div class="ex-meta"><span class="prescribed">${esc(showReps(slot))}</span>${collapsed && hasRk ? `<span class="rk-mini" style="color:${rk.color}">${esc(rk.label)}</span>` : ''}${!collapsed && other ? `<button class="var-chip" data-variant data-e="${e}" aria-label="Ezen a héten inkább: ${esc(huShort(other.hu) || other.name)}">↔ ${esc(splitHu(huShort(other.hu) || other.name)[0])}</button>` : ''}</div></div><span class="fold-ic" aria-hidden="true">${collapsed ? '▾' : '▴'}</span><button class="more-btn" data-more="${e}" aria-label="További lehetőségek">⋯</button></div>`;
     if (collapsed) {
       h += `<div class="fold-sum${done ? ' ok' : ''}">${done ? `✓ Kész · ${esc(setsText(rec))}` : `${lastTxt ? `Előző: <b>${esc(lastTxt)}</b>` : 'Még nincs előzmény'}${goals[0] ? ` · 🎯 <b>${goals[0]}</b>` : ''}`}</div></article>`; return;
     }
     // EGY tömör infó-blokk: rang, előző + rekord, minimum ismétlés (a részletes előzmény a ⋯ / az „Előző” sor mögött)
     let info = '';
-    if (hasRk) { info += `<div class="ei-rank">${rankBadge(rk)}<div class="ei-rk"><div><b style="color:${rk.color}">${esc(rk.label)}</b><span>${esc(oneRmText(rk))}</span></div><div class="rr-bar"><i style="width:${Math.round(rk.pct * 100)}%;background:${rk.color}"></i></div><small>${esc(rankNeedText(rk))}</small></div></div>`; }
+    if (hasRk) { info += `<div class="ei-rank">${rankBadge(rk)}<div class="ei-rk"><b class="ei-rl" style="color:${rk.color}">${esc(rk.label)}</b><div class="rr-bar"><i style="width:${Math.round(rk.pct * 100)}%;background:${rk.color}"></i></div><small>${esc(oneRmText(rk))}${pb ? ` · 🏆 rekord ${showNum(pb.weight)}×${showNum(pb.reps)}` : ''}</small></div><span class="ei-go" aria-hidden="true">›</span></div>`; }
     else if (rk?.needBw) info += `<div class="ei-line muted">🏅 A rangodhoz add meg a testsúlyod a Rangok oldalon.</div>`;
-    info += `<div class="ei-line ei-last">${lastTxt ? `Előző: <b>${esc(lastTxt)}</b>` : 'Első alkalom – írd be, mennyit bírsz'}${pb ? ` <span class="ei-pb">🏆 ${showNum(pb.weight)}×${showNum(pb.reps)}</span>` : ''}</div>`;
+    if (!lastTxt) info += `<div class="ei-line ei-last">Első alkalom – írd be, mennyit bírsz</div>`;
+    else if (!hasRk && pb) info += `<div class="ei-line ei-last">🏆 Rekord: <b>${showNum(pb.weight)} kg × ${showNum(pb.reps)}</b></div>`;
     if (goals.length) info += `<div class="ei-line ei-goal">🎯 Nehezebb súllyal min.: ${goals.map(g => `<b>${g}</b>`).join(' · ')}</div>`;
     // az EGÉSZ blokk egy gomb: bárhová koppintasz rajta (rang, előző, minimum), megnyílnak a statisztikák és a rangtörténet
     h += `<div class="ex-info${flashRankId === id ? ' flash' : ''}" role="button" tabindex="0" data-stats="${esc(id)}" aria-label="${esc(hu)}: statisztika és rangtörténet">${info}</div>`; if (flashRankId === id) flashRankId = null;
     const note = state.notes?.[id] || '';
     if (note) h += `<button class="ex-note" data-note="${esc(id)}">📝 ${esc(note)}</button>`;
-    if (slot.variants.length > 1) {
-      const other = slot.variants[1 - vi];
-      h += `<div class="variant-row"><span class="variant-tag">VÁLTAKOZÓ</span><button class="variant-btn" data-variant data-e="${e}">↔ Ezen a héten inkább: ${esc(huShort(other.hu) || other.name)}</button></div>`;
-    }
-    h += `<div class="sets">`;
-    const bwx = isBwExercise(name);
-    h += setRowHtml('B', e, wu, 'warmup', 0, bwx);
+    h += `<div class="sets"><div class="st-head"><span>#</span><span>ELŐZŐ</span><span>KG</span><span>ISM.</span><span>✓</span></div>`;
+    const bwx = isBwExercise(name), lw = last?.warmup;
+    h += setRowHtml('B', e, wu, 'warmup', 0, bwx, null, lw && (lw.done || lw.weight || lw.reps) ? lw : null);
     const nSets = setCount(slot, rec);
     for (let s = 0; s < nSets; s++) {
       const sv = sets[s] || emptySet(), mh = !sv.done && cleanNum(sv.reps) === '' ? matchHint(slot, e, s, sv.weight) : null;
-      h += setRowHtml(String(s + 1), e, sv, 'work', s, bwx, mh?.r) + `<div class="match-hint${mh ? '' : ' hidden'}" data-mh="${e}-${s}">${mh ? '🎯 ' + mh.text : ''}</div>`;
+      const ps = last?.sets?.[s]?.done ? last.sets[s] : null;
+      h += setRowHtml(String(s + 1), e, sv, 'work', s, bwx, mh?.r, ps) + `<div class="match-hint${mh ? '' : ' hidden'}" data-mh="${e}-${s}">${mh ? '🎯 ' + mh.text : ''}</div>`;
     }
     h += `<div class="set-tools slim">${bwx ? '' : `<button class="set-tool warm" data-warm="${e}">🔥 Bemelegítés${barWeight(id) !== null ? ' · tárcsák' : ''}</button>`}<button class="set-tool" data-addset data-e="${e}">+ szett</button>${nSets > 1 ? `<button class="set-tool minus" data-delset data-e="${e}">− szett</button>` : ''}</div></div></article>`;
   });
   if (!slots.length) h += '<div class="note">Ezen a napon nincs gyakorlat. Adj hozzá egyet!</div>';
   h += '<button class="add-ex-btn" id="addExBtn">+ ÚJ GYAKORLAT HOZZÁADÁSA</button>';
-  h += '<div class="note">Koppints a gyakorlat nevére a ki- és becsukáshoz, a képére az animációhoz, a rangos keretre a statisztikához és a régi rangokhoz; a ⋯ gombbal áthelyezheted, cserélheted, jegyzetet írhatsz.</div>';
+  h += '<div class="note">Tipp: ha ugyanannyit csináltál, mint múltkor, csak pipáld ki – a halvány számokat veszi át. Név = ki/becsuk · kép = animáció · rang = statisztika · ⋯ = csere, sorrend, jegyzet.</div>';
   workout.innerHTML = h;
   bindInputs();
   // a kártya fejlécére (vagy a becsukott kártyára) koppintva ki/becsukódik – a kép (animáció) és a ⋯ gomb kivétel
@@ -810,7 +810,7 @@ function renderWorkout() {
     const slot = slots[e]; if (!slot) return;
     const key = `${c}-${w}-${d}-${slot.uid}`, done = exAllDone(slot, recs[e]);
     const toggle = ev => {
-      if (ev.target.closest('.ex-thumb, .more-btn, input, .set-row, .set-tools, .ex-note, .variant-row, .ex-info, .match-hint')) return;
+      if (ev.target.closest('.ex-thumb, .more-btn, input, .set-row, .set-tools, .ex-note, .var-chip, .st-head, .ex-info, .match-hint')) return;
       if (!art.classList.contains('collapsed') && !ev.target.closest('.exercise-head')) return;   // nyitott kártyán csak a fejléc csuk
       if (done) { if (openEx.has(key)) openEx.delete(key); else openEx.add(key); } else { if (closedEx.has(key)) closedEx.delete(key); else closedEx.add(key); }
       renderWorkout();
@@ -821,9 +821,24 @@ function renderWorkout() {
   workout.querySelectorAll('details.ex-more').forEach(dt => dt.ontoggle = () => { if (dt.open) openEx.add(dt.dataset.mkey); else openEx.delete(dt.dataset.mkey); });
   workout.querySelectorAll('[data-more]').forEach(b => b.onclick = () => openMore(+b.dataset.more));
   workout.querySelectorAll('[data-sum]').forEach(b => b.onclick = () => openSummary(c, w, d));
+  const hw = $('hevyWelcomeInput'); if (hw) hw.onchange = ev => { importHevy(ev.target.files[0]); ev.target.value = ''; };
+  const hx = $('hevyWelcomeX'); if (hx) hx.onclick = () => { state.hideHevyTip = 1; save(); renderWorkout(); };
   workout.querySelectorAll('[data-share]').forEach(b => b.onclick = () => { feedDraft = { body: '', attach: b.dataset.share, photo: null, photoUrl: '' }; view = 'feed'; render(); window.scrollTo(0, 0); });
   workout.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => { const el = $('ex-' + b.dataset.jump); if (el) { const y = el.getBoundingClientRect().top + window.scrollY - (document.querySelector('.sticky-nav')?.getBoundingClientRect().bottom || 120) - 8; window.scrollTo({ top: y, behavior: 'smooth' }); } });
 }
+/* v57: futó edzésóra a napfejlécben (az első pipától; ha kész a nap vagy 4 óránál régebbi, nem látszik) */
+function dayStart(c, w, d) {
+  let t0 = Infinity;
+  for (const slot of (layoutFor(c, w)[d] || [])) { const r = recordFor(c, w, d, slotName(c, w, d, slot)); for (const x of [r?.warmup, ...(r?.sets || [])]) if (x?.done && x.ts > 1e12) t0 = Math.min(t0, x.ts); }
+  return t0 < Infinity ? t0 : 0;
+}
+function liveClockHtml(c, w, d, slots, doneN) {
+  const t0 = dayStart(c, w, d); if (!t0 || doneN >= slots.length || Date.now() - t0 > 4 * 3600e3) return '';
+  return `<span class="dh-clock" data-t0="${t0}">⏱ ${clockText(Date.now() - t0)}</span>`;
+}
+const clockText = ms => { const m = Math.floor(ms / 60000), sx = Math.floor(ms / 1000) % 60; return m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}:${String(sx).padStart(2, '0')}` : `${m}:${String(sx).padStart(2, '0')}`; };
+setInterval(() => { document.querySelectorAll('.dh-clock').forEach(el => { el.textContent = '⏱ ' + clockText(Date.now() - Number(el.dataset.t0)); }); }, 1000);
+
 /* ⋯ menü egy gyakorlathoz: nagy, könnyen eltalálható gombok */
 function openMore(e) {
   const slots = curSlots(), slot = slots[e]; if (!slot) return;
@@ -854,10 +869,16 @@ function editNote(id) {
   save(); renderWorkout();
 }
 function isBwExercise(name) { const k = rankKeyFor(exId(name)); return !!k && RANK_DB[k].type === 'r'; }
-function setRowHtml(label, e, v, kind, s = 0, bw = false, minR = null) {
+/* v57: Hevy-szerű sor – SZETT | ELŐZŐ | KG | ISM. | ✓. Az üres mezőben az előző alkalom értéke látszik halványan,
+   és ha üresen pipálod ki, azt veszi át (egy koppintás = ugyanaz, mint múltkor). Az ELŐZŐ-re koppintva beíródik. */
+function setRowHtml(label, e, v, kind, s = 0, bw = false, minR = null, prev = null) {
   const wu = kind === 'warmup', done = !!v.done;
-  return `<div class="set-row ${wu ? 'warmup-row' : ''}" data-e="${e}" data-s="${s}"><div class="set-num">${label}</div><input inputmode="decimal" data-type="weight" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.weight || ''))}" placeholder="${bw ? '0 kg' : 'kg'}" aria-label="${label} súly"><input inputmode="numeric" data-type="reps" data-kind="${kind}" data-e="${e}" data-s="${s}" value="${esc(showNum(v.reps || ''))}" placeholder="${minR ? 'min ' + minR : 'ism.'}" aria-label="${label} ismétlés"${minR ? ' class="min-ph"' : ''}><button class="complete ${done ? 'checked' : ''}" data-done data-kind="${kind}" data-e="${e}" data-s="${s}">${done ? '✓' : '○'}</button></div>`;
+  const pw = prev && cleanNum(prev.weight ?? '') !== '' ? cleanNum(prev.weight) : (prev && bw ? '0' : ''), pr = prev && positive(prev.reps) ? cleanNum(prev.reps) : '';
+  const prevTxt = pr ? `${showNum(pw || '0')}×${showNum(pr)}` : '—';
+  return `<div class="set-row ${wu ? 'warmup-row' : ''}${done ? ' is-done' : ''}" data-e="${e}" data-s="${s}"><div class="set-num">${label}</div><button type="button" class="prev-cell" data-prevfill${pr ? '' : ' disabled'} aria-label="Előző: ${esc(prevTxt)}">${esc(prevTxt)}</button><input inputmode="decimal" data-type="weight" data-kind="${kind}" data-e="${e}" data-s="${s}" data-pw="${esc(pw)}" value="${esc(showNum(v.weight || ''))}" placeholder="${pw ? esc(showNum(pw)) : bw ? '0' : 'kg'}" aria-label="${label} súly"><input inputmode="numeric" data-type="reps" data-kind="${kind}" data-e="${e}" data-s="${s}" data-pr="${esc(pr)}" value="${esc(showNum(v.reps || ''))}" placeholder="${minR ? 'min ' + minR : pr ? esc(showNum(pr)) : 'ism.'}" aria-label="${label} ismétlés"${minR ? ' class="min-ph"' : ''}><button class="complete ${done ? 'checked' : ''}" data-done data-kind="${kind}" data-e="${e}" data-s="${s}" aria-label="${label}. szett kész">✓</button></div>`;
 }
+/* „Mellkassal támasztott evezés – csípő felé húzva” → cím + kiegészítés (hogy ne legyen 3 soros a cím) */
+function splitHu(t) { const m = String(t || '').split(/\s+[–-]\s+/); return [m[0], m.slice(1).join(' – ')]; }
 function bindInputs() {
   workout.querySelectorAll('.set-row input').forEach(inp => inp.oninput = () => {
     const slot = curSlots()[+inp.dataset.e]; if (!slot) return;
@@ -870,11 +891,11 @@ function bindInputs() {
     if (inp.dataset.kind === 'work') {
       const row = inp.closest('.set-row'), ri = row.querySelector('[data-type="reps"]'), hint = workout.querySelector(`[data-mh="${inp.dataset.e}-${s}"]`);
       const mh = cleanNum(ri.value) === '' ? matchHint(slot, +inp.dataset.e, s, row.querySelector('[data-type="weight"]').value) : null;
-      ri.placeholder = mh ? 'min ' + mh.r : 'ism.'; ri.classList.toggle('min-ph', !!mh);
+      ri.placeholder = mh ? 'min ' + mh.r : (ri.dataset.pr ? showNum(ri.dataset.pr) : 'ism.'); ri.classList.toggle('min-ph', !!mh);
       if (hint) { hint.innerHTML = mh ? '🎯 ' + mh.text : ''; hint.classList.toggle('hidden', !mh); }
     }
     const btn = inp.closest('.set-row').querySelector('[data-done]');
-    btn.classList.remove('checked'); btn.textContent = '○';
+    btn.classList.remove('checked'); inp.closest('.set-row').classList.remove('is-done');
     save();
   });
   workout.querySelectorAll('[data-done]').forEach(btn => btn.onclick = () => {
@@ -887,6 +908,10 @@ function bindInputs() {
     if (cur?.done) { cur.done = false; save(); renderWorkout(); return; }
     // Saját testsúlyos gyakorlatnál (húzódzkodás, lábemelés…) a súly lehet 0 vagy üres.
     const bw = isBwExercise(name);
+    // üres mező + kipipálás = ugyanaz, mint az előző alkalommal (az ismétlést csak akkor veszi át, ha a súly is ugyanaz)
+    const pw = ins[0].dataset.pw || '', pr = ins[1].dataset.pr || '';
+    if (cleanNum(ins[0].value) === '' && pw !== '') ins[0].value = showNum(pw);
+    if (cleanNum(ins[1].value) === '' && pr !== '' && toNum(ins[0].value) === toNum(pw)) ins[1].value = showNum(pr);
     if (bw && cleanNum(ins[0].value) === '') ins[0].value = '0';
     let invalid = false;
     ins.forEach((inp, j) => { const okv = (bw && j === 0) ? toNum(inp.value) >= 0 : positive(inp.value); if (!okv) { inp.classList.add('invalid'); invalid = true; } else inp.classList.remove('invalid'); });
@@ -938,6 +963,12 @@ function bindInputs() {
   if (typeof ANIM3D !== 'undefined') ANIM3D.fillThumbs(workout);
   workout.querySelectorAll('[data-note]').forEach(btn => btn.onclick = () => editNote(btn.dataset.note));
   workout.querySelectorAll('[data-warm]').forEach(btn => btn.onclick = () => openWarmup(+btn.dataset.warm));
+  workout.querySelectorAll('[data-prevfill]').forEach(btn => btn.onclick = () => {
+    const row = btn.closest('.set-row'), [wi, ri] = row.querySelectorAll('input');
+    if (row.querySelector('[data-done]').classList.contains('checked')) return;
+    wi.value = showNum(wi.dataset.pw || ''); ri.value = showNum(ri.dataset.pr || '');
+    wi.dispatchEvent(new Event('input')); ri.dispatchEvent(new Event('input'));
+  });
   $('addExBtn').onclick = () => openEditor('add');
 }
 
@@ -1904,7 +1935,12 @@ const HEVY_MAP = {
   'seated calf raise': 'Seated Calf Raise', 'crunch (machine)': 'Machine Ab Crunch', 'cable crunch': 'Cable Crunch', 'preacher curl (dumbbell)': 'Dumbbell Preacher Curl', 'pull up': 'Pull Up', 'pull up (weighted)': 'Pull Up', 'chin up': 'Pull Up',
   'chest dip': 'Dips', 'triceps dip': 'Dips', 'chest dip (weighted)': 'Dips', 'push up': 'Push Up', 'hanging leg raise': 'Hanging Leg Raise', 'goblet squat': 'Goblet Squat',
   'bulgarian split squat': 'Dumbbell Bulgarian Split Squat', 'smith machine squat': 'Smith Machine Squat', 'smith machine bench press': 'Smith Machine Bench Press',
-  't bar row': 'Chest-Supported Row', 'chest supported incline row (dumbbell)': 'Chest-Supported Row', 'wrist curl (dumbbell)': 'Dumbbell Wrist Curl', 'reverse wrist curl (dumbbell)': 'Dumbbell Reverse Wrist Curl'
+  't bar row': 'Chest-Supported Row', 'chest supported incline row (dumbbell)': 'Chest-Supported Row', 'wrist curl (dumbbell)': 'Dumbbell Wrist Curl', 'reverse wrist curl (dumbbell)': 'Dumbbell Reverse Wrist Curl',
+  'seated calf raise (machine)': 'Seated Calf Raise', 'standing calf raise (smith)': 'Standing Calf Raise', 'calf press (machine)': 'Standing Calf Raise', 'overhead press (smith machine)': 'Smith Machine Overhead Shoulder Press',
+  'shoulder press (smith machine)': 'Smith Machine Overhead Shoulder Press', 'bulgarian split squat (smith machine)': 'Smith Machine Bulgarian Split Squat', 'smith machine bulgarian split squat': 'Smith Machine Bulgarian Split Squat',
+  'hanging knee raise': 'Hanging Leg Raise', 'chest supported row (machine)': 'Chest-Supported Row', 'iso-lateral row (machine)': 'Chest-Supported Row', 'iso-lateral high row (machine)': 'Cable High Row',
+  'high row (machine)': 'Cable High Row', 'single arm lat pulldown': 'Single-Arm Sagittal Pulldown', 'single arm lat pulldown (cable)': 'Single-Arm Sagittal Pulldown', 'reverse fly (machine)': 'Reverse Pec Deck',
+  'triceps rope pushdown (cable)': 'Cable Rope Triceps Pushdown', 'lying leg curl': 'Lying Hamstring Curl', 'deadlift': 'Conventional Deadlift', 'bench press': 'Bench Press', 'incline bench press': 'Incline Bench Press'
 };
 function hevyName(title) {
   const t = String(title || '').trim(), k = t.toLowerCase();
@@ -1940,6 +1976,11 @@ function importHevy(file) {
     state.hevyImported = state.hevyImported || {};
     const fresh = parsed.sessions.filter(s => !state.hevyImported[`${s.t}|${s.title}`]);
     if (!fresh.length) { toast(parsed.sessions.length ? 'Ezek az edzések már be vannak importálva.' : 'Nem találtam edzést a fájlban.'); return; }
+    const unknown = [...new Set(fresh.flatMap(s => [...s.ex.values()].map(e => e.orig)))].filter(o => !rankKeyFor(exId(hevyName(o))) && !programIds().has(exId(hevyName(o))));
+    if (unknown.length) {
+      const map = await askHevyMap(unknown); if (!map) return;
+      for (const s of fresh) { const m2 = new Map(); for (const [n, e] of s.ex) { const k = map[e.orig] || n, x = m2.get(k); if (x) { x.sets.push(...e.sets); if (e.warm && (!x.warm || toNum(e.warm.weight) > toNum(x.warm.weight))) x.warm = e.warm; } else m2.set(k, e); } s.ex = m2; }
+    }
     const names = new Map(); let sets = 0;
     for (const s of fresh) for (const [n, e] of s.ex) { names.set(e.orig, n); sets += e.sets.length; }
     const mapped = [...names].filter(([o, n]) => o !== n).slice(0, 12).map(([o, n]) => `  ${o} → ${n}`).join('\n');
@@ -1960,10 +2001,40 @@ function importHevy(file) {
       }
       state.hevyImported[`${s.t}|${s.title}`] = seq;
     }
-    await save(); render();
-    toast(`Kész: ${fresh.length} Hevy-edzés importálva.`);
+    state.hideHevyTip = 1;
+    await save(); view = 'workout'; render(); window.scrollTo(0, 0);
+    toast(`Kész: ${fresh.length} Hevy-edzés áthozva – az ELŐZŐ oszlopban már a te súlyaid vannak.`);
   };
   fr.readAsText(file);
+}
+/* v57: Hevy → IRONLOG átállás */
+function hasAnyLog() { return Object.values(state.exercises || {}).some(o => Object.values(o.occurrences || {}).some(anyDone)); }
+function hevyWelcomeHtml() {
+  if (state.hideHevyTip || hasAnyLog()) return '';
+  return `<section class="hevy-welcome"><button class="hw-x" id="hevyWelcomeX" aria-label="Bezár">✕</button><div class="hw-title">📥 Hevy-ből jössz?</div>
+  <div class="hw-text">Hozd át az edzéseidet egy perc alatt: utána minden szettnél ott lesz, mennyit nyomtál legutóbb, és a rangjaid is azonnal kiszámolódnak. A Hevy-ben semmi nem törlődik.</div>
+  <details class="hw-how"><summary>Hogyan töltöm le a Hevy-ből?</summary><ol><li>Hevy → <b>Profil</b> → jobb fent ⚙️ <b>Beállítások</b></li><li><b>Export & Import Data</b> → <b>Export Data</b> → <b>Export Workouts</b></li><li>Mentsd a fájlt (Fájlok appba), majd itt nyomd meg a gombot és válaszd ki.</li></ol></details>
+  <label class="primary hw-btn">HEVY-EDZÉSEK BETÖLTÉSE<input id="hevyWelcomeInput" type="file" accept=".csv,text/csv,text/plain" hidden></label></section>`;
+}
+// egyszerű névhasonlóság a javasolt párosításhoz
+function nameSim(a, b) {
+  const A = new Set(norm(a).split('_').filter(x => x.length > 2)), B = new Set(norm(b).split('_').filter(x => x.length > 2));
+  let n = 0; for (const x of A) if (B.has(x)) n++; return n / Math.max(1, Math.min(A.size, B.size));
+}
+function askHevyMap(unknown) {
+  return new Promise(resolve => {
+    const seen = new Set(), plan = [];
+    for (const day of layoutFor(state.cycle, state.week)) for (const sl of day) for (const v of sl.variants) { const id = exId(v.name); if (!seen.has(id)) { seen.add(id); plan.push({ id, name: v.name, hu: huShort(v.hu) || hun(id) }); } }
+    const el = document.createElement('div'); el.className = 'overlay sum-overlay'; el.id = 'hevyMap';
+    el.innerHTML = `<div class="sum-card"><div class="ws-eyebrow">HEVY ÁTHOZÁS</div><div class="ws-day" style="font-size:22px">Melyik gyakorlat ez nálad?</div>
+      <div class="bw-note">Ezeket a Hevy-neveket nem ismertem fel. Ha ugyanaz, mint egy gyakorlat a tervedben, válaszd ki – így az előzményed és a rangod összeadódik.</div>
+      ${unknown.map((o, i) => { const best = plan.map(p => ({ p, s: Math.max(nameSim(o, p.name), nameSim(o, p.hu)) })).sort((a, b) => b.s - a.s)[0];
+        return `<label class="hm-row"><span>${esc(o)}</span><select data-hm="${i}" class="lib-search"><option value="">Külön gyakorlatként</option>${plan.map(p => `<option value="${esc(p.name)}"${best && best.s >= 0.5 && best.p.id === p.id ? ' selected' : ''}>${esc(p.hu)}</option>`).join('')}</select></label>`; }).join('')}
+      <div class="ws-actions"><button class="primary" data-ok>TOVÁBB</button><button class="secondary" data-no>Mégse</button></div></div>`;
+    document.body.appendChild(el);
+    el.querySelector('[data-no]').onclick = () => { el.remove(); resolve(null); };
+    el.querySelector('[data-ok]').onclick = () => { const m = {}; el.querySelectorAll('[data-hm]').forEach(sl => { if (sl.value) m[unknown[+sl.dataset.hm]] = sl.value; }); el.remove(); resolve(m); };
+  });
 }
 function importData(file) {
   if (!file) return;
@@ -2000,6 +2071,7 @@ function beep() {
 }
 async function requestWake() { try { if ('wakeLock' in navigator && !wakeLock && !document.hidden) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) { wakeLock = null; } }
 function releaseWake() { try { wakeLock?.release(); } catch (e) {} wakeLock = null; }
+let timerDur = 150;
 let timerCtx = null; // { c, w, d, e, kind, s } – melyik szett után indult a pihenő
 function persistTimer() { try { if (timerEnd) localStorage.setItem(TIMER_KEY, JSON.stringify({ end: timerEnd, kind: timerKind, ex: timerEx, ctx: timerCtx })); else localStorage.removeItem(TIMER_KEY); } catch (e) {} }
 /* A következő elvégzendő szett az adott napon (a most befejezett után, a nap végén körbeér). */
@@ -2042,12 +2114,14 @@ function renderNext() {
 function startTimer(ex, kind = 'work', at = null) {
   timerCtx = at ? { c: state.cycle, w: state.week, d: state.day, ...at } : null;
   timerKind = kind; timerEx = ex;
-  timerEnd = Date.now() + (kind === 'warmup' ? 60 : 150) * 1000;
+  timerDur = kind === 'warmup' ? 60 : (state.rest?.[exId(ex)] || 150);
+  timerEnd = Date.now() + timerDur * 1000;
   persistTimer(); showTimer();
 }
 function showTimer() {
   timerExercise.textContent = `${timerEx} · ${timerKind === 'warmup' ? 'bemelegítő szett után' : 'következő munkasorozat előtt'}`;
   try { renderNext(); } catch (e) {}
+  showRestDefault();
   timerOverlay.classList.remove('hidden');
   clearInterval(timer); tickTimer(); timer = setInterval(tickTimer, 250);
   requestWake();
@@ -2068,12 +2142,20 @@ function restoreTimer() {
   try {
     const t = JSON.parse(localStorage.getItem(TIMER_KEY) || 'null');
     if (!t || !t.end) return;
-    if (t.end > Date.now()) { timerEnd = t.end; timerKind = t.kind || 'work'; timerEx = t.ex || ''; timerCtx = t.ctx || null; showTimer(); }
+    if (t.end > Date.now()) { timerEnd = t.end; timerKind = t.kind || 'work'; timerEx = t.ex || ''; timerCtx = t.ctx || null; timerDur = timerKind === 'warmup' ? 60 : (state.rest?.[exId(timerEx)] || 150); showTimer(); }
     else { localStorage.removeItem(TIMER_KEY); if (Date.now() - t.end < 15 * 60 * 1000) toast('A pihenőidő lejárt, amíg nem voltál itt.'); }
   } catch (e) {}
 }
 skipTimer.onclick = () => finishTimer(false);
-add30.onclick = () => { if (!timerEnd) return; timerEnd += 30000; persistTimer(); tickTimer(); };
+// v57: ±15 mp – a munkasorozatok utáni pihenőt gyakorlatonként megjegyzi (a következő szettnél már ennyi lesz)
+function adjustRest(d) {
+  if (!timerEnd) return;
+  timerEnd = Math.max(Date.now() + 1000, timerEnd + d * 1000); timerDur = Math.max(15, timerDur + d); persistTimer(); tickTimer();
+  if (timerKind === 'work' && timerEx) { state.rest = state.rest || {}; state.rest[exId(timerEx)] = timerDur; save(); showRestDefault(); }
+}
+function showRestDefault() { const el = $('restDefault'); if (el) el.textContent = timerKind === 'work' ? `Pihenő ennél a gyakorlatnál: ${Math.floor(timerDur / 60)}:${String(timerDur % 60).padStart(2, '0')} (a −/+ gomb megjegyzi)` : 'Bemelegítő szett utáni pihenő'; }
+add30.onclick = () => adjustRest(15);
+$('minus15').onclick = () => adjustRest(-15);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && timerEnd) { unlockAudio(); tickTimer(); if (timerEnd) requestWake(); } });
 window.addEventListener('pageshow', () => { if (timerEnd) tickTimer(); });
 
