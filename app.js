@@ -5,7 +5,7 @@
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v57';
+const APP_VERSION = 'v58';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -762,7 +762,7 @@ function renderWorkout() {
   const recs = slots.map(slot => recordFor(c, w, d, slotName(c, w, d, slot))), doneN = slots.filter((sl, e) => exAllDone(sl, recs[e])).length;
   const nextE = slots.findIndex((sl, e) => !exAllDone(sl, recs[e]));
   const vol = dayVolume(c, w, d), pv = prevDayVolume(c, w, d);
-  let h = hevyWelcomeHtml() + `<section class="day-head"><div class="dh-row"><div><div class="day-name">${day.name}</div><div class="day-meta">${esc(day.subtitle)} · ${cycLabel(c).toLowerCase()}${w}. hét</div></div><div class="dh-count"><b>${doneN}/${slots.length}</b><span>kész</span></div></div>
+  let h = `<section class="day-head"><div class="dh-row"><div><div class="day-name">${day.name}</div><div class="day-meta">${cycLabel(c).toLowerCase()}${w}. hét</div></div><div class="dh-count"><b>${doneN}/${slots.length}</b><span>kész</span></div></div>
     <div class="dh-bar"><i style="width:${slots.length ? Math.round(doneN / slots.length * 100) : 0}%"></i></div>
     <div class="dh-vol">${liveClockHtml(c, w, d, slots, doneN)}Megmozgatott súly: <b>${kg(vol.total)} kg</b>${pv ? ` · előző: ${kg(pv.total)} kg` : ''}</div>
     ${nextE >= 0 && doneN > 0 ? `<button class="dh-next" data-jump="${nextE}">▶ Következő: ${esc(hun(slotName(c, w, d, slots[nextE])))}</button>` : ''}${slots.length && doneN === slots.length ? '<div class="dh-done">🎉 Minden gyakorlat kész erre a napra!</div>' : ''}${doneN > 0 ? `<div class="dh-actions"><button class="dh-sum" data-sum>📋 Összegzés</button>${me?.approved ? `<button class="dh-share" data-share="${c}-${w}-${d}">📣 Közösségbe</button>` : ''}</div>` : ''}</section>`;
@@ -821,8 +821,6 @@ function renderWorkout() {
   workout.querySelectorAll('details.ex-more').forEach(dt => dt.ontoggle = () => { if (dt.open) openEx.add(dt.dataset.mkey); else openEx.delete(dt.dataset.mkey); });
   workout.querySelectorAll('[data-more]').forEach(b => b.onclick = () => openMore(+b.dataset.more));
   workout.querySelectorAll('[data-sum]').forEach(b => b.onclick = () => openSummary(c, w, d));
-  const hw = $('hevyWelcomeInput'); if (hw) hw.onchange = ev => { importHevy(ev.target.files[0]); ev.target.value = ''; };
-  const hx = $('hevyWelcomeX'); if (hx) hx.onclick = () => { state.hideHevyTip = 1; save(); renderWorkout(); };
   workout.querySelectorAll('[data-share]').forEach(b => b.onclick = () => { feedDraft = { body: '', attach: b.dataset.share, photo: null, photoUrl: '' }; view = 'feed'; render(); window.scrollTo(0, 0); });
   workout.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => { const el = $('ex-' + b.dataset.jump); if (el) { const y = el.getBoundingClientRect().top + window.scrollY - (document.querySelector('.sticky-nav')?.getBoundingClientRect().bottom || 120) - 8; window.scrollTo({ top: y, behavior: 'smooth' }); } });
 }
@@ -1190,7 +1188,7 @@ function weekMuscleHtml() {
   ${fig}
   <div class="wm-legend"><span class="s3"><i></i>2× megvolt</span><span class="s2"><i></i>1× célzottan</span><span class="s1"><i></i>alig dolgozott</span><span class="s0"><i></i>kimaradt</span></div>
   <div class="summary-stats three"><div><strong>${cnt[3]}</strong><span>izom 2× megvolt</span></div><div><strong>${cnt[2]}</strong><span>izom csak 1× célzottan</span></div><div><strong>${cnt[1] + cnt[0]}</strong><span>izom alig vagy nem dolgozott</span></div></div>
-  <details class="wm-more"><summary>Részletek izmonként ▾</summary><div class="wm-list">${rows}</div></details></section>`;
+  <div class="wm-list">${rows}</div></section>`;
 }
 function monthHtml() {
   const now = monthKey(Date.now()), mk = monthSel ?? now, m = monthSummary(mk);
@@ -1214,7 +1212,6 @@ function renderHistory() {
   const doneSets = rows.reduce((a, x) => a + x.done, 0), allSets = rows.reduce((a, x) => a + x.total, 0);
   h += `<section class="summary-card"><div class="summary-title">${cycLabel(c)}${w}. HÉT ÖSSZESÍTŐ</div><div class="summary-stats three"><div><strong>${started}/4</strong><span>edzésnap elkezdve</span></div><div><strong>${finished}/4</strong><span>edzésnap kész</span></div><div><strong>${doneSets}/${allSets}</strong><span>munkasorozat kész</span></div></div><div class="summary-row total"><span>Heti megmozgatott súly</span><b>${kg(rows.reduce((a, x) => a + x.vol, 0))} kg</b></div>${rows.map(x => `<div class="summary-row"><span>${x.name}</span><b>${x.done}/${x.total} szett · ${kg(x.vol)} kg${x.total && x.done >= x.total ? ' ✓' : ''}</b></div>`).join('')}</section>`;
 
-  h += weekSetsHtml();
   h += weekMuscleHtml();
   h += monthHtml();
   h += recentRankUpsHtml();
@@ -1235,7 +1232,6 @@ function renderHistory() {
   }
   h += `<div class="note">Az alkalmazás minden változást azonnal ment, és naponta külön helyi másolatot is készít. A fájlba mentés külön, letölthető másolatot ad. IRONLOG ${APP_VERSION}</div>`;
   workout.innerHTML = h + hevyCard;
-  bindWeekSets(workout);
   $('histSearch').oninput = e => { histQuery = e.target.value; filterHistory(); };
   workout.querySelectorAll('[data-mm]').forEach(b => b.onclick = () => { muscleMode = b.dataset.mm; renderHistory(); });
   workout.querySelectorAll('.ru-row[data-rstats]').forEach(b => b.onclick = () => openStats(b.dataset.rstats));
@@ -2009,13 +2005,6 @@ function importHevy(file) {
 }
 /* v57: Hevy → IRONLOG átállás */
 function hasAnyLog() { return Object.values(state.exercises || {}).some(o => Object.values(o.occurrences || {}).some(anyDone)); }
-function hevyWelcomeHtml() {
-  if (state.hideHevyTip || hasAnyLog()) return '';
-  return `<section class="hevy-welcome"><button class="hw-x" id="hevyWelcomeX" aria-label="Bezár">✕</button><div class="hw-title">📥 Hevy-ből jössz?</div>
-  <div class="hw-text">Hozd át az edzéseidet egy perc alatt: utána minden szettnél ott lesz, mennyit nyomtál legutóbb, és a rangjaid is azonnal kiszámolódnak. A Hevy-ben semmi nem törlődik.</div>
-  <details class="hw-how"><summary>Hogyan töltöm le a Hevy-ből?</summary><ol><li>Hevy → <b>Profil</b> → jobb fent ⚙️ <b>Beállítások</b></li><li><b>Export & Import Data</b> → <b>Export Data</b> → <b>Export Workouts</b></li><li>Mentsd a fájlt (Fájlok appba), majd itt nyomd meg a gombot és válaszd ki.</li></ol></details>
-  <label class="primary hw-btn">HEVY-EDZÉSEK BETÖLTÉSE<input id="hevyWelcomeInput" type="file" accept=".csv,text/csv,text/plain" hidden></label></section>`;
-}
 // egyszerű névhasonlóság a javasolt párosításhoz
 function nameSim(a, b) {
   const A = new Set(norm(a).split('_').filter(x => x.length > 2)), B = new Set(norm(b).split('_').filter(x => x.length > 2));
@@ -2189,40 +2178,6 @@ function calWeekSets(ws) {
   }
   return { G, total, sessions: sess.size };
 }
-const setLevel = (g, v) => !MAJOR_GROUPS.has(g) ? 'sx' : v >= 4 ? 's3' : v >= 2 ? 's2' : 's0';
-let setWeekOff = 0;   // 0 = ez a hét, -1 = előző hét…
-function weekSetsHtml() {
-  const ws = addWeeks(weekStartOf(Date.now()), setWeekOff), cur = calWeekSets(ws);
-  // összehasonlítás: az előző 4 hét átlaga (csak azok a hetek, amikor edzettél – egy kihagyott hét ne húzza le)
-  const prev = [1, 2, 3, 4].map(i => calWeekSets(addWeeks(ws, -i))).filter(x => x.sessions > 0), avg = {};
-  for (const p of prev) for (const [g, v] of Object.entries(p.G)) avg[g] = (avg[g] || 0) + v / prev.length;
-  const groups = MUSCLE_GROUPS.map(x => x[0]).filter(g => MAJOR_GROUPS.has(g) || cur.G[g] || avg[g]);
-  const max = Math.max(8, ...groups.map(g => Math.max(cur.G[g] || 0, avg[g] || 0)));
-  groups.sort((a, b) => (MAJOR_GROUPS.has(b) - MAJOR_GROUPS.has(a)) || ((cur.G[b] || 0) - (cur.G[a] || 0)));
-  const end = new Date(addWeeks(ws, 1) - 864e5), fmt = t => new Date(t).toLocaleDateString('hu-HU', { month: 'short', day: 'numeric' });
-  const label = setWeekOff === 0 ? 'EZ A HÉT' : setWeekOff === -1 ? 'MÚLT HÉT' : `${fmt(ws)} – ${fmt(end)}`.toUpperCase();
-  const rows = groups.map(g => {
-    const v = cur.G[g] || 0, a = avg[g], lvl = setLevel(g, v), diff = a !== undefined ? v - a : null;
-    const tick = a ? `<b class="ws-avg" style="left:${Math.min(100, a / max * 100)}%" title="előző hetek átlaga"></b>` : '';
-    const d = diff === null || setWeekOff === 0 ? '' : diff >= 0.5 ? `<em class="up">▲${halfNum(diff)}</em>` : diff <= -0.5 ? `<em class="down">▼${halfNum(-diff)}</em>` : '<em>=</em>';
-    return `<div class="wsr ${lvl}"><span class="wsr-n">${esc(groupName(g))}</span><div class="wsr-bar"><i style="width:${v / max * 100}%"></i>${tick}</div><span class="wsr-v">${halfNum(v)}</span>${d || '<em></em>'}</div>`;
-  }).join('');
-  const low = groups.filter(g => MAJOR_GROUPS.has(g) && (cur.G[g] || 0) < 2).map(groupName);
-  let tip = '';
-  if (cur.sessions && low.length) tip = `<div class="ws-tip">⚠️ Ezen a héten kevés: <b>${esc(low.join(', '))}</b>${setWeekOff === 0 ? ' – ha még van edzésed a héten, figyelj rájuk.' : '.'}</div>`;
-  else if (cur.sessions >= 2) tip = '<div class="ws-tip ok">✅ Minden fő izomcsoport megkapta a heti adagját.</div>';
-  return `<section class="summary-card wset-card"><div class="month-nav"><button class="cycle-btn" id="wsPrev">‹</button><div class="summary-title">📊 HETI SZETTEK IZOMCSOPORTONKÉNT · ${esc(label)}</div><button class="cycle-btn" id="wsNext" ${setWeekOff >= 0 ? 'disabled' : ''}>›</button></div>
-  <div class="bw-note">${cur.sessions ? `<b>${cur.total}</b> munkasorozat, ${cur.sessions} edzés.` : 'Ezen a héten még nincs kipipált szett.'} Fő izomként 1, segítőként ½ szett számít. A függőleges vonal az előző hetek átlaga.</div>
-  <div class="wsr-list">${rows}</div>
-  <div class="wm-legend"><span class="s3"><i></i>4+ szett</span><span class="s2"><i></i>2–3,5</span><span class="s0"><i></i>2 alatt</span></div>${tip}
-  <div class="bw-note small">Tönkremenetelig vitt (vagy ahhoz közeli) szettekkel izomcsoportonként heti kb. 4–10 szett már szépen fejleszt; ennél kevesebbel lassabb.</div></section>`;
-}
-function bindWeekSets(root) {
-  const p = root.querySelector('#wsPrev'), n = root.querySelector('#wsNext');
-  if (p) p.onclick = () => { setWeekOff--; renderHistory(); document.querySelector('.wset-card')?.scrollIntoView({ block: 'start' }); };
-  if (n) n.onclick = () => { setWeekOff = Math.min(0, setWeekOff + 1); renderHistory(); document.querySelector('.wset-card')?.scrollIntoView({ block: 'start' }); };
-}
-
 /* ---------- edzés végi összegzés ---------- */
 const e1 = (w, r) => w * (1 + Math.min(r, 12) / 30);
 function sessionPRs(id, k, name) {
@@ -2287,8 +2242,6 @@ function summaryHtml(S) {
   const prs = S.ex.filter(e => e.prs.some(p => p.kind !== 'first'));
   if (prs.length) h += `<div class="ws-sec">🏆 ÚJ REKORDOK</div>` + prs.map(e => `<div class="ws-pr"><b>${esc(hun(e.id))}</b>${e.prs.filter(p => p.kind !== 'first').map(p => `<span>${prText(p, e)}</span>`).join('')}</div>`).join('');
   h += `<div class="ws-sec">GYAKORLATOK</div><div class="ws-ex">` + S.ex.map(e => `<div><span>${esc(hun(e.id))}${e.prs.some(p => p.kind !== 'first') ? ' 🏆' : e.prs[0]?.kind === 'first' ? ' <em>első</em>' : ''}</span><b>${e.n} × ${e.best ? `${showNum(e.best.weight)} kg × ${showNum(e.best.reps)}` : '—'}</b></div>`).join('') + '</div>';
-  const gs = Object.entries(S.G).sort((a, b) => b[1] - a[1]);
-  if (gs.length) { const mx = Math.max(...gs.map(x => x[1])); h += `<div class="ws-sec">MEGDOLGOZOTT IZMOK (szett)</div><div class="ws-mus">` + gs.map(([g, v]) => `<div><span>${esc(groupName(g))}</span><i style="width:${v / mx * 100}%"></i><b>${halfNum(v)}</b></div>`).join('') + '</div>'; }
   return h;
 }
 function openSummary(c, w, d) {
