@@ -292,7 +292,7 @@ const ANIM = (() => {
     y1 = Math.max(y1, GROUND + 6); const w = x1 - x0, h = y1 - y0, W = Math.max(w, h * 1.25), H = Math.max(h, W / 1.25);
     return [x0 - (W - w) / 2, y0 - (H - h), W, H].map(f1).join(' ');
   }
-  const keyOf = id => (typeof rankKeyFor === 'function' && rankKeyFor(id)) || (typeof RANK_ALIAS !== 'undefined' && RANK_ALIAS[id]) || id;
+  const keyOf = id => (typeof rankKeyFor === 'function' && rankKeyFor(id)) || (typeof RANK_ALIAS !== 'undefined' && RANK_ALIAS[id]) || (typeof baseIdOf === 'function' ? baseIdOf(id) : id);
   const has = id => !!E[keyOf(id)];
   const THUMBS = new Map();
   function thumb(id) {

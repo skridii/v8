@@ -4,8 +4,11 @@
    - occurrences kulcs: "ciklus-hét-nap" (v5-ben "hét-nap" volt → migráció az 1. ciklusba)
    - layouts: "ciklus-hét" → 4 nap gyakorlatlistája; a módosítás attól a héttől érvényes
    - variantChoice: váltakozó gyakorlatoknál (pl. Bench / Incline) az adott heti választás
+   - v60: gépválasztó – slot.pick = true esetén a variants a gépek listája (v.machine = gép neve), mindegyik külön
+     gyakorlat-azonosító, saját előzménnyel; alapból a legutóbb használt gép. state.machineBase: gép-azonosító → alap-azonosító
+     (animáció, útmutató, rang ehhez igazodik).
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v59';
+const APP_VERSION = 'v60';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -206,11 +209,12 @@ function hun(idOrName) {
   return huShort(h) || nameOf(id);
 }
 
-/* Váltakozó gyakorlat: az adott hét választása, alapból mindig az előző alkalom ellentéte. */
+/* Váltakozó gyakorlat: az adott hét választása, alapból mindig az előző alkalom ellentéte.
+   v60: gépválasztós gyakorlatnál (slot.pick) alapból a legutóbb használt gép. */
 function variantIndex(c, w, d, slot) {
   if (!slot.variants || slot.variants.length < 2) return 0;
   const ch = state.variantChoice?.[`${c}-${w}-${slot.uid}`];
-  if (ch === 0 || ch === 1) return ch;
+  if (Number.isInteger(ch) && ch >= 0 && ch < slot.variants.length && (slot.pick || ch < 2)) return ch;
   let best = null, bestI = -1;
   slot.variants.forEach((v, i) => {
     for (const x of sessionsOf(exId(v.name))) {
@@ -218,6 +222,7 @@ function variantIndex(c, w, d, slot) {
       if (!best || later(x, best) > 0) { best = x; bestI = i; }
     }
   });
+  if (slot.pick) return bestI === -1 ? 0 : bestI;
   return bestI === -1 ? 0 : 1 - bestI;
 }
 function slotName(c, w, d, slot) { return slot.variants[variantIndex(c, w, d, slot)].name; }
@@ -226,6 +231,10 @@ function lockVariant(slot) {
   const k = `${state.cycle}-${state.week}-${slot.uid}`;
   if (state.variantChoice[k] === undefined) state.variantChoice[k] = variantIndex(state.cycle, state.week, state.day, slot);
 }
+/* v60: gép-változat → alap gyakorlat (animáció, útmutató, rang ehhez igazodik) */
+function baseIdOf(id) { let b = id, n = 0; while (state?.machineBase?.[b] && n++ < 5) b = state.machineBase[b]; return b; }
+const isAltSlot = slot => slot.variants.length > 1 && !slot.pick;   // klasszikus váltakozó (Bench ↔ Incline)
+const machineLabel = (slot, i) => slot.variants[i]?.machine || `${i + 1}. gép`;
 
 /* ---------- rekordok ---------- */
 function ensureExercise(id) { if (!state.exercises[id]) state.exercises[id] = { occurrences: {} }; return state.exercises[id]; }
@@ -772,9 +781,10 @@ function renderWorkout() {
     const sets = rec?.sets || [emptySet(), emptySet()], wu = rec?.warmup || emptySet(), pb = personalBest(id);
     const key = `${c}-${w}-${d}-${slot.uid}`, done = exAllDone(slot, rec), collapsed = done ? !openEx.has(key) : closedEx.has(key), rk = rankOf(id), hasRk = rk && rk.pts !== undefined;
     const goals = goalList(c, w, d, name), lastTxt = last ? setsText(last) : '';
-    const [huMain, huExtra] = splitHu(hu), sub = [huExtra, hu !== name ? name : ''].filter(Boolean).join(' · ');
-    const other = slot.variants.length > 1 ? slot.variants[1 - vi] : null;
-    h += `<article class="exercise${done ? ' ex-done' : ''}${collapsed ? ' collapsed' : ''}" id="ex-${e}"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(hu)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><div class="exercise-title">${esc(huMain)}</div>${sub ? `<div class="exercise-en">${esc(sub)}</div>` : ''}<div class="ex-meta"><span class="prescribed">${esc(showReps(slot))}</span>${collapsed && hasRk ? `<span class="rk-mini" style="color:${rk.color}">${esc(rk.label)}</span>` : ''}${!collapsed && other ? `<button class="var-chip" data-variant data-e="${e}" aria-label="Ezen a héten inkább: ${esc(huShort(other.hu) || other.name)}">↔ ${esc(splitHu(huShort(other.hu) || other.name)[0])}</button>` : ''}</div></div><span class="fold-ic" aria-hidden="true">${collapsed ? '▾' : '▴'}</span><button class="more-btn" data-more="${e}" aria-label="További lehetőségek">⋯</button></div>`;
+    const enName = slot.pick && vi > 0 ? slot.variants[0].name : name;   // gépnél az alap angol név, a „#2” nélkül
+    const [huMain, huExtra] = splitHu(hu), sub = [huExtra, hu !== enName ? enName : ''].filter(Boolean).join(' · ');
+    const other = isAltSlot(slot) ? slot.variants[1 - vi] : null;
+    h += `<article class="exercise${done ? ' ex-done' : ''}${collapsed ? ' collapsed' : ''}" id="ex-${e}"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(hu)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><div class="exercise-title">${esc(huMain)}</div>${sub ? `<div class="exercise-en">${esc(sub)}</div>` : ''}<div class="ex-meta"><span class="prescribed">${esc(showReps(slot))}</span>${collapsed && hasRk ? `<span class="rk-mini" style="color:${rk.color}">${esc(rk.label)}</span>` : ''}${!collapsed && slot.pick ? `<button class="var-chip" data-machine="${e}" aria-label="Gép: ${esc(machineLabel(slot, vi))} – másik gép választása">⚙ ${esc(machineLabel(slot, vi))} ▾</button>` : ''}${!collapsed && other ? `<button class="var-chip" data-variant data-e="${e}" aria-label="Ezen a héten inkább: ${esc(huShort(other.hu) || other.name)}">↔ ${esc(splitHu(huShort(other.hu) || other.name)[0])}</button>` : ''}</div></div><span class="fold-ic" aria-hidden="true">${collapsed ? '▾' : '▴'}</span><button class="more-btn" data-more="${e}" aria-label="További lehetőségek">⋯</button></div>`;
     if (collapsed) {
       h += `<div class="fold-sum${done ? ' ok' : ''}">${done ? `✓ Kész · ${esc(setsText(rec))}` : `${lastTxt ? `Előző: <b>${esc(lastTxt)}</b>` : 'Még nincs előzmény'}${goals[0] ? ` · 🎯 <b>${goals[0]}</b>` : ''}`}</div></article>`; return;
     }
@@ -845,6 +855,7 @@ function openMore(e) {
   const el = document.createElement('div'); el.id = 'moreSheet'; el.className = 'overlay sheet-overlay';
   el.innerHTML = `<div class="sheet" role="dialog" aria-label="${esc(hun(id))}"><div class="sheet-title">${esc(huShort(v.hu) || hun(id))}<small>${esc(name)}</small></div>
     <button data-a="stats">📊 Előzmények és grafikon</button><button data-a="info">▶ Animáció és útmutató</button><button data-a="note">📝 Jegyzet${state.notes?.[id] ? ' szerkesztése' : ' írása'}</button>
+    ${isAltSlot(slot) ? '' : `<button data-a="machine">⚙ ${slot.pick ? `Gép: ${esc(machineLabel(slot, variantIndex(state.cycle, state.week, state.day, slot)))} – másik gép / új gép` : 'Másik gépen csinálom (új gép felvétele)'}</button>`}
     <button data-a="swap">🔄 Csere / szerkesztés / törlés</button>
     <div class="sheet-row"><button data-a="up"${e === 0 ? ' disabled' : ''}>▲ Feljebb</button><button data-a="down"${e === slots.length - 1 ? ' disabled' : ''}>▼ Lejjebb</button></div>
     <button data-a="x" class="sheet-cancel">Mégse</button></div>`;
@@ -855,8 +866,101 @@ function openMore(e) {
     const a = b.dataset.a; close();
     if (a === 'stats') openStats(id); else if (a === 'info') openExInfo(id, name, v.hu || '');
     else if (a === 'swap') openEditor('edit', e); else if (a === 'up') moveExercise(e, -1); else if (a === 'down') moveExercise(e, 1);
-    else if (a === 'note') editNote(id);
+    else if (a === 'note') editNote(id); else if (a === 'machine') openMachinePicker(e);
   });
+}
+/* ---------- v60: gépválasztó ----------
+   Ugyanaz a gyakorlat több gépen (pl. két leg extension gép): a kg-ok nem összevethetők, ezért minden gép külön
+   gyakorlat-azonosító, saját előzménnyel, ranggal, grafikonnal. Az 1. gép az eredeti gyakorlat (a régi adatok ott maradnak).
+   A választás hetente rögzül (variantChoice), alapból a legutóbb használt gép jön fel. */
+function openMachinePicker(e) {
+  const slot = curSlots()[e]; if (!slot || isAltSlot(slot)) return;
+  const c = state.cycle, w = state.week, d = state.day, vi = variantIndex(c, w, d, slot), base = slot.variants[0], baseId = exId(base.name);
+  const rows = slot.pick ? slot.variants.map((v, i) => {
+    const l = lastDone(exId(v.name));
+    return `<button data-pick="${i}"${i === vi ? ' class="on"' : ''}>${i === vi ? '✓ ' : ''}${esc(machineLabel(slot, i))}<small>${l ? `Utoljára: ${esc(setsText(l))}${fmtDate(l.t) ? ' · ' + esc(fmtDate(l.t)) : ''}` : 'Még nincs előzmény'}</small></button>`;
+  }).join('') : `<div class="sheet-note">Ha másik gépen csinálod, vedd fel új gépként: külön előzménye lesz, így a két gép súlyai nem keverednek. A mostani gép lesz az „1. gép”, az eddigi adataiddal.</div>`;
+  const removed = Object.entries(state.machineBase || {}).filter(([id, b]) => b === baseId && !slot.variants.some(v => exId(v.name) === id) && state.library?.[id]);
+  const el = document.createElement('div'); el.id = 'machineSheet'; el.className = 'overlay sheet-overlay';
+  el.innerHTML = `<div class="sheet" role="dialog" aria-label="Gép választása"><div class="sheet-title">${slot.pick ? 'Melyik gépen csinálod?' : 'Másik gép'}<small>${esc(huShort(base.hu) || hun(baseId))}</small></div>
+    ${rows}<button data-act="add">➕ Új gép felvétele</button>
+    ${removed.map(([id]) => `<button data-restore="${esc(id)}">↩ Visszavesz: ${esc(state.library[id].machine || nameOf(id))}</button>`).join('')}
+    ${slot.pick ? `<div class="sheet-row"><button data-act="rename">✏️ Átnevezés</button><button data-act="remove"${vi === 0 ? ' disabled' : ''}>🗑 Kivétel</button></div>` : ''}
+    <button data-act="x" class="sheet-cancel">Mégse</button></div>`;
+  document.body.appendChild(el);
+  const close = () => el.remove();
+  el.onclick = ev => { if (ev.target === el) close(); };
+  el.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => { close(); pickMachine(e, +b.dataset.pick); });
+  el.querySelectorAll('[data-restore]').forEach(b => b.onclick = () => { close(); const m = state.library[b.dataset.restore]; addMachineVariant(e, { name: m.name, hu: m.hu, machine: m.machine || nameOf(b.dataset.restore) }); });
+  el.querySelectorAll('[data-act]').forEach(b => b.onclick = () => {
+    const a = b.dataset.act; close();
+    if (a === 'add') newMachine(e); else if (a === 'rename') renameMachine(e, vi); else if (a === 'remove') removeMachine(e, vi);
+  });
+}
+/* A választott gép erre a hétre. Ha ezen a héten már írtál be szettet egy másik géphez, és az új gépnél még nincs semmi,
+   megkérdezi, hogy azok a szettek is az új géphez tartozzanak-e (általában igen: csak később vetted észre, hogy más gépen vagy). */
+function pickMachine(e, i) {
+  const slot = curSlots()[e]; if (!slot?.pick || !slot.variants[i]) return;
+  const c = state.cycle, w = state.week, d = state.day, k = okey(c, w, d), from = slot.variants[variantIndex(c, w, d, slot)], to = slot.variants[i];
+  state.variantChoice[`${c}-${w}-${slot.uid}`] = i;
+  const fid = exId(from.name), tid = exId(to.name), rec = state.exercises[fid]?.occurrences?.[k];
+  if (fid !== tid && hasData(rec) && !hasData(state.exercises[tid]?.occurrences?.[k])
+    && confirm(`Ezen a héten már beírtál szetteket ide: ${machineLabel(slot, slot.variants.indexOf(from))} (${setsText(rec)}).\n\nEzek is a(z) „${machineLabel(slot, i)}” géphez tartozzanak?`)) {
+    ensureExercise(tid).occurrences[k] = rec; delete state.exercises[fid].occurrences[k];
+    if (!state.names[tid]) state.names[tid] = to.name;
+  }
+  save(); renderWorkout(); renderWeeks();
+  toast(`Ezen a héten: ${machineLabel(slot, i)}`);
+}
+function newMachine(e) {
+  const slot = curSlots()[e]; if (!slot || isAltSlot(slot)) return;
+  const labels = slot.pick ? slot.variants.map((v, i) => machineLabel(slot, i).toLowerCase()) : ['1. gép'];
+  let n = slot.pick ? slot.variants.length + 1 : 2; while (labels.includes(`${n}. gép`)) n++;
+  const inp = prompt('Az új gép neve (pl. „2. gép”, „piros gép”, „ablak melletti”):', `${n}. gép`);
+  if (inp === null) return;
+  const lb = inp.trim().replace(/\s+/g, ' ').slice(0, 30) || `${n}. gép`;
+  if (labels.includes(lb.toLowerCase())) { toast('Ilyen nevű gép már van ennél a gyakorlatnál.'); return; }
+  const base = slot.variants[0], used = new Set([...Object.keys(state.exercises), ...Object.keys(state.library || {}), ...Object.keys(state.names || {}), ...allVariants().map(v => exId(v.name))]);
+  let k = 2; while (used.has(exId(`${base.name} #${k}`))) k++;
+  const baseHu = huShort(base.hu) || hun(exId(base.name));
+  addMachineVariant(e, { name: `${base.name} #${k}`, hu: `${baseHu} – ${lb}`, machine: lb });
+}
+function addMachineVariant(e, mv) {
+  const slot = curSlots()[e]; if (!slot || isAltSlot(slot)) return;
+  const c = state.cycle, w = state.week, uid = slot.uid, base = slot.variants[0], baseId = exId(base.name), nid = exId(mv.name);
+  state.machineBase = state.machineBase || {}; state.machineBase[nid] = baseId;
+  state.library = state.library || {}; state.library[nid] = { name: mv.name, hu: mv.hu, reps: slot.reps || '2 × 8–10', machine: mv.machine };
+  state.names[nid] = state.names[nid] || mv.name;
+  applyFrom(c, w, L => { for (const day of L) for (const sl of day) {
+    if (sl.uid !== uid || isAltSlot(sl) || exId(sl.variants[0].name) !== baseId) continue;
+    if (!sl.pick) { sl.pick = true; sl.variants[0].machine = sl.variants[0].machine || '1. gép'; }
+    if (!sl.variants.some(v => exId(v.name) === nid)) sl.variants.push({ ...mv });
+  } });
+  const cur = curSlots()[e], i = cur ? cur.variants.findIndex(v => exId(v.name) === nid) : -1;
+  if (i >= 0) pickMachine(e, i); else { save(); renderWorkout(); }
+}
+function renameMachine(e, i) {
+  const slot = curSlots()[e]; if (!slot?.pick || !slot.variants[i]) return;
+  const old = machineLabel(slot, i), inp = prompt('A gép új neve:', old);
+  if (inp === null) return;
+  const lb = inp.trim().replace(/\s+/g, ' ').slice(0, 30); if (!lb || lb === old) return;
+  if (slot.variants.some((v, j) => j !== i && machineLabel(slot, j).toLowerCase() === lb.toLowerCase())) { toast('Ilyen nevű gép már van ennél a gyakorlatnál.'); return; }
+  const id = exId(slot.variants[i].name), baseHu = huShort(slot.variants[0].hu) || hun(exId(slot.variants[0].name));
+  // a név csak megjelenítés: minden héten átírjuk (az azonosító és az előzmények nem változnak)
+  for (const L of Object.values(state.layouts)) for (const day of L) for (const sl of day) for (const v of sl.variants) if (exId(v.name) === id) { v.machine = lb; if (i > 0) v.hu = `${baseHu} – ${lb}`; }
+  if (state.library?.[id]) { state.library[id].machine = lb; if (i > 0) state.library[id].hu = `${baseHu} – ${lb}`; }
+  save(); renderWorkout(); toast(`Átnevezve: ${lb}`);
+}
+function removeMachine(e, i) {
+  const slot = curSlots()[e]; if (!slot?.pick || i < 1 || !slot.variants[i]) return;
+  const id = exId(slot.variants[i].name), lb = machineLabel(slot, i), uid = slot.uid, c = state.cycle, w = state.week;
+  if (!confirm(`Kiveszed a(z) „${lb}” gépet ennél a gyakorlatnál a ${cycLabel(c).toLowerCase()}${w}. héttől?\n\nAz eddigi adatai megmaradnak (FEJLŐDÉS oldal), és később vissza is veheted.`)) return;
+  applyFrom(c, w, L => { for (const day of L) for (const sl of day) if (sl.uid === uid && sl.pick) {
+    sl.variants = sl.variants.filter(v => exId(v.name) !== id);
+    if (sl.variants.length < 2) delete sl.pick;
+  } });
+  delete state.variantChoice[`${c}-${w}-${uid}`];
+  save(); renderWorkout(); renderWeeks(); toast(`„${lb}” kivéve. Az adatai megmaradtak.`);
 }
 function editNote(id) {
   const cur = state.notes?.[id] || '';
@@ -935,6 +1039,7 @@ function bindInputs() {
     save(); renderWorkout();
     toast(`Ezen a héten: ${huShort(slot.variants[1 - vi].hu) || slot.variants[1 - vi].name}`);
   });
+  workout.querySelectorAll('[data-machine]').forEach(btn => btn.onclick = () => openMachinePicker(+btn.dataset.machine));
   workout.querySelectorAll('[data-swap]').forEach(btn => btn.onclick = () => openEditor('edit', +btn.dataset.e));
   workout.querySelectorAll('[data-move]').forEach(btn => btn.onclick = () => moveExercise(+btn.dataset.e, +btn.dataset.move));
   workout.querySelectorAll('[data-addset]').forEach(btn => btn.onclick = () => {
@@ -998,7 +1103,7 @@ function openEditor(mode, e) {
   $('editName').value = slot ? slot.variants[0].name : '';
   $('editHu').value = slot ? (slot.variants[0].hu || '') : '';
   $('editReps').value = slot ? slot.reps : '2 × 8–10';
-  $('editAlt').value = slot?.variants[1]?.name || '';
+  $('editAlt').value = slot && isAltSlot(slot) ? slot.variants[1].name : '';
   $('editHelp').textContent = mode === 'edit'
     ? 'Új név = új gyakorlat, saját, üres előzményekkel. A régi gyakorlat eddigi adatai megmaradnak és a FEJLŐDÉS oldalon visszanézhetők. A változás ettől a héttől érvényes, a korábbi hetek nem változnak, és a többi edzésnapot sem érinti.'
     : 'A gyakorlat ettől a héttől kerül be erre az edzésnapra. Ha egy már létező nevet adsz meg, annak előzményeit folytatja.';
@@ -1090,7 +1195,11 @@ $('editForm').onsubmit = ev => {
   if (!name || !exId(name)) { $('editName').classList.add('invalid'); toast('A gyakorlat neve nem lehet üres.'); return; }
   if (alt && exId(alt) === exId(name)) { toast('A váltakozó gyakorlat neve legyen más.'); return; }
   const { mode, uid, c, w, d } = editCtx;
-  const variants = [{ name, hu }];
+  // v60: gépválasztós gyakorlatnál, ha a név nem változik, a gépek megmaradnak (új név = új gyakorlat, gépek nélkül)
+  const prevSlot = mode === 'edit' ? layoutFor(c, w)[d].find(s => s.uid === uid) : null;
+  const keepMachines = !!prevSlot?.pick && exId(prevSlot.variants[0].name) === exId(name);
+  if (keepMachines && alt) { toast('Gépválasztós gyakorlatnál nem lehet váltakozó gyakorlat. Előbb vedd ki a gépeket (⋯ → Gép).'); return; }
+  const variants = keepMachines ? [{ ...prevSlot.variants[0], name, hu }, ...clone(prevSlot.variants.slice(1))] : [{ name, hu }];
   if (alt) {
     const prevAlt = mode === 'edit' ? layoutFor(c, w)[d].find(s => s.uid === uid)?.variants[1] : null;
     variants.push({ name: alt, hu: prevAlt && exId(prevAlt.name) === exId(alt) ? prevAlt.hu : (exId(alt) === exId(INCLINE.name) ? INCLINE.hu : '') });
@@ -1105,7 +1214,7 @@ $('editForm').onsubmit = ev => {
     const nu = newUid();
     applyFrom(c, w, L => { L[d].push({ uid: nu, reps, variants: clone(variants) }); });
   } else {
-    applyFrom(c, w, L => { const s = L[d].find(x => x.uid === uid); if (s) { s.variants = clone(variants); s.reps = reps; } });
+    applyFrom(c, w, L => { const s = L[d].find(x => x.uid === uid); if (s) { s.variants = clone(variants); s.reps = reps; if (keepMachines) s.pick = true; else delete s.pick; } });
   }
   closeEditor(); save(); render();
   toast(mode === 'add' ? 'Új gyakorlat hozzáadva.' : 'Gyakorlatcsere elmentve. A korábbi adatok megmaradtak.');
@@ -1427,7 +1536,7 @@ for (const [name, hu, type, equip, std, reps, aliases] of RANK_DB_RAW) {
   RANK_DB[key] = { key, name, hu, type, equip, std, reps };
   RANK_ALIAS[key] = key; for (const a of aliases) RANK_ALIAS[exId(a)] = key;
 }
-function rankKeyFor(id, st = state) { const m = st.rankMap?.[id]; if (m === 'none') return null; return (m && RANK_DB[m]) ? m : (RANK_ALIAS[id] || null); }
+function rankKeyFor(id, st = state) { const m = st.rankMap?.[id]; if (m === 'none') return null; if (m && RANK_DB[m]) return m; if (RANK_ALIAS[id]) return RANK_ALIAS[id]; const b = st.machineBase?.[id]; return b && b !== id ? rankKeyFor(b, st) : null; }
 function bodyWeight(st = state) { const w = Number(st.body?.weight); return w > 0 ? w : 0; }
 /* A rang mindig a JELENLEGI erőt mutatja: csak az utolsó 2 edzés (időrendben) legjobb szettje számít. */
 const RANK_SESSIONS = 2;
@@ -1571,8 +1680,10 @@ function rankOf(id, st = state) {
 }
 function withStateIf(st, fn) { return st === state ? fn() : withState(st, fn); }
 function overallRank(st = state) {
-  const ids = [...programIds(st)], pts = [];
-  for (const id of ids) { const r = rankOf(id, st); if (r && r.pts !== undefined) pts.push(r.pts + (r.plus || 0)); }
+  const ids = [...programIds(st)], best = new Map();
+  // v60: ugyanannak a gyakorlatnak több gépe egynek számít (a legjobb rangú gép), hogy egy új, még gyenge gép ne húzza le az átlagot
+  for (const id of ids) { const r = rankOf(id, st); if (!r || r.pts === undefined) continue; const g = st.machineBase?.[id] || id, v = r.pts + (r.plus || 0); if (!best.has(g) || best.get(g) < v) best.set(g, v); }
+  const pts = [...best.values()];
   if (!pts.length) return null;
   const avg = Math.floor(pts.reduce((a, b) => a + b, 0) / pts.length);
   if (avg > MAX_PTS) { const plus = avg - MAX_PTS; return { pts: MAX_PTS, plus, label: `${RANKS[RANKS.length - 1].n} III +${plus}`, color: RANKS[RANKS.length - 1].c, n: pts.length }; }
@@ -1810,7 +1921,8 @@ function muscleMapSvg(m) {
   return `<svg viewBox="0 0 400 380" class="muscle-map" role="img" aria-label="Izomtérkép">${bodySvg(BODY_FRONT, m, 0, 'ELÖL')}${bodySvg(BODY_BACK, m, 200, 'HÁTUL')}</svg>`;
 }
 function exInfoFor(id) {
-  const key = rankKeyFor(id) || RANK_ALIAS[id] || id, raw = EX_INFO[key]; if (!raw) return null;
+  let key = rankKeyFor(id) || RANK_ALIAS[id] || id; if (!EX_INFO[key] && baseIdOf(id) !== id) key = baseIdOf(id);
+  const raw = EX_INFO[key]; if (!raw) return null;
   const m = {}; for (const p of raw[0].split(',')) { const [k, v] = p.split(':'); m[k] = Number(v); }
   return { m, steps: raw[1].split('|'), tip: raw[2] };
 }
@@ -3042,7 +3154,7 @@ function renderFriend() {
     if (!slots.length) return '<div class="note">Ezen a napon nincs gyakorlat.</div>';
     return slots.map(slot => {
       const name = slotName(c, w, fd, slot), id = exId(name), l = lastDone(id), pb = personalBest(id), cur = recordFor(c, w, fd, name);
-      const alt = slot.variants.length > 1 ? `<span class="pill">váltakozik: ${esc(slot.variants.map(v => v.name).join(' / '))}</span>` : '';
+      const alt = slot.pick ? `<span class="pill">gép: ${esc(machineLabel(slot, Math.max(0, slot.variants.findIndex(v => v.name === name))))}</span>` : slot.variants.length > 1 ? `<span class="pill">váltakozik: ${esc(slot.variants.map(v => v.name).join(' / '))}</span>` : '';
       const frk = rankOf(id);
       return `<button class="friend-ex fday-ex" data-fex="${esc(id)}"><b>${frk?.label ? rankBadge(frk) + ' ' : ''}${esc(hun(id))}${frk?.label ? ` <small style="color:${frk.color}">${esc(frk.label)}</small>` : ''}</b><span>${esc(showReps(slot))} ${alt}</span>${anyDone(cur) ? `<span class="fx-now">Ezen a héten: ${esc(setsText(cur))}</span>` : ''}<span>${l ? `Legutóbb (${esc(fmtDate(l.t) || l.w + '. hét')}): ${esc(setsText(l))}` : 'Még nincs adat'}</span>${pb ? `<span>🏆 ${showNum(pb.weight)} kg × ${showNum(pb.reps)}</span>` : ''}</button>`;
     }).join('');

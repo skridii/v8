@@ -1380,7 +1380,7 @@ void main() {}`;
     x -= TL.hold; if (x < b) return { t: 1 - ease(x / b), glow: neg ? 1 : 0.4, rep };
     return { t: 0, glow: 0.25, rep };
   }
-  const keyOf = id => (typeof rankKeyFor === 'function' && rankKeyFor(id)) || (typeof RANK_ALIAS !== 'undefined' && RANK_ALIAS[id]) || id;
+  const keyOf = id => (typeof rankKeyFor === 'function' && rankKeyFor(id)) || (typeof RANK_ALIAS !== 'undefined' && RANK_ALIAS[id]) || (typeof baseIdOf === 'function' ? baseIdOf(id) : id);
   const has = id => { const k = keyOf(id); return !failed && !!EX[k] && k[0] !== '_'; };
   const VIEWS = { front: -20, side: -82, back: -158 };
   let activeStop = null;

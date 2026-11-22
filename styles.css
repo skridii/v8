@@ -765,3 +765,8 @@ body.must-read #infoBtn{display:none!important}
 .sl-levels span{font-size:9.5px;color:#aab2ba;font-weight:800}
 .sl-levels i{font-style:normal;font-size:9px;color:#6d7781}
 .ld-cell small{display:block;font-size:8.5px;opacity:.6;font-weight:700;margin-top:1px}
+
+/* v60: gépválasztó */
+.sheet button small{display:block;font-size:11px;color:#6d7781;font-weight:700;margin-top:3px}
+.sheet button.on{border-color:#9cff57;color:#bafc8f;background:#0f1a0b}
+.sheet-note{font-size:13px;color:#aab2ba;line-height:1.45;padding:2px 4px 6px}
