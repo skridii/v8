@@ -770,3 +770,20 @@ body.must-read #infoBtn{display:none!important}
 .sheet button small{display:block;font-size:11px;color:#6d7781;font-weight:700;margin-top:3px}
 .sheet button.on{border-color:#9cff57;color:#bafc8f;background:#0f1a0b}
 .sheet-note{font-size:13px;color:#aab2ba;line-height:1.45;padding:2px 4px 6px}
+/* v61: sérülés */
+.inj-banner{background:#22180c;border:1px solid #5a3d14;color:#ffc46b;border-radius:10px;padding:8px 10px;font-size:12.5px;font-weight:800;cursor:pointer}
+.inj-banner small{display:block;color:#b8946a;font-weight:600;font-size:11px;margin-top:2px}
+.inj-txt{color:#ffc46b;font-weight:800}
+.inj-opts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.inj-opts button{text-align:center!important;font-weight:900}
+.inj-opts button.on{background:#ffb35c;color:#1a1004;border-color:#ffb35c}
+.inj-sheet .chip.on{background:#ffb35c;border-color:#ffb35c;color:#1a1004}
+.inj-note{width:100%;font-size:16px;margin-top:4px}
+.inj-card .inj-row{display:flex;flex-direction:column;gap:3px;width:100%;text-align:left;background:#0a0d10;border:1px solid #2a2218;border-radius:12px;padding:10px 12px;margin-top:8px;color:#e8edf1;cursor:pointer}
+.inj-row b{font-size:13.5px}.inj-row b i{font-style:normal;color:#ffc46b;font-size:11.5px;margin-left:4px}
+.inj-row span{font-size:11.5px;color:#9aa3ac}
+.inj-row .inj-n{color:#c9b18f;font-style:italic}
+.inj-row .ok{color:#9cff57;font-weight:800}.inj-row .on{color:#ffc46b;font-weight:800}
+.stats-row.inj{border-left:3px solid #ffb35c}
+.stats-inj{color:#ffc46b;font-size:12px;font-weight:800;margin-bottom:4px}
+.ch-dot.inj{fill:#ffb35c;stroke:#ffb35c}

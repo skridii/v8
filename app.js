@@ -8,7 +8,7 @@
      gyakorlat-azonosító, saját előzménnyel; alapból a legutóbb használt gép. state.machineBase: gép-azonosító → alap-azonosító
      (animáció, útmutató, rang ehhez igazodik).
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v60';
+const APP_VERSION = 'v61';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -92,7 +92,7 @@ const newUid = () => 's' + Date.now().toString(36) + Math.random().toString(36).
 const today = () => new Date().toISOString().slice(0, 10);
 function esc(v) { return String(v ?? '').replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'); }
 function prettyId(id) { return String(id).split('_').map(p => p ? p[0].toUpperCase() + p.slice(1) : p).join(' '); }
-function hasData(r) { if (!r) return false; return [r.warmup, ...(r.sets || [])].some(s => s && (String(s.weight ?? '') !== '' || String(s.reps ?? '') !== '' || s.done)); }
+function hasData(r) { if (!r) return false; if (r.inj) return true; return [r.warmup, ...(r.sets || [])].some(s => s && (String(s.weight ?? '') !== '' || String(s.reps ?? '') !== '' || s.done)); }
 function withTimeout(p, ms) { return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]); }
 
 /* ---------- program / layout ---------- */
@@ -249,8 +249,8 @@ function ensureRecord(c, w, d, name) {
   while (r.sets.length < 2) r.sets.push(emptySet());
   return r;
 }
-function latestBefore(c, w, d, name) {
-  const k = okey(c, w, d), list = sessionsOf(exId(name));
+function latestBefore(c, w, d, name, skipInj = false) {
+  const k = okey(c, w, d), list = sessionsOf(exId(name)).filter(x => !skipInj || !injOf(x.r));
   const cur = list.find(x => x.k === k);
   // Ha ezt az alkalmat már elkezdted, az ennél korábbi a „legutóbbi”; ha még nem, akkor a legfrissebb.
   const ref = cur && anyDone(cur.r) ? cur : null;
@@ -706,7 +706,9 @@ function matchLoad(name, wt) {
   return wt > 0 ? wt : null;
 }
 function matchRef(c, w, d, name) {
-  const last = latestBefore(c, w, d, name); if (!last) return null;
+  // sérülés miatt könnyített / kihagyott alkalomnál nincs „ne ess vissza” cél; a mérce a legutóbbi NEM sérült alkalom
+  if (injOf(recordFor(c, w, d, name))) return null;
+  const last = latestBefore(c, w, d, name, true); if (!last) return null;
   let best = null;
   for (const st of last.sets || []) {
     if (!st?.done || !positive(st.reps)) continue;
@@ -745,7 +747,7 @@ function matchHint(slot, e, s, wtRaw) {
 
 /* v42: átláthatóbb edzésnap – tömör fejléc napi haladással, gyakorlatkártyán a lényeg elöl, a többi lenyitható; a kész gyakorlat összecsukódik */
 const openEx = new Set(), closedEx = new Set();   // kézzel kinyitott (kész) / kézzel becsukott (nem kész) kártyák
-function exAllDone(slot, rec) { const n = setCount(slot, rec); if (!n) return false; for (let s = 0; s < n; s++) if (!rec?.sets?.[s]?.done) return false; return true; }
+function exAllDone(slot, rec) { if (injOf(rec)?.t === 'skip') return true; const n = setCount(slot, rec); if (!n) return false; for (let s = 0; s < n; s++) if (!rec?.sets?.[s]?.done) return false; return true; }
 // „Ne ess vissza”: a következő 3 súlylépcső minimum ismétlése (szövegként)
 function goalList(c, w, d, name) {
   const ref = matchRef(c, w, d, name); if (!ref) return [];
@@ -783,13 +785,13 @@ function renderWorkout() {
     const goals = goalList(c, w, d, name), lastTxt = last ? setsText(last) : '';
     const enName = slot.pick && vi > 0 ? slot.variants[0].name : name;   // gépnél az alap angol név, a „#2” nélkül
     const [huMain, huExtra] = splitHu(hu), sub = [huExtra, hu !== enName ? enName : ''].filter(Boolean).join(' · ');
-    const other = isAltSlot(slot) ? slot.variants[1 - vi] : null;
+    const other = isAltSlot(slot) ? slot.variants[1 - vi] : null, inj = injOf(rec);
     h += `<article class="exercise${done ? ' ex-done' : ''}${collapsed ? ' collapsed' : ''}" id="ex-${e}"><div class="exercise-head"><button class="ex-thumb" data-info="${esc(id)}" data-iname="${esc(name)}" data-ihu="${esc(v.hu || '')}" aria-label="${esc(hu)}: animáció és útmutató">${(typeof ANIM3D !== 'undefined' && ANIM3D.thumbHtml(id)) || (typeof ANIM !== 'undefined' ? ANIM.thumb(id) : '?')}</button><div class="ex-main"><div class="exercise-title">${esc(huMain)}</div>${sub ? `<div class="exercise-en">${esc(sub)}</div>` : ''}<div class="ex-meta"><span class="prescribed">${esc(showReps(slot))}</span>${collapsed && hasRk ? `<span class="rk-mini" style="color:${rk.color}">${esc(rk.label)}</span>` : ''}${!collapsed && slot.pick ? `<button class="var-chip" data-machine="${e}" aria-label="Gép: ${esc(machineLabel(slot, vi))} – másik gép választása">⚙ ${esc(machineLabel(slot, vi))} ▾</button>` : ''}${!collapsed && other ? `<button class="var-chip" data-variant data-e="${e}" aria-label="Ezen a héten inkább: ${esc(huShort(other.hu) || other.name)}">↔ ${esc(splitHu(huShort(other.hu) || other.name)[0])}</button>` : ''}</div></div><span class="fold-ic" aria-hidden="true">${collapsed ? '▾' : '▴'}</span><button class="more-btn" data-more="${e}" aria-label="További lehetőségek">⋯</button></div>`;
     if (collapsed) {
-      h += `<div class="fold-sum${done ? ' ok' : ''}">${done ? `✓ Kész · ${esc(setsText(rec))}` : `${lastTxt ? `Előző: <b>${esc(lastTxt)}</b>` : 'Még nincs előzmény'}${goals[0] ? ` · 🎯 <b>${goals[0]}</b>` : ''}`}</div></article>`; return;
+      h += `<div class="fold-sum${done ? ' ok' : ''}">${inj?.t === 'skip' ? `<span class="inj-txt">${esc(injText(inj))}</span>` : done ? `${inj ? '🩹 ' : ''}✓ Kész · ${esc(setsText(rec))}` : `${lastTxt ? `Előző: <b>${esc(lastTxt)}</b>` : 'Még nincs előzmény'}${goals[0] ? ` · 🎯 <b>${goals[0]}</b>` : ''}`}</div></article>`; return;
     }
     // EGY tömör infó-blokk: rang, előző + rekord, minimum ismétlés (a részletes előzmény a ⋯ / az „Előző” sor mögött)
-    let info = '';
+    let info = inj ? `<div class="inj-banner" role="button" data-inj="${e}">${esc(injText(inj))}${inj.t === 'light' ? '<small>A rangodat és a „ne ess vissza” célt ez az alkalom nem rontja.</small>' : '<small>Ha mégis megcsinálod, nyugodtan írd be.</small>'}</div>` : '';
     if (hasRk) { info += `<div class="ei-rank">${rankBadge(rk)}<div class="ei-rk"><b class="ei-rl" style="color:${rk.color}">${esc(rk.label)}</b><div class="rr-bar"><i style="width:${Math.round(rk.pct * 100)}%;background:${rk.color}"></i></div><small>${esc(oneRmText(rk))}${pb ? ` · 🏆 rekord ${showNum(pb.weight)}×${showNum(pb.reps)}` : ''}</small></div><span class="ei-go" aria-hidden="true">›</span></div>`; }
     else if (rk?.needBw) info += `<div class="ei-line muted">🏅 A rangodhoz add meg a testsúlyod a Rangok oldalon.</div>`;
     if (!lastTxt) info += `<div class="ei-line ei-last">Első alkalom – írd be, mennyit bírsz</div>`;
@@ -856,6 +858,7 @@ function openMore(e) {
   el.innerHTML = `<div class="sheet" role="dialog" aria-label="${esc(hun(id))}"><div class="sheet-title">${esc(huShort(v.hu) || hun(id))}<small>${esc(name)}</small></div>
     <button data-a="stats">📊 Előzmények és grafikon</button><button data-a="info">▶ Animáció és útmutató</button><button data-a="note">📝 Jegyzet${state.notes?.[id] ? ' szerkesztése' : ' írása'}</button>
     ${isAltSlot(slot) ? '' : `<button data-a="machine">⚙ ${slot.pick ? `Gép: ${esc(machineLabel(slot, variantIndex(state.cycle, state.week, state.day, slot)))} – másik gép / új gép` : 'Másik gépen csinálom (új gép felvétele)'}</button>`}
+    <button data-a="inj">🩹 ${injOf(recordFor(state.cycle, state.week, state.day, name)) ? 'Sérülés jelölése – módosítás' : 'Sérülés miatt könnyebben / kihagyom'}</button>
     <button data-a="swap">🔄 Csere / szerkesztés / törlés</button>
     <div class="sheet-row"><button data-a="up"${e === 0 ? ' disabled' : ''}>▲ Feljebb</button><button data-a="down"${e === slots.length - 1 ? ' disabled' : ''}>▼ Lejjebb</button></div>
     <button data-a="x" class="sheet-cancel">Mégse</button></div>`;
@@ -866,9 +869,82 @@ function openMore(e) {
     const a = b.dataset.a; close();
     if (a === 'stats') openStats(id); else if (a === 'info') openExInfo(id, name, v.hu || '');
     else if (a === 'swap') openEditor('edit', e); else if (a === 'up') moveExercise(e, -1); else if (a === 'down') moveExercise(e, 1);
-    else if (a === 'note') editNote(id); else if (a === 'machine') openMachinePicker(e);
+    else if (a === 'note') editNote(id); else if (a === 'machine') openMachinePicker(e); else if (a === 'inj') openInjury(e);
   });
 }
+/* ---------- v61: sérülés jelölése ----------
+   Egy alkalomra (gyakorlat × hét × nap): r.inj = { t: 'light' (könnyebben csinálom) | 'skip' (kihagyom), part: 'Térd'…, note }.
+   A rang, a rangtörténet és a „ne ess vissza” cél nem számol vele; a Fejlődésben, a statisztikában és a grafikonon látszik. */
+const INJ_PARTS = ['Térd', 'Váll', 'Könyök', 'Csukló', 'Derék', 'Hát', 'Nyak', 'Csípő', 'Boka', 'Egyéb'];
+const injOf = r => r?.inj && (r.inj.t === 'light' || r.inj.t === 'skip') ? r.inj : null;
+function injText(inj, short = false) {
+  if (!inj) return '';
+  const what = inj.t === 'skip' ? 'Kihagyva sérülés miatt' : 'Könnyebben sérülés miatt';
+  const part = inj.part ? ` · ${inj.part.toLowerCase()}` : '';
+  return `🩹 ${short ? (inj.t === 'skip' ? 'kihagyva' : 'könnyebben') : what}${part}${!short && inj.note ? ` – ${inj.note}` : ''}`;
+}
+function openInjury(e) {
+  const slot = curSlots()[e]; if (!slot) return;
+  const c = state.cycle, w = state.week, d = state.day, name = slotName(c, w, d, slot), id = exId(name);
+  const cur = injOf(recordFor(c, w, d, name));
+  // alapból az előző sérülés testrésze (ha volt), hogy ne kelljen újra kiválasztani
+  const prevInj = [...sessionsOf(id)].reverse().map(x => injOf(x.r)).find(Boolean);
+  let t = cur?.t || 'light', part = cur?.part || prevInj?.part || '';
+  document.getElementById('injSheet')?.remove();
+  const el = document.createElement('div'); el.id = 'injSheet'; el.className = 'overlay sheet-overlay';
+  el.innerHTML = `<div class="sheet inj-sheet" role="dialog" aria-label="Sérülés jelölése"><div class="sheet-title">🩹 Sérülés<small>${esc(hun(id))}</small></div>
+    <div class="inj-opts"><button data-t="light">Könnyebb súllyal csinálom</button><button data-t="skip">Ma kihagyom</button></div>
+    <div class="warm-sec">MI FÁJ?</div><div class="chip-row">${INJ_PARTS.map(p => `<button class="chip" data-part="${p}">${p}</button>`).join('')}</div>
+    <input class="lib-search inj-note" maxlength="80" placeholder="Megjegyzés (nem kötelező), pl. húzódás" value="${esc(cur?.note || '')}">
+    <div class="sheet-note">A rangodba és a „ne ess vissza” célba ez az alkalom nem számít bele, a Fejlődésben és a grafikonon 🩹 jellel látod később.</div>
+    <div class="sheet-row"><button class="primary" data-save>Mentés</button>${cur ? '<button data-del>Jelölés törlése</button>' : '<button data-x>Mégse</button>'}</div></div>`;
+  document.body.appendChild(el);
+  const paint = () => { el.querySelectorAll('[data-t]').forEach(b => b.classList.toggle('on', b.dataset.t === t)); el.querySelectorAll('[data-part]').forEach(b => b.classList.toggle('on', b.dataset.part === part)); };
+  paint();
+  el.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { t = b.dataset.t; paint(); });
+  el.querySelectorAll('[data-part]').forEach(b => b.onclick = () => { part = part === b.dataset.part ? '' : b.dataset.part; paint(); });
+  const close = () => el.remove();
+  el.onclick = ev => { if (ev.target === el) close(); };
+  el.querySelector('[data-x]')?.addEventListener('click', close);
+  el.querySelector('[data-del]')?.addEventListener('click', () => {
+    const r = recordFor(c, w, d, name); if (r) { delete r.inj; r.ts = Date.now(); }
+    save(); close(); renderWorkout(); renderWeeks(); toast('Sérülés jelölés törölve.');
+  });
+  el.querySelector('[data-save]').onclick = () => {
+    lockVariant(slot);
+    const r = ensureRecord(c, w, d, name), note = el.querySelector('.inj-note').value.trim();
+    r.inj = { t, ...(part ? { part } : {}), ...(note ? { note } : {}), at: Date.now() }; r.ts = Date.now();
+    if (t === 'skip' && !r.doneAt) r.doneAt = Date.now();
+    const key = `${c}-${w}-${d}-${slot.uid}`; if (t === 'skip') openEx.delete(key); else closedEx.delete(key);
+    save(); close(); renderWorkout(); renderWeeks();
+    toast(t === 'skip' ? 'Kihagyva sérülés miatt – jobbulást! 🩹' : 'Megjelölve: sérülés miatt könnyebben. 🩹');
+  };
+}
+/* Fejlődés oldal: a sérülések időrendben, gyakorlatonként összevonva (egymást követő alkalmak = egy időszak). */
+function injuryLogHtml() {
+  const list = [];
+  for (const id of Object.keys(state.exercises || {})) {
+    const ss = sessionsOf(id); let cur = null;
+    ss.forEach(x => {
+      const inj = injOf(x.r);
+      if (!inj) { cur = null; return; }
+      if (!cur) { cur = { id, from: x, to: x, light: 0, skip: 0, parts: new Set(), notes: [] }; list.push(cur); }
+      cur.to = x; cur[inj.t]++; if (inj.part) cur.parts.add(inj.part); if (inj.note) cur.notes.push(inj.note);
+    });
+    // a sérülés utáni első rendes alkalom: visszatérés
+    for (const p of list.filter(q => q.id === id)) { const after = ss.find(x => later(x, p.to) > 0 && !injOf(x.r) && anyDone(x.r)); if (after) p.back = after; }
+  }
+  if (!list.length) return '';
+  list.sort((a, b) => later(b.to, a.to));
+  const when = x => fmtDate(x.t) || (isImported(x.c) ? 'Hevy' : `${cycLabel(x.c).toLowerCase()}${x.w}. hét`);
+  return `<section class="summary-card inj-card"><div class="summary-title">🩹 SÉRÜLÉSEK</div>${list.slice(0, 8).map(p => {
+    const n = p.light + p.skip, span = p.from === p.to ? when(p.from) : `${when(p.from)} – ${when(p.to)}`;
+    const what = [p.light ? `${p.light}× könnyebben` : '', p.skip ? `${p.skip}× kihagyva` : ''].filter(Boolean).join(', ');
+    const back = p.back ? `✅ Visszatért: ${esc(fmtDate(p.back.t) || when(p.back))}${heavierSet(p.back.r) ? ` · ${showNum(heavierSet(p.back.r).weight)} kg × ${showNum(heavierSet(p.back.r).reps)}` : ''}` : '⏳ Még tart';
+    return `<button class="inj-row" data-rstats="${esc(p.id)}"><b>${esc(splitHu(hun(p.id))[0])}${p.parts.size ? ` <i>${esc([...p.parts].join(', ').toLowerCase())}</i>` : ''}</b><span>${esc(span)} · ${what}${n > 1 ? '' : ''}</span>${p.notes.length ? `<span class="inj-n">„${esc(p.notes[p.notes.length - 1])}”</span>` : ''}<span class="${p.back ? 'ok' : 'on'}">${back}</span></button>`;
+  }).join('')}</section>`;
+}
+
 /* ---------- v60: gépválasztó ----------
    Ugyanaz a gyakorlat több gépen (pl. két leg extension gép): a kg-ok nem összevethetők, ezért minden gép külön
    gyakorlat-azonosító, saját előzménnyel, ranggal, grafikonnal. Az 1. gép az eredeti gyakorlat (a régi adatok ott maradnak).
@@ -1065,6 +1141,7 @@ function bindInputs() {
   workout.querySelectorAll('[data-info]').forEach(btn => btn.onclick = () => openExInfo(btn.dataset.info, btn.dataset.iname, btn.dataset.ihu));
   if (typeof ANIM3D !== 'undefined') ANIM3D.fillThumbs(workout);
   workout.querySelectorAll('[data-note]').forEach(btn => btn.onclick = () => editNote(btn.dataset.note));
+  workout.querySelectorAll('[data-inj]').forEach(b => b.onclick = ev => { ev.stopPropagation(); openInjury(+b.dataset.inj); });
   workout.querySelectorAll('[data-warm]').forEach(btn => btn.onclick = () => openWarmup(+btn.dataset.warm));
   workout.querySelectorAll('[data-prevfill]').forEach(btn => btn.onclick = () => {
     const row = btn.closest('.set-row'), [wi, ri] = row.querySelectorAll('input');
@@ -1324,6 +1401,7 @@ function renderHistory() {
   h += weekMuscleHtml();
   h += monthHtml();
   h += recentRankUpsHtml();
+  h += injuryLogHtml();
   const active = [];
   L.forEach(day => day.forEach(slot => slot.variants.forEach(v => { const id = exId(v.name); if (!active.includes(id)) active.push(id); })));
   const archived = Object.keys(state.exercises).filter(id => !active.includes(id) && Object.values(state.exercises[id].occurrences || {}).some(hasData)).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
@@ -1343,7 +1421,7 @@ function renderHistory() {
   workout.innerHTML = h + hevyCard;
   $('histSearch').oninput = e => { histQuery = e.target.value; filterHistory(); };
   workout.querySelectorAll('[data-mm]').forEach(b => b.onclick = () => { muscleMode = b.dataset.mm; renderHistory(); });
-  workout.querySelectorAll('.ru-row[data-rstats]').forEach(b => b.onclick = () => openStats(b.dataset.rstats));
+  workout.querySelectorAll('.ru-row[data-rstats], .inj-row[data-rstats]').forEach(b => b.onclick = () => openStats(b.dataset.rstats));
   $('monthPrev').onclick = () => { monthSel = (monthSel ?? monthKey(Date.now())) - 1; renderHistory(); };
   $('monthNext').onclick = () => { monthSel = Math.min(monthKey(Date.now()), (monthSel ?? monthKey(Date.now())) + 1); renderHistory(); };
   workout.querySelectorAll('details[data-gid]').forEach(dt => dt.addEventListener('toggle', () => {
@@ -1390,15 +1468,17 @@ function statsHtml(id) {
     const rx = rh[k];
     const f = s => s && (s.weight || s.reps) ? `${esc(showNum(s.weight)) || '—'} × ${esc(showNum(s.reps)) || '—'}${s.done ? '' : ' <i>(nincs kész)</i>'}` : '—';
     const hs = heavierSet(r);
-    h += `<div class="stats-row"><div class="stats-when"><b>${isImported(c) ? esc('Hevy' + (r.title ? ' · ' + r.title : '')) : `${cycLabel(c)}${w}. hét · ${DAYS[d]?.name || ''}`}</b><span>${fmtDate(t)}</span></div><div class="stats-sets"><span>WU ${f(r.warmup)}</span>${(r.sets || []).map((x, i) => [x, i]).filter(([x]) => setFilled(x)).map(([x, i]) => `<span>S${i + 1} ${f(x)}</span>`).join('')}</div>${hs ? `<div class="stats-top">${showNum(hs.weight)} kg</div>` : ''}${rx ? `<div class="stats-rk${rx.up ? ' up' : ''}" style="--rc:${rx.rk.color}">${rx.up ? '⬆ RANGLÉPÉS: ' : ''}${esc(rx.rk.label)} · ${esc(oneRmText(rx.rk))}</div>` : ''}</div>`;
+    const inj = injOf(r);
+    if (inj?.t === 'skip' && !anyDone(r)) { h += `<div class="stats-row inj"><div class="stats-when"><b>${isImported(c) ? 'Hevy' : `${cycLabel(c)}${w}. hét · ${DAYS[d]?.name || ''}`}</b><span>${fmtDate(t)}</span></div><div class="stats-inj">${esc(injText(inj))}</div></div>`; continue; }
+    h += `<div class="stats-row${inj ? ' inj' : ''}">${inj ? `<div class="stats-inj">${esc(injText(inj))}</div>` : ''}<div class="stats-when"><b>${isImported(c) ? esc('Hevy' + (r.title ? ' · ' + r.title : '')) : `${cycLabel(c)}${w}. hét · ${DAYS[d]?.name || ''}`}</b><span>${fmtDate(t)}</span></div><div class="stats-sets"><span>WU ${f(r.warmup)}</span>${(r.sets || []).map((x, i) => [x, i]).filter(([x]) => setFilled(x)).map(([x, i]) => `<span>S${i + 1} ${f(x)}</span>`).join('')}</div>${hs ? `<div class="stats-top">${showNum(hs.weight)} kg</div>` : ''}${rx ? `<div class="stats-rk${rx.up ? ' up' : ''}" style="--rc:${rx.rk.color}">${rx.up ? '⬆ RANGLÉPÉS: ' : ''}${esc(rx.rk.label)} · ${esc(oneRmText(rx.rk))}</div>` : ''}</div>`;
   }
   return h + '</div>';
 }
 function chartPoints(id) {
-  return sessionsOf(id).map(x => ({ x, hs: heavierSet(x.r) })).filter(o => o.hs).map(({ x, hs }) => ({ wt: hs.weight, reps: hs.reps, set: hs.i + 1, lab: isImported(x.c) ? 'Hevy' : `${state.maxCycle > 1 ? x.c + '.c ' : ''}${x.w}.hét ${DAYS[x.d]?.short || ''}`, date: fmtDate(x.t) }));
+  return sessionsOf(id).map(x => ({ x, hs: heavierSet(x.r) })).filter(o => o.hs).map(({ x, hs }) => ({ inj: !!injOf(x.r), wt: hs.weight, reps: hs.reps, set: hs.i + 1, lab: isImported(x.c) ? 'Hevy' : `${state.maxCycle > 1 ? x.c + '.c ' : ''}${x.w}.hét ${DAYS[x.d]?.short || ''}`, date: fmtDate(x.t) }));
 }
 function chartHtml(id) {
-  const pts = chartPoints(id).map(p => ({ ...p, read: [`${showNum(p.wt)} kg × ${showNum(p.reps)}`, ` · ${p.set}. szett · ${p.lab}${p.date ? ' · ' + p.date : ''}`] }));
+  const pts = chartPoints(id).map(p => ({ ...p, read: [`${p.inj ? '🩹 ' : ''}${showNum(p.wt)} kg × ${showNum(p.reps)}`, ` · ${p.set}. szett · ${p.lab}${p.date ? ' · ' + p.date : ''}${p.inj ? ' · sérülés miatt könnyebben' : ''}`] }));
   if (!pts.length) return '<div class="empty">A görbéhez legalább egy kész munkasorozat kell.</div>';
   return lineChart(pts, 'Legnehezebb munkasorozat edzésenként', 'Súlyfejlődés', true);
 }
@@ -1419,7 +1499,7 @@ function lineChart(pts, title, aria, upGood) {
   const path = pts.map((p, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(p.wt).toFixed(1)}`).join(' ');
   const maxI = ws.indexOf(Math.max(...ws)), lastI = pts.length - 1;
   const lbl = i => `<text x="${X(i).toFixed(1)}" y="${(Y(pts[i].wt) - 9).toFixed(1)}" class="ch-lbl" text-anchor="${i === 0 && pts.length > 1 ? 'start' : i === lastI && pts.length > 1 ? 'end' : 'middle'}">${showNum(pts[i].wt)}</text>`;
-  const dots = pts.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p.wt).toFixed(1)}" r="4" class="ch-dot"/>`).join('');
+  const dots = pts.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p.wt).toFixed(1)}" r="4" class="ch-dot${p.inj ? ' inj' : ''}"/>`).join('');
   const first = pts[0].wt, last = pts[lastI].wt, diff = Math.round((last - first) * 10) / 10;
   return `<div class="chart-wrap" data-pts="${esc(JSON.stringify(pts.map((p, i) => ({ ...p, cx: X(i), cy: Y(p.wt) }))))}">
   <div class="chart-head"><span>${esc(title)}</span><b class="${diff > 0 && upGood ? 'up' : ''}">${pts.length > 1 ? (diff > 0 ? '+' : '') + showNum(diff) + ' kg' : ''}</b></div>
@@ -1616,7 +1696,7 @@ function repFactor(r) { r = Math.max(1, Math.min(20, r)); return r <= 10 ? 1 + r
 function repsForFactor(f) { if (f <= 1) return 1; if (f <= 4 / 3) return Math.ceil((f - 1) * 30 - 1e-9); const r = Math.ceil(10 + (f - 4 / 3) / 0.022 - 1e-9); return r <= 20 ? r : null; }
 const pctText = p => p >= 99 ? showNum(Math.min(99.9, Math.floor(p * 10) / 10)) : String(Math.max(0, Math.floor(p)));
 
-function recentSessions(id) { return sessionsOf(id).filter(x => (x.r.sets || []).some(s => s?.done)).slice(-RANK_SESSIONS); }
+function recentSessions(id) { return sessionsOf(id).filter(x => !injOf(x.r) && (x.r.sets || []).some(s => s?.done)).slice(-RANK_SESSIONS); }
 function rankScore(id, type) { return scoreFromSessions(id, recentSessions(id), type); }
 function scoreFromSessions(id, recent, type) {
   const key = rankKeyFor(id), bw = bodyWeight();
@@ -1737,7 +1817,7 @@ function rankHistory(id) {
   const key = rankKeyFor(id); if (!key) return [];
   const db = RANK_DB[key], bw = bodyWeight();
   if (!bw && db.type === 'w') return [];
-  const done = sessionsOf(id).filter(x => (x.r.sets || []).some(s => s?.done)), out = [];
+  const done = sessionsOf(id).filter(x => !injOf(x.r) && (x.r.sets || []).some(s => s?.done)), out = [];
   done.forEach((x, i) => {
     const sc = scoreFromSessions(id, done.slice(Math.max(0, i - RANK_SESSIONS + 1), i + 1), db.type); if (!sc) return;
     const rk = { key, db, ...rankFromScore(sc.score, db, bw || 80) }, lvl = rankLvl(rk), prev = out[out.length - 1];
@@ -2438,7 +2518,7 @@ function summaryHtml(S) {
   }
   const prs = S.ex.filter(e => e.prs.some(p => p.kind !== 'first'));
   if (prs.length) h += `<div class="ws-sec">🏆 ÚJ REKORDOK</div>` + prs.map(e => `<div class="ws-pr"><b>${esc(hun(e.id))}</b>${e.prs.filter(p => p.kind !== 'first').map(p => `<span>${prText(p, e)}</span>`).join('')}</div>`).join('');
-  h += `<div class="ws-sec">GYAKORLATOK</div><div class="ws-ex">` + S.ex.map(e => `<div><span>${esc(hun(e.id))}${e.prs.some(p => p.kind !== 'first') ? ' 🏆' : e.prs[0]?.kind === 'first' ? ' <em>első</em>' : ''}</span><b>${e.n} × ${e.best ? `${showNum(e.best.weight)} kg × ${showNum(e.best.reps)}` : '—'}</b></div>`).join('') + '</div>';
+  h += `<div class="ws-sec">GYAKORLATOK</div><div class="ws-ex">` + S.ex.map(e => `<div><span>${injOf(e.r) ? '🩹 ' : ''}${esc(hun(e.id))}${e.prs.some(p => p.kind !== 'first') ? ' 🏆' : e.prs[0]?.kind === 'first' ? ' <em>első</em>' : ''}</span><b>${e.n} × ${e.best ? `${showNum(e.best.weight)} kg × ${showNum(e.best.reps)}` : '—'}</b></div>`).join('') + '</div>';
   return h;
 }
 function openSummary(c, w, d) {
