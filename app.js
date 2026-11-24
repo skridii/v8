@@ -8,7 +8,7 @@
      gyakorlat-azonosító, saját előzménnyel; alapból a legutóbb használt gép. state.machineBase: gép-azonosító → alap-azonosító
      (animáció, útmutató, rang ehhez igazodik).
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v61';
+const APP_VERSION = 'v62';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -1629,9 +1629,14 @@ const RANK_SESSIONS = 2;
    Forrás: strengthlevel.com (férfi, kg). A 6 alapgyakorlatnál (fekve, guggolás, felhúzás, vállból nyomás, bicepsz rúddal,
    döntött evezés) a testsúly-táblázatuk pontos értékeit használjuk; a többinél a közösségi szinteket ugyanazzal a
    testsúly-görbével igazítjuk, mint amit az alapgyakorlataik mutatnak. */
-const LEVEL_P = [5, 20, 50, 80, 95];
+const LEVEL_P = [5, 20, 50, 80, 95];   // a Strength Level saját meghatározása (az ő naplózó felhasználóik között)
+/* v62: a Strength Level felhasználói lelkes, naplózó edzők – az átlagos edzőterem-látogatónál jóval erősebbek
+   (az ő „Középhaladó”-juk 2+ év rendszeres edzés). Ezért a százalékot az EDZŐTERMI átlaghoz számoljuk át:
+   Kezdő ≈ 20%, Újonc ≈ 45%, Középhaladó ≈ 75%, Haladó ≈ 93%, Elit ≈ 99% (becslés). */
+const GYM_P = [20, 45, 75, 93, 99];
 const LEVEL_NAMES = ['Kezdő', 'Újonc', 'Középhaladó', 'Haladó', 'Elit'];
-const RANK_P = [0, 5 / 3, 10 / 3, 5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 85, 90, 95, 96, 97, 98, 98.5, 99, 99.4, 99.6, 99.8];
+// rangok: Puding = Kezdő alatt · Menzás = Kezdő · Lábnap-kerülő = Újonc · Tápos = Középhaladó · Bedurranás = Haladó · Szekrény = Elit · Kétajtós, Görög isten = az Elit fölött
+const RANK_P = [0, 7, 14, 20, 28, 36, 45, 55, 65, 75, 81, 87, 93, 95, 97, 99, 99.3, 99.5, 99.65, 99.75, 99.82, 99.88, 99.92, 99.96];
 const SL_BW0 = 50, SL_BWSTEP = 5; // 50, 55, … 140 kg
 const SL_TABLES = {
   bench_press: [[27,41,58,78,101],[32,47,65,87,110],[37,53,72,95,119],[42,59,79,102,128],[47,64,85,110,136],[51,70,92,117,144],[56,75,98,124,151],[60,80,104,130,158],[65,85,109,137,165],[69,90,115,143,172],[73,95,120,149,179],[77,99,125,155,185],[81,104,131,160,191],[85,108,135,166,197],[89,113,140,171,203],[93,117,145,176,209],[97,121,150,181,214],[100,125,154,186,220],[104,129,158,191,225]],
@@ -1655,7 +1660,7 @@ const SL_COMM = {
   reverse_pec_deck: [25, 42, 64, 90, 120], machine_lateral_raise: [15, 32, 57, 89, 126], cable_rope_triceps_pushdown: [15, 27, 44, 65, 89], overhead_cable_triceps_extension: [12, 24, 41, 62, 86],
   cable_crunch: [20, 41, 70, 108, 150], chest_supported_row: [41, 67, 100, 143, 190], wide_grip_lat_pulldown: [38, 58, 82, 110, 141], single_arm_sagittal_pulldown: [21, 36, 55, 83, 116],
   seated_cable_row: [41, 61, 86, 115, 147], straight_arm_lat_pulldown: [17, 34, 57, 86, 120], cable_face_pull: [12, 26, 46, 71, 101],
-  pull_up: [-13, 8, 34, 63, 93] // plusz súly (kg) egy ismétléshez; a saját testsúlyos ismétlést is erre számoljuk át
+  pull_up: [-3, 13, 31, 52, 73] // plusz súly (kg) egy ismétléshez; a saját testsúlyos ismétlést is erre számoljuk át
 };
 const SL_ADDED = new Set(['pull_up']);
 function slRow(T, bw) {
@@ -1678,18 +1683,18 @@ function levelsFor(key, bw = 80) {
   if (SL_COMM[key]) return SL_COMM[key].map((v, j) => v * f[j]);
   const f80 = bwFactor(80); return db.std.map((v, j) => v * f[j] / f80[j]);
 }
-const TAIL_K = Math.log(5) / 0.8; // az Elit fölött: 99% ≈ Elit + 0,8 × (Elit − Haladó)
+const TAIL_K = Math.log(5) / 0.8; // az Elit fölött: 99,8% ≈ Elit + 0,8 × (Elit − Haladó)
 function pctOf(x, L) {
-  const [b, n, , a, e] = L;
-  if (x >= e) return 100 - 5 * Math.exp(-TAIL_K * (x - e) / (e - a));
-  for (let j = 4; j >= 1; j--) if (x >= L[j - 1]) return LEVEL_P[j - 1] + (LEVEL_P[j] - LEVEL_P[j - 1]) * (x - L[j - 1]) / (L[j] - L[j - 1]);
-  const x0 = b - (n - b); return Math.max(0, 5 * (x - x0) / (b - x0));
+  const [b, n, , a, e] = L, P = GYM_P;
+  if (x >= e) return 100 - (100 - P[4]) * Math.exp(-TAIL_K * (x - e) / (e - a));
+  for (let j = 4; j >= 1; j--) if (x >= L[j - 1]) return P[j - 1] + (P[j] - P[j - 1]) * (x - L[j - 1]) / (L[j] - L[j - 1]);
+  const x0 = b - (n - b); return Math.max(0, P[0] * (x - x0) / (b - x0));
 }
 function xOfPct(p, L) {
-  const [b, n, , a, e] = L;
-  if (p >= 95) return e - Math.log((100 - p) / 5) * (e - a) / TAIL_K;
-  for (let j = 4; j >= 1; j--) if (p >= LEVEL_P[j - 1]) return L[j - 1] + (L[j] - L[j - 1]) * (p - LEVEL_P[j - 1]) / (LEVEL_P[j] - LEVEL_P[j - 1]);
-  const x0 = b - (n - b); return x0 + (b - x0) * p / 5;
+  const [b, n, , a, e] = L, P = GYM_P;
+  if (p >= P[4]) return e - Math.log((100 - p) / (100 - P[4])) * (e - a) / TAIL_K;
+  for (let j = 4; j >= 1; j--) if (p >= P[j - 1]) return L[j - 1] + (L[j] - L[j - 1]) * (p - P[j - 1]) / (P[j] - P[j - 1]);
+  const x0 = b - (n - b); return x0 + (b - x0) * p / P[0];
 }
 /* Ismétlés-szorzó a becsült 1RM-hez: 10 ismétlésig Epley (1 + r/30), fölötte már lassabban nő (a sok ismétlés kevésbé jelez erőt), 20-nál megáll. */
 function repFactor(r) { r = Math.max(1, Math.min(20, r)); return r <= 10 ? 1 + r / 30 : 4 / 3 + (r - 10) * 0.022; }
@@ -1859,7 +1864,7 @@ function rankLadderHtml(id) {
   const cell = v => added ? (Math.round(v) >= 0 ? '+' : '−') + showNum(Math.abs(Math.round(v))) : db.type === 'w' ? showNum(Math.round(v)) : kgUnit ? showNum(Math.round(bw * (1 + v / 30))) : showNum(Math.max(0, Math.ceil(v)));
   const unit = added ? 'becsült 1RM plusz súly (kg)' : kgUnit ? 'becsült 1RM (kg)' + (db.type === 'w' ? '' : ', testsúllyal') : 'ismétlés egy szettben';
   let h = `<div class="ladder-card"><div class="chart-head"><span>Ranglétra · ${unit}</span><b>${cur?.score !== undefined ? esc(oneRmText(cur)) : ''}</b></div>`;
-  h += `<div class="sl-levels">${L.map((v, j) => `<div${cur?.score !== undefined && cur.score >= v ? ' class="on"' : ''}><b>${cell(v)}</b><span>${LEVEL_NAMES[j]}</span><i>${LEVEL_P[j]}%</i></div>`).join('')}</div>`;
+  h += `<div class="sl-levels">${L.map((v, j) => `<div${cur?.score !== undefined && cur.score >= v ? ' class="on"' : ''}><b>${cell(v)}</b><span>${LEVEL_NAMES[j]}</span><i>${GYM_P[j]}%</i></div>`).join('')}</div>`;
   h += `<div class="ladder-grid"><span></span><span>I</span><span>II</span><span>III</span>`;
   for (let r = RANKS.length - 1; r >= 0; r--) {
     h += `<span class="ld-name" style="color:${RANKS[r].c}">${esc(RANKS[r].n)}</span>`;
@@ -1868,7 +1873,7 @@ function rankLadderHtml(id) {
       h += `<span class="ld-cell${p === cl ? ' on' : p < cl ? ' past' : ''}" style="--rc:${RANKS[r].c}">${p === 0 ? '0' : cell(T[p])}<small>${pctText(RANK_P[p])}%</small></span>`;
     }
   }
-  return h + `</div><div class="ld-note">A Strength Level közösségi erőnormái szerint${db.type === 'r' && !added ? '' : `, a ${bw ? showNum(bw) + ' kg-os testsúlyodhoz' : '80 kg-os testsúlyhoz'} igazítva`}. A felső sor az 5 szint (a százalék: a súlyzós edzők hány százalékánál erősebb, aki eléri). A rácsban minden fokozat alsó határa és a hozzá tartozó százalék.${db.equip === 'machine' ? ' Gépeknél a terhelés gépenként eltér, ezért ez csak irányadó.' : ''}${cur?.plus ? ` Te már a ${esc(RANKS[RANKS.length - 1].n)} III fölött jársz (+${cur.plus}).` : ''}</div></div>`;
+  return h + `</div><div class="ld-note">A Strength Level erőnormái alapján${db.type === 'r' && !added ? '' : `, a ${bw ? showNum(bw) + ' kg-os testsúlyodhoz' : '80 kg-os testsúlyhoz'} igazítva`}. A felső sor az 5 szint; a százalék: az átlagos edzőterem-látogatók hány százalékánál erősebb, aki eléri (becslés – a Strength Level százalékai a lelkes, naplózó edzőkhöz mérnek, ezért átszámoltuk). A rácsban minden fokozat alsó határa és a hozzá tartozó százalék.${db.equip === 'machine' ? ' Gépeknél a terhelés gépenként eltér, ezért ez csak irányadó.' : ''}${cur?.plus ? ` Te már a ${esc(RANKS[RANKS.length - 1].n)} III fölött jársz (+${cur.plus}).` : ''}</div></div>`;
 }
 /* Minden rang egy helyen, név szerint – és melyik gyakorlatod hol tart. */
 function allRanksHtml() {
