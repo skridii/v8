@@ -1277,6 +1277,32 @@ void main() {}`;
       return Object.assign({ root: [0, seatY + 0.125, 0], pitch: -6, head: 2 }, LR(sd => Object.assign(sitLegs(sd, 0.4, 0.18), { hand: Hs[sd], grip: Y, pole: [sd * 1, -0.6, -0.3] })));
     }
   };
+  /* Ülő tolódzkodás gépen (Life Fitness Signature Series Seated Dip – tárcsás, összekapcsolt karok): egyenes háttal ülve
+     a csípő melletti fogantyúkat lefelé tolja, majdnem nyújtott karig; a kar elöl, mellmagasságban forog, a tárcsatartó
+     a forgáspont előtt van, így a tárcsa felfelé lendül, ahogy a fogantyú lemegy. t = 0 fent (behajlított könyök), 1 lent. */
+  EX.seated_dip_machine = {
+    cam: { yaw: -58, pitch: 9, dist: 5.0, target: [0, 0.95, 0.1], rad: 2.2 },
+    build(t) {
+      const seatY = 0.48;
+      baseT(-0.55, 0.85); seat(seatY, 0, 6, 0.78);
+      const pose = Object.assign({ root: [0, seatY + 0.125, 0], pitch: 3, head: 2 }, LR(sd => sitLegs(sd, 0.42, 0.18)));
+      side2(sd => {
+        const S = shoulderOf(pose, sd);
+        // a kéz a váll alatt: fent ~27 cm-rel (könyök hátul, kb. derékszögben), lent majdnem nyújtott kar
+        const H = [sd * (Math.abs(S[0]) + 0.07), S[1] - lerp(0.27, 0.56, t), S[2] + lerp(-0.06, 0.03, t)];
+        const piv = [sd * 0.44, 0.78, 0.46], E = [sd * 0.44, H[1], H[2] + 0.02];
+        beam([sd * 0.44, 0.03, 0.46], [sd * 0.44, piv[1] - 0.04, piv[2]], 0.06, 0.06, STEEL, Zf);
+        cyl([sd * 0.41, piv[1], piv[2]], [sd * 0.49, piv[1], piv[2]], 0.045, STEEL2, 0.01);
+        beam(piv, E, 0.04, 0.04, STEEL, X); beam(E, [H[0], H[1], H[2] + 0.02], 0.03, 0.03, STEEL, Y);
+        cyl([H[0], H[1], H[2] - 0.07], [H[0], H[1], H[2] + 0.07], 0.02, GRIP, 0.004);
+        // tárcsatartó a forgáspont előtt: ahogy a fogantyú lemegy, a tárcsa felemelkedik
+        const hb = mad(piv, norm(sub(piv, E)), 0.26);
+        beam(piv, hb, 0.035, 0.035, STEEL, X); cyl([sd * 0.46, hb[1], hb[2]], [sd * 0.6, hb[1], hb[2]], 0.022, CHROME, 0.005); weightPlate([sd * 0.53, hb[1], hb[2]], X, 0.16, 0.035);
+        Object.assign(sd > 0 ? pose.L : pose.R, { hand: H, grip: Zf, pole: [sd * 0.3, -0.1, -1] });
+      });
+      return pose;
+    }
+  };
   /* Gépes vállnyomás: ülve, a fogantyúk vállmagasságból a fej fölé, majdnem nyújtott karig. t = 0 lent, 1 fent. */
   EX.machine_shoulder_press = {
     cam: { yaw: -38, pitch: 8, dist: 5.2, target: [0, 1.25, 0], rad: 2.3 },

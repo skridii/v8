@@ -8,7 +8,7 @@
      gyakorlat-azonosító, saját előzménnyel; alapból a legutóbb használt gép. state.machineBase: gép-azonosító → alap-azonosító
      (animáció, útmutató, rang ehhez igazodik).
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v62';
+const APP_VERSION = 'v63';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -1598,6 +1598,7 @@ const RANK_DB_RAW = [
   ['Machine Lateral Raise', 'Gépes Oldalemelés', 'w', 'machine', [32, 50, 72, 100, 130], '2 × 10–12', []],
   ['Reverse Pec Deck', 'Hátsó Váll Pec Deck Gépen', 'w', 'machine', [40, 60, 85, 115, 150], '2 × 10–12', ['Reverse Fly Machine']],
   ['Cable Face Pull', 'Arcig Húzás Csigán', 'w', 'machine', [20, 30, 42, 56, 72], '2 × 10–12', ['Face Pull']],
+  ['Seated Dip Machine', 'Ülő Tolódzkodás Gépen', 'w', 'machine', [50, 76, 109, 147, 190], '2 × 8–10', ['Seated Dip', 'Dip Machine', 'Triceps Dip Machine', 'Machine Dip', 'Seated Dips', 'Ülő tolódzkodás']],
   ['Cable Rope Triceps Pushdown', 'Csigás Kötél Tricepsz', 'w', 'machine', [22, 32, 45, 60, 78], '2 × 8–10', ['Triceps Pushdown', 'Rope Pushdown']],
   ['Single-Arm Overhead Cable Triceps Extension', '1 Kezes Fejfeletti Tricepsz', 'w', 'machine', [8, 13, 19, 26, 34], '2 × 8–10', []],
   ['Overhead Cable Triceps Extension', 'Fejfeletti Tricepsz Csigán', 'w', 'machine', [26, 40, 55, 72, 98], '2 × 8–10', []],
@@ -1656,6 +1657,7 @@ const SL_COMM = {
   dumbbell_wrist_curl: [3, 11, 25, 44, 66], dumbbell_reverse_wrist_curl: [2, 7, 16, 28, 42],
   dumbbell_bench_press: [17, 26, 38, 53, 69], incline_dumbbell_press: [19, 28, 39, 53, 68], dumbbell_shoulder_press: [12, 20, 32, 45, 60], dumbbell_row: [16, 27, 43, 62, 83],
   alternating_dumbbell_biceps_curl: [7, 13, 21, 31, 42], hammer_curl: [8, 14, 23, 34, 46], dumbbell_preacher_curl: [7, 12.5, 20, 29.5, 40], scott_bench_preacher_curl: [17, 29, 45, 63, 84],
+  seated_dip_machine: [50, 76, 109, 147, 190],
   machine_preacher_curl: [21, 36, 57, 81, 109], machine_chest_press: [34, 56, 86, 121, 161], machine_shoulder_press: [24, 46, 77, 115, 159], chest_fly: [37, 58, 85, 118, 154],
   reverse_pec_deck: [25, 42, 64, 90, 120], machine_lateral_raise: [15, 32, 57, 89, 126], cable_rope_triceps_pushdown: [15, 27, 44, 65, 89], overhead_cable_triceps_extension: [12, 24, 41, 62, 86],
   cable_crunch: [20, 41, 70, 108, 150], chest_supported_row: [41, 67, 100, 143, 190], wide_grip_lat_pulldown: [38, 58, 82, 110, 141], single_arm_sagittal_pulldown: [21, 36, 55, 83, 116],
@@ -1964,6 +1966,7 @@ const EX_INFO = {
   machine_preacher_curl: ['biceps:3,forearm:1', 'Ülj be, a felkar a párnán.|Hajlítsd fel a fogantyút.|Lassan engedd le majdnem nyújtott karig.', 'Alul ne ejtsd le.'],
   cable_curl: ['biceps:3,forearm:2', 'Állj a csiga elé, fogd alulról.|Hajlítsd fel, könyök a test mellett.|Lassan engedd le.', 'Ne lendíts.'],
   pull_up: ['lats:3,upback:2,biceps:2,forearm:2,delt_r:1,abs:1', 'Fogd a rudat vállszélességnél szélesebben, lógj nyújtott karral.|Húzd fel magad, amíg az állad a rúd fölé ér, mellkas a rúd felé.|Lassan engedd le teljesen.', 'Ne lendülj; ha még nem megy, gumiszalaggal vagy géppel segíts.'],
+  seated_dip_machine: ['triceps:3,chest:2,delt_f:2', 'Ülj be egyenes háttal, a hátad a támlán; a fogantyúkat a csípőd mellett fogd semleges fogással (tenyér befelé), a könyök hátrafelé néz.|Told lefelé a fogantyúkat, amíg a karod majdnem teljesen kinyúlik; fent ne zárd be erőből a könyököt.|Lassan engedd vissza, amíg a kéz kb. a mellkasod aljáig jön fel és nyúlást érzel a vállad elején.', 'A könyök ne nyíljon ki oldalra, és a vállad ne húzd fel a füled felé. Egyenesebb törzzsel több tricepsz, előredőlve több mell dolgozik. Tárcsás gépnél a felrakott tárcsák összsúlyát írd be (mindkét oldal együtt).'],
   dips: ['chest:2,triceps:3,delt_f:2', 'Támaszkodj fel a korláton nyújtott karral.|Ereszkedj le, amíg a váll a könyök alá kerül.|Told vissza magad.', 'Előredőlve több mell, egyenesen több tricepsz.'],
   push_up: ['chest:3,triceps:2,delt_f:2,abs:1', 'Kéz vállszélességben, test egyenes vonalban.|Engedd le a mellkasod a földig.|Told vissza.', 'A csípő ne lógjon le.'],
   hanging_leg_raise: ['abs:3,obl:2,forearm:1', 'Lógj a rúdon nyújtott karral.|Emeld fel a lábad (térdet) a hasad összehúzásával.|Lassan engedd le, ne lendülj.', 'A medencét is billentsd fel, ne csak a lábat emeld.'],
@@ -2211,6 +2214,7 @@ const HEVY_MAP = {
   'hack squat (machine)': 'Hack Squat', 'leg extension (machine)': 'Leg Extension', 'seated leg curl (machine)': 'Seated Hamstring Curl', 'lying leg curl (machine)': 'Lying Hamstring Curl',
   'hip adduction (machine)': 'Machine Hip Adduction', 'hip abduction (machine)': 'Machine Hip Abduction', 'standing calf raise (machine)': 'Standing Calf Raise',
   'seated calf raise': 'Seated Calf Raise', 'crunch (machine)': 'Machine Ab Crunch', 'cable crunch': 'Cable Crunch', 'preacher curl (dumbbell)': 'Dumbbell Preacher Curl', 'pull up': 'Pull Up', 'pull up (weighted)': 'Pull Up', 'chin up': 'Pull Up',
+  'seated dip machine': 'Seated Dip Machine', 'triceps dip (machine)': 'Seated Dip Machine', 'seated dip (machine)': 'Seated Dip Machine', 'dip machine': 'Seated Dip Machine',
   'chest dip': 'Dips', 'triceps dip': 'Dips', 'chest dip (weighted)': 'Dips', 'push up': 'Push Up', 'hanging leg raise': 'Hanging Leg Raise', 'goblet squat': 'Goblet Squat',
   'bulgarian split squat': 'Dumbbell Bulgarian Split Squat', 'smith machine squat': 'Smith Machine Squat', 'smith machine bench press': 'Smith Machine Bench Press',
   't bar row': 'Chest-Supported Row', 'chest supported incline row (dumbbell)': 'Chest-Supported Row', 'wrist curl (dumbbell)': 'Dumbbell Wrist Curl', 'reverse wrist curl (dumbbell)': 'Dumbbell Reverse Wrist Curl',
