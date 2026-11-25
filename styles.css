@@ -787,3 +787,46 @@ body.must-read #infoBtn{display:none!important}
 .stats-row.inj{border-left:3px solid #ffb35c}
 .stats-inj{color:#ffc46b;font-size:12px;font-weight:800;margin-bottom:4px}
 .ch-dot.inj{fill:#ffb35c;stroke:#ffb35c}
+/* v64: KARDIÓ kártya az edzésnap végén + Fejlődés */
+.cd-card{background:linear-gradient(145deg,#111a1f,#0d1216);border:1px solid #24414a;border-radius:17px;margin:14px 0 10px;padding:14px;display:grid;gap:10px}
+.cd-card.done{border-color:#2f5a2a}.cd-card.skipped{opacity:.75;border-style:dashed}
+.cd-card.collapsed{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.cd-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.cd-title{font-weight:900;font-size:16px;letter-spacing:.3px}
+.cd-sub{font-size:11.5px;color:#7fa7b3;margin-top:3px;font-weight:700}
+.cd-badge{flex-shrink:0;font-size:10.5px;font-weight:900;padding:5px 9px;border-radius:99px;background:#1b2128;color:#9aa3ac;text-transform:uppercase;letter-spacing:.6px}
+.cd-badge.ok{background:rgba(156,255,87,.14);color:#9cff57}
+.cd-fold{font-size:13px;color:#c9d0d6;line-height:1.5;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.cd-fold b{color:#fff}.cd-edit{margin-left:auto;color:#6f7a84;font-size:11.5px;font-weight:800}
+.cd-link{background:none;border:0;color:#5cc8ff;font-weight:900;font-size:13px;padding:4px 0;cursor:pointer}
+.cd-chips{display:flex;flex-wrap:wrap;gap:6px}
+.cd-types{display:grid;grid-template-columns:repeat(3,1fr)}
+.cd-types .chip{display:flex;flex-direction:column;gap:2px;border-radius:12px;padding:8px 6px;line-height:1.15}
+.cd-types .chip small{font-size:9.5px;font-weight:700;opacity:.75}
+.cd-goal{background:#0a0f12;border:1px solid #1f3238;border-radius:12px;padding:9px 11px;display:grid;gap:6px;font-size:12.5px;color:#b9c3ca;line-height:1.45}
+.cd-goal b{color:#fff}
+.cd-prev{font-size:12px;color:#86909a;line-height:1.45}.cd-prev b{color:#dfe5ea}
+.cd-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.cd-f{display:grid;gap:4px;font-size:10px;font-weight:900;color:#7e8791;letter-spacing:.5px;text-transform:uppercase;position:relative}
+.cd-f.wide{grid-column:1/-1}.cd-f i{font-style:normal;font-weight:700;text-transform:none;letter-spacing:0;color:#5d6770}
+.cd-f input{width:100%;background:#0a0d10;border:1px solid #2a3037;border-radius:10px;color:#fff;padding:11px 10px;outline:none;font-size:16px;font-weight:800}
+.cd-f input:focus{border-color:#5cc8ff}.cd-f input.invalid{border-color:#ff6b6b}
+.cd-zl{position:absolute;right:9px;bottom:12px;font-style:normal;font-size:10.5px;font-weight:900;text-transform:none;letter-spacing:0}
+.cd-zl.z1,.cd-z.z1{color:#9cff57}.cd-zl.z2,.cd-z.z2{color:#ffd25c}.cd-zl.z3,.cd-z.z3{color:#ff7b7b}
+.cd-z{font-style:normal;font-weight:900;font-size:11px}
+.cd-rpe-h{font-style:normal;font-weight:700;letter-spacing:0;color:#5d6770;margin-left:4px}
+.cd-rpe{display:grid;grid-template-columns:repeat(10,1fr);gap:4px}
+.cd-rpe .chip{padding:9px 0;border-radius:9px;font-size:12px}
+.cd-note{margin:0}
+.cd-actions{display:grid;grid-template-columns:1.4fr 1fr;gap:8px}
+.cd-actions button{padding:13px 10px;border-radius:12px;font-size:13px}
+.cd-hint{font-size:11px;color:#66717b}
+.cd-zones{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:12px 0 6px}
+.cd-zones span{background:#0a0d10;border:1px solid #232a31;border-radius:11px;padding:8px;font-size:10px;font-weight:900;color:#87919a;text-transform:uppercase;letter-spacing:.5px;display:grid;gap:3px;text-align:center}
+.cd-zones span b{font-size:15px;letter-spacing:0}
+.cd-zones .z1 b{color:#9cff57}.cd-zones .z2 b{color:#ffd25c}.cd-zones .z3 b{color:#ff7b7b}
+.cd-hrow{display:flex;gap:8px;margin:10px 0 4px;flex-wrap:wrap}.cd-hrow button{flex:1}
+.cd-mchips{margin:12px 0 2px}
+.cd-row{display:grid;grid-template-columns:62px 1fr;gap:8px;padding:8px 10px;margin-top:6px;background:#0a0d10;border-radius:10px;font-size:12px;color:#aeb6be;line-height:1.4}
+.cd-row>b{color:#dfe5ea}.cd-row span b{color:#fff}.cd-row.sk{opacity:.6}
+.cd-hist .chart-wrap{margin-top:10px}

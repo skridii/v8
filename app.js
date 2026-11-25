@@ -8,7 +8,7 @@
      gyakorlat-azonosító, saját előzménnyel; alapból a legutóbb használt gép. state.machineBase: gép-azonosító → alap-azonosító
      (animáció, útmutató, rang ehhez igazodik).
    Adatbázis neve, store, kulcs és a localStorage kulcsok változatlanok. */
-const APP_VERSION = 'v63';
+const APP_VERSION = 'v64';
 
 // v45: a felsőtest az első nap (Ádám kérése) – a régi mentéseket az applyDayOrder fordítja át
 const DAYS = [
@@ -813,10 +813,12 @@ function renderWorkout() {
     h += `<div class="set-tools slim">${bwx ? '' : `<button class="set-tool warm" data-warm="${e}">🔥 Bemelegítés${barWeight(id) !== null ? ' · tárcsák' : ''}</button>`}<button class="set-tool" data-addset data-e="${e}">+ szett</button>${nSets > 1 ? `<button class="set-tool minus" data-delset data-e="${e}">− szett</button>` : ''}</div></div></article>`;
   });
   if (!slots.length) h += '<div class="note">Ezen a napon nincs gyakorlat. Adj hozzá egyet!</div>';
+  h += cardioCardHtml(c, w, d);   // v64: kardió minden edzésnap végén (kihagyható)
   h += '<button class="add-ex-btn" id="addExBtn">+ ÚJ GYAKORLAT HOZZÁADÁSA</button>';
   h += '<div class="note">Tipp: ha ugyanannyit csináltál, mint múltkor, csak pipáld ki – a halvány számokat veszi át. Név = ki/becsuk · kép = animáció · rang = statisztika · ⋯ = csere, sorrend, jegyzet.</div>';
   workout.innerHTML = h;
   bindInputs();
+  bindCardio();
   // a kártya fejlécére (vagy a becsukott kártyára) koppintva ki/becsukódik – a kép (animáció) és a ⋯ gomb kivétel
   workout.querySelectorAll('.exercise').forEach((art, e) => {
     const slot = slots[e]; if (!slot) return;
@@ -836,6 +838,258 @@ function renderWorkout() {
   workout.querySelectorAll('[data-share]').forEach(b => b.onclick = () => { feedDraft = { body: '', attach: b.dataset.share, photo: null, photoUrl: '' }; view = 'feed'; render(); window.scrollTo(0, 0); });
   workout.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => { const el = $('ex-' + b.dataset.jump); if (el) { const y = el.getBoundingClientRect().top + window.scrollY - (document.querySelector('.sticky-nav')?.getBoundingClientRect().bottom || 120) - 8; window.scrollTo({ top: y, behavior: 'smooth' }); } });
 }
+/* ===== v64: KARDIÓ – minden edzésnap végén (Ádám kérése, a 12 hetes kardióterv szerint, LTHR-zónákkal) =====
+   state.cardio = { log: { 'c-w-d': bejegyzés }, lthr: { v, at, m }, tests: [{ k, v, at, m, km, min }], start: a terv 1. hetének hétfője }
+   bejegyzés: { m: gép, t: 'A' alap | 'B' küszöb | 'T' teszt, min, km, lvl, watt, spd, inc, hr, rpe, lthr, note, done, skip, time }
+   A kardió NEM számít bele a nap „kész” számlálójába és a rangokba – külön kártya, kihagyható. */
+const CD_M = { ell: { n: 'Elliptikus', i: '🌀' }, bike: { n: 'Bicikli', i: '🚴' }, run: { n: 'Futópad', i: '🏃' } };
+const CD_T = { A: { n: 'Alap', s: '1. zóna – beszédtempó' }, B: { n: 'Küszöb', s: '2. zóna – részekben' }, T: { n: 'Teszt', s: 'LTHR-teszt' } };
+// a terv napjai: FELSŐTEST 1 alap 30 p elliptikus · ALSÓTEST 1 alap 25 p bicikli · FELSŐTEST 2 küszöb · ALSÓTEST 2 alap 25 p bicikli (kihagyható)
+const CD_DAY = [{ t: 'A', m: 'ell', min: 30 }, { t: 'A', m: 'bike', min: 25 }, { t: 'B', m: 'ell', min: 30 }, { t: 'A', m: 'bike', min: 25, opt: true }];
+// 12 hetes terv a küszöb-napra: [részek, perc, pihenő perc, alsó % LTHR, felső % LTHR]; 'A' = könnyű hét; 'T' = LTHR-teszt
+const CD_PLAN = [null, [3, 4, 2, 90, 95], [3, 5, 2, 90, 95], [4, 4, 2, 90, 95], 'A', [3, 6, 2, 92, 97], 'T', [2, 10, 3, 92, 97], 'A', [2, 10, 2, 95, 100], [3, 6, 2, 95, 100], [1, 20, 0, 92, 97], 'T'];
+// az alap edzés hossza a FELSŐTEST 1 napon hetenként (a többi alap nap 25 perc)
+const CD_A_MIN = [30, 25, 25, 30, 25, 30, 30, 30, 25, 30, 30, 30, 30];
+const CD_FIELDS = {
+  min: ['Idő', 'perc'], km: ['Táv', 'km'], lvl: ['Szint', 'ellenállás'], watt: ['Átlag watt', 'W'], spd: ['Sebesség', 'km/h'], inc: ['Emelkedés', '%'],
+  hr: ['Átlagpulzus', 'bpm'], lthr: ['LTHR', 'utolsó 20 p átlaga']
+};
+const cdFieldsFor = (m, t) => ['min', 'km', ...(m === 'run' ? ['spd', 'inc'] : m === 'bike' ? ['lvl', 'watt'] : ['lvl']), 'hr', ...(t === 'T' ? ['lthr'] : [])];
+let cdOpen = new Set(), cdChartM = null;
+
+const cdS = (st = state) => (st && typeof st.cardio === 'object' && st.cardio) || {};
+function cdEnsure() { if (!state.cardio || typeof state.cardio !== 'object') state.cardio = {}; const C = state.cardio; C.log = C.log || {}; C.tests = C.tests || []; return C; }
+const cdEntry = (c, w, d, st = state) => cdS(st).log?.[okey(c, w, d)] || null;
+const cdNum = v => { const n = toNum(v); return Number.isFinite(n) && n > 0 ? n : 0; };
+const cdDone = (st = state) => Object.entries(cdS(st).log || {}).filter(([, e]) => e && e.done).map(([k, e]) => ({ k, e })).sort((a, b) => (a.e.time || 0) - (b.e.time || 0));
+const cdPer30 = e => cdNum(e.km) && cdNum(e.min) ? cdNum(e.km) / cdNum(e.min) * 30 : 0;
+/* LTHR gépenként: biciklin kb. 5 ütéssel alacsonyabb (becslés), amíg nincs külön biciklis teszt */
+function cdLthr(m) { const L = cdS().lthr; if (!L?.v) return 0; let v = Number(L.v); if (m === 'bike' && L.m !== 'bike') v -= 5; else if (m !== 'bike' && L.m === 'bike') v += 5; return v; }
+const cdZ1 = m => Math.round(cdLthr(m) * 0.85);
+function cdZone(m, hr) { const L = cdLthr(m); if (!L || !hr) return 0; return hr <= cdZ1(m) ? 1 : hr <= L ? 2 : 3; }
+/* a terv hete (1–12, utána újrakezdődik); 0 = még nem indult */
+function cdPlanWeek(t = Date.now()) { const s = cdS().start; if (!s) return 0; const n = Math.round((weekStartOf(t) - s) / 6048e5) + 1; return n < 1 ? 0 : ((n - 1) % 12) + 1; }
+function cdPlanFor(d, t = Date.now()) {
+  const base = CD_DAY[d] || CD_DAY[0], pw = cdPlanWeek(t), hasL = !!cdS().lthr?.v;
+  let type = base.t, min = base.min, b = null;
+  if (base.t === 'A' && base.min === 30) min = CD_A_MIN[pw] || 30;
+  if (base.t === 'B') {
+    const p = CD_PLAN[pw || 1];
+    if (!hasL || p === 'T') { type = 'T'; min = 30; }
+    else if (p === 'A') { type = 'A'; min = 25; }
+    else b = p;
+  }
+  return { t: type, m: base.m, min, b, pw, opt: !!base.opt, light: base.t === 'B' && CD_PLAN[pw || 1] === 'A' };
+}
+const cdBFor = pw => { const p = CD_PLAN[pw || 1]; return Array.isArray(p) ? p : [3, 5, 2, 90, 95]; };
+/* az előző alkalom ugyanazon a gépen (és ha van, ugyanabból a típusból) – az aktuális előtt */
+function cdPrev(m, t, k) {
+  const all = cdDone().filter(x => x.k !== k && x.e.m === m), cur = cdS().log?.[k];
+  const before = cur?.time ? all.filter(x => (x.e.time || 0) < cur.time) : all;
+  return [...before].reverse().find(x => x.e.t === t)?.e || [...before].reverse()[0]?.e || null;
+}
+function cdText(e, short) {
+  const p = [];
+  if (!short) p.push(CD_M[e.m]?.n || 'Kardió');
+  if (cdNum(e.min)) p.push(`${showNum(e.min)} perc`);
+  if (cdNum(e.km)) p.push(`${showNum(e.km)} km`);
+  if (cdNum(e.lvl)) p.push(`${showNum(e.lvl)}. szint`);
+  if (cdNum(e.watt)) p.push(`${showNum(e.watt)} W`);
+  if (cdNum(e.spd)) p.push(`${showNum(e.spd)} km/h`);
+  if (e.inc !== undefined && e.inc !== '' && toNum(e.inc) >= 0 && e.m === 'run') p.push(`${showNum(e.inc)}%`);
+  if (cdNum(e.hr)) p.push(`♥ ${showNum(e.hr)}`);
+  if (cdNum(e.rpe)) p.push(`nehézség ${showNum(e.rpe)}/10`);
+  return p.join(' · ');
+}
+const cdR2 = n => Math.round(n * 100) / 100;
+function cdGoalHtml(k, e, plan) {
+  const m = e.m, t = e.t, L = cdLthr(m), z1 = cdZ1(m), prev = cdPrev(m, t, k), out = [];
+  const min = cdNum(e.min) || plan.min || 30;
+  if (t === 'T') {
+    out.push('Friss lábbal a legjobb (ha teheted, edzés elején). 5 perc könnyű bemelegítés, utána <b>30 perc a legnagyobb tempóval, amit végig bírsz</b> – az elején ne sprintelj.');
+    out.push('A 10. percnél koppints duplán az óra kijelzőjére (új szakasz). A végén a Fitnesz appban az utolsó szakasz átlagpulzusa az <b>LTHR</b> – írd be lent.');
+    if (prev && cdPer30(prev)) out.push(`Előző teszt: <b>${showNum(cdR2(cdPer30(prev)))} km / 30 perc</b>${prev.lthr ? `, LTHR ${showNum(prev.lthr)}` : ''} – ennél többet célozz.`);
+    return out;
+  }
+  if (!L) out.push('Még nincs LTHR-ed: maradj <b>beszédtempóban</b> (végig teljes mondatokban tudj beszélni). Az LTHR-tesztet a FELSŐTEST 2 napon ajánlja fel az app, vagy a Fejlődés oldalon beírhatod.');
+  if (t === 'A') {
+    if (L) out.push(`Pulzus végig <b>${z1} bpm alatt</b> (1. zóna)${m === 'bike' && cdS().lthr?.m !== 'bike' ? ' – biciklin 5-tel lejjebb' : ''}`);
+    if (prev && cdPer30(prev)) out.push(`Cél: ${showNum(min)} perc alatt <b>${showNum(cdR2(cdPer30(prev) / 30 * min + 0.005))} km-nél több</b> ugyanakkora pulzussal${cdNum(prev.lvl) ? ` (előző: ${showNum(prev.lvl)}. szint)` : ''}`);
+    // szintemelés: az utolsó 2 alap edzés ezen a gépen legalább 5 ütéssel a plafon alatt maradt
+    const two = cdDone().filter(x => x.k !== k && x.e.m === m && x.e.t === 'A').slice(-2).map(x => x.e);
+    if (L && two.length === 2 && two.every(x => cdNum(x.hr) && cdNum(x.hr) <= z1 - 5) && cdNum(two[1].lvl)) out.push(`⬆ <b>Emelj szintet: ${showNum(cdNum(two[1].lvl) + 1)}.</b> Kétszer is bőven a zóna alatt maradtál.`);
+    else if (L && prev && cdNum(prev.hr) > z1 && prev.t === 'A') out.push('Múltkor a zóna fölé mentél – maradj ezen a szinten, vagy vegyél vissza egyet.');
+  }
+  if (t === 'B' && L) {
+    const [n, len, rest, p1, p2] = plan.b || cdBFor(plan.pw), lo = Math.round(L * p1 / 100), hi = Math.round(L * p2 / 100);
+    out.push(`<b>${n} × ${len} perc ${lo}–${hi} bpm</b>${n > 1 ? `, köztük ${rest} perc könnyen` : ' egyben'} · előtte 5 perc bemelegítés, a végén 2–3 perc levezetés`);
+    if (prev && prev.t === 'B' && cdNum(prev.rpe) && cdNum(prev.rpe) <= 7 && (!cdNum(prev.hr) || cdNum(prev.hr) <= L) && cdNum(prev.lvl)) out.push(`⬆ Múltkor ment (nehézség ${showNum(prev.rpe)}/10): a részekben <b>${showNum(cdNum(prev.lvl) + 1)}. szint</b>.`);
+    else if (prev && prev.t === 'B' && cdNum(prev.hr) > L) out.push('Múltkor az LTHR fölé ment a pulzus – vegyél vissza egy szintet a részekben.');
+  }
+  return out;
+}
+function cardioCardHtml(c, w, d) {
+  const k = okey(c, w, d), e0 = cdEntry(c, w, d), plan = cdPlanFor(d);
+  const e = e0 || { m: (cdDone().filter(x => +x.k.split('-')[2] === d).pop()?.e.m) || plan.m, t: plan.t };
+  const pw = plan.pw, L = cdS().lthr?.v;
+  const head = `<div class="cd-head"><div><div class="cd-title">🏃 KARDIÓ</div><div class="cd-sub">${pw ? `Kardióterv ${pw}. hét` : 'Kardióterv: az első kardióval indul'} · ma: ${CD_T[plan.t].n.toLowerCase()}${plan.t === 'B' ? '' : `, ${plan.min} perc`}${plan.light ? ' (könnyű hét)' : ''}${plan.opt ? ' · kihagyható' : ''}</div></div>`;
+  if (e0?.skip) return `<section class="cd-card skipped" id="cardioCard">${head}<span class="cd-badge">kihagyva</span></div><div class="cd-fold">Ma kihagyva.<button class="cd-link" data-cunskip>Mégis csinálom</button></div></section>`;
+  if (e0?.done && !cdOpen.has(k)) {
+    const z = cdZone(e0.m, cdNum(e0.hr));
+    return `<section class="cd-card done collapsed" id="cardioCard" role="button" data-copen>${head}<span class="cd-badge ok">✓ kész</span></div><div class="cd-fold"><b>${esc(CD_T[e0.t]?.n || '')}</b> · ${esc(cdText(e0))}${z ? ` <i class="cd-z z${z}">${z}. zóna</i>` : ''}<span class="cd-edit">szerkesztés ›</span></div></section>`;
+  }
+  const prev = cdPrev(e.m, e.t, k), min = plan.t === e.t ? plan.min : (e.t === 'A' ? 30 : 30);
+  let h = `<section class="cd-card${e0?.done ? ' done' : ''}" id="cardioCard">${head}${e0?.done ? '<span class="cd-badge ok">✓ kész</span>' : ''}</div>`;
+  h += `<div class="cd-chips">${Object.entries(CD_M).map(([id, x]) => `<button class="chip${e.m === id ? ' on' : ''}" data-cm="${id}">${x.i} ${x.n}</button>`).join('')}</div>`;
+  h += `<div class="cd-chips cd-types">${Object.entries(CD_T).map(([id, x]) => `<button class="chip${e.t === id ? ' on' : ''}" data-ct="${id}"><b>${x.n}</b><small>${x.s}</small></button>`).join('')}</div>`;
+  const goals = cdGoalHtml(k, e, { ...plan, min: plan.t === e.t ? plan.min : min, b: e.t === 'B' ? (plan.b || cdBFor(plan.pw)) : null });
+  if (goals.length) h += `<div class="cd-goal">${goals.map(g => `<div>🎯 ${g}</div>`).join('')}</div>`;
+  h += `<div class="cd-prev">${prev ? `Előző (${esc(CD_M[prev.m]?.n || '')}, ${esc((CD_T[prev.t]?.n || '').toLowerCase())}): <b>${esc(cdText(prev, true))}</b>` : `Első alkalom ezen a gépen (${esc((CD_M[e.m]?.n || '').toLowerCase())}) – írd be, mennyit mentél, ez lesz a mérce.`}</div>`;
+  h += `<div class="cd-grid">${cdFieldsFor(e.m, e.t).map(f => {
+    const v = e[f] ?? '', ph = f === 'min' ? String(min) : (prev && prev[f] !== undefined && prev[f] !== '' && f !== 'lthr' ? showNum(prev[f]) : '');
+    return `<label class="cd-f${f === 'lthr' ? ' wide' : ''}"><span>${CD_FIELDS[f][0]} <i>${CD_FIELDS[f][1]}</i></span><input data-cf="${f}" inputmode="decimal" autocomplete="off" value="${esc(showNum(v))}" placeholder="${esc(ph)}">${f === 'hr' ? `<em class="cd-zl" data-czone></em>` : ''}</label>`;
+  }).join('')}</div>`;
+  h += `<div class="warm-sec">MILYEN NEHÉZ VOLT? <i class="cd-rpe-h">1 = séta · 5 = beszélgetős · 7 = nehéz · 10 = maximum</i></div><div class="cd-rpe">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<button class="chip${cdNum(e.rpe) === n ? ' on' : ''}" data-crpe="${n}">${n}</button>`).join('')}</div>`;
+  h += `<input class="lib-search cd-note" data-cf="note" maxlength="120" placeholder="Megjegyzés (nem kötelező), pl. térd rendben" value="${esc(e.note || '')}">`;
+  h += `<div class="cd-actions"><button class="primary" data-cdone>✓ ${e0?.done ? 'MENTÉS' : 'KÉSZ'}</button>${e0?.done ? '<button class="secondary" data-cdel>Törlés</button>' : '<button class="secondary" data-cskip>Ma kihagyom</button>'}</div>`;
+  if (!L && e.t !== 'T') h += `<div class="cd-hint">Tipp: a pulzust az óra méri – a végén a Fitnesz appban látod az átlagpulzust.</div>`;
+  return h + '</section>';
+}
+/* csak a kardió kártyát rajzolja újra (a gyakorlatok nem ugrálnak) */
+function rerenderCardio() {
+  const el = $('cardioCard'); if (!el) return;
+  el.outerHTML = cardioCardHtml(state.cycle, state.week, state.day); bindCardio();
+}
+function cdTouch() {
+  const c = state.cycle, w = state.week, d = state.day, C = cdEnsure(), k = okey(c, w, d);
+  if (!C.log[k]) { const plan = cdPlanFor(d); C.log[k] = { m: (cdDone().filter(x => +x.k.split('-')[2] === d).pop()?.e.m) || plan.m, t: plan.t }; }
+  return C.log[k];
+}
+function cdZoneLabel() {
+  const el = document.querySelector('#cardioCard [data-czone]'); if (!el) return;
+  const e = cdEntry(state.cycle, state.week, state.day), hr = cdNum(document.querySelector('#cardioCard [data-cf="hr"]')?.value), z = e ? cdZone(e.m, hr) : 0;
+  el.textContent = z ? `${z}. zóna` : ''; el.className = 'cd-zl' + (z ? ' z' + z : '');
+}
+function bindCardio() {
+  const card = $('cardioCard'); if (!card) return;
+  const k = okey(state.cycle, state.week, state.day);
+  card.querySelectorAll('[data-cf]').forEach(inp => inp.oninput = () => {
+    const E = cdTouch(), f = inp.dataset.cf;
+    E[f] = f === 'note' ? inp.value.slice(0, 120) : cleanNum(inp.value); E.ts = Date.now();
+    inp.classList.remove('invalid');
+    if (f === 'hr') cdZoneLabel();
+    save();
+  });
+  card.querySelectorAll('[data-cm]').forEach(b => b.onclick = () => { const E = cdTouch(); E.m = b.dataset.cm; save(); rerenderCardio(); });
+  card.querySelectorAll('[data-ct]').forEach(b => b.onclick = () => { const E = cdTouch(); E.t = b.dataset.ct; save(); rerenderCardio(); });
+  card.querySelectorAll('[data-crpe]').forEach(b => b.onclick = () => { const E = cdTouch(), n = +b.dataset.crpe; E.rpe = cdNum(E.rpe) === n ? '' : n; save(); card.querySelectorAll('[data-crpe]').forEach(x => x.classList.toggle('on', +x.dataset.crpe === cdNum(E.rpe))); });
+  if (card.matches('[data-copen]')) card.onclick = () => { cdOpen.add(k); rerenderCardio(); };
+  card.querySelector('[data-cunskip]')?.addEventListener('click', ev => { ev.stopPropagation(); const E = cdTouch(); delete E.skip; save(); rerenderCardio(); });
+  card.querySelector('[data-cskip]')?.addEventListener('click', () => { const E = cdTouch(); E.skip = true; E.done = false; E.ts = Date.now(); save(); rerenderCardio(); toast('Kardió kihagyva erre a napra.'); });
+  card.querySelector('[data-cdel]')?.addEventListener('click', () => {
+    if (!confirm('Törlöd a mai kardiót?')) return;
+    const C = cdEnsure(); delete C.log[k]; cdDropTest(k); cdOpen.delete(k); save(); rerenderCardio(); toast('Kardió törölve.');
+  });
+  card.querySelector('[data-cdone]')?.addEventListener('click', () => cdFinish(card, k));
+  cdZoneLabel();
+}
+function cdDropTest(k) {
+  const C = cdEnsure(); C.tests = (C.tests || []).filter(x => x.k !== k);
+  const last = C.tests[C.tests.length - 1];
+  if (C.lthr?.k === k) C.lthr = last ? { v: last.v, at: last.at, m: last.m, k: last.k } : null;
+}
+function cdFinish(card, k) {
+  const E = cdTouch(), plan = cdPlanFor(state.day), get = f => card.querySelector(`[data-cf="${f}"]`);
+  // az üres idő = a tervezett idő (ami halványan látszik)
+  if (!cdNum(E.min)) { const ph = toNum(get('min')?.placeholder); if (ph > 0) E.min = String(ph); }
+  const bad = [];
+  if (!(cdNum(E.min) > 0 && cdNum(E.min) <= 300)) bad.push('min');
+  if (E.km !== undefined && E.km !== '' && !(cdNum(E.km) > 0 && cdNum(E.km) < 100)) bad.push('km');
+  if (E.hr !== undefined && E.hr !== '' && !(cdNum(E.hr) >= 60 && cdNum(E.hr) <= 230)) bad.push('hr');
+  if (E.t === 'T' && !(cdNum(E.lthr) >= 100 && cdNum(E.lthr) <= 220)) bad.push('lthr');
+  if (bad.length) {
+    bad.forEach(f => get(f)?.classList.add('invalid'));
+    toast(bad.includes('lthr') ? 'Írd be az LTHR-t: a teszt utolsó 20 percének átlagpulzusa (100–220).' : bad.includes('hr') ? 'Az átlagpulzus 60 és 230 között legyen (vagy hagyd üresen).' : bad.includes('km') ? 'A táv kilométerben (pl. 4,2), vagy hagyd üresen.' : 'Add meg, hány percet kardióztál.');
+    return;
+  }
+  const C = cdEnsure(), first = !E.time, now = Date.now();
+  const prevBest = Math.max(0, ...cdDone().filter(x => x.k !== k && x.e.m === E.m && x.e.t === E.t).map(x => cdPer30(x.e)));
+  E.done = true; delete E.skip; if (first) E.time = now; E.ts = now;
+  if (E.t === 'T') {
+    const v = cdNum(E.lthr);
+    C.tests = (C.tests || []).filter(x => x.k !== k);
+    C.tests.push({ k, v, at: E.time, m: E.m, km: cdNum(E.km) || 0, min: cdNum(E.min) });
+    C.tests.sort((a, b) => a.at - b.at);
+    const last = C.tests[C.tests.length - 1]; C.lthr = { v: last.v, at: last.at, m: last.m, k: last.k };
+  } else if (C.lthr?.k === k) cdDropTest(k);
+  // a terv indulása: tesztnél a következő hét az 1. hét (a teszt hete a 0.), különben ez a hét
+  if (!C.start) C.start = E.t === 'T' ? addWeeks(weekStartOf(now), 1) : weekStartOf(now);
+  cdOpen.delete(k);
+  save(); rerenderCardio();
+  const p30 = cdPer30(E);
+  if (E.t === 'T') toast(`LTHR elmentve: ${showNum(cdNum(E.lthr))} bpm – a zónáid frissültek. 💪`);
+  else if (first && p30 && prevBest && p30 > prevBest + 0.004) toast(`🏃 Új csúcs: ${showNum(cdR2(p30))} km / 30 perc (+${showNum(cdR2(p30 - prevBest))})`);
+  else toast(first ? 'Kardió elmentve. 💪' : 'Kardió frissítve.');
+}
+/* Fejlődés oldal: KARDIÓ kártya */
+function cardioHistoryHtml() {
+  const C = cdS(), all = cdDone(), L = C.lthr?.v, pw = cdPlanWeek();
+  const ws = weekStartOf(Date.now()), weekN = all.filter(x => (x.e.time || 0) >= ws).length;
+  let h = `<section class="summary-card cd-hist"><div class="summary-title">🏃 KARDIÓ</div>
+    <div class="summary-stats three"><div><strong>${weekN}</strong><span>kardió a héten (cél 3–4)</span></div><div><strong>${pw ? pw + '.' : '–'}</strong><span>hét a 12 hetes tervben</span></div><div><strong>${L ? showNum(L) : '–'}</strong><span>LTHR (bpm)</span></div></div>`;
+  if (L) {
+    const z1 = Math.round(L * 0.85);
+    h += `<div class="cd-zones"><span class="z1">1. zóna<b>≤ ${z1}</b></span><span class="z2">2. zóna<b>${z1 + 1}–${showNum(L)}</b></span><span class="z3">3. zóna<b>&gt; ${showNum(L)}</b></span></div>
+      <div class="bw-note">Mért: ${esc(fmtDate(C.lthr.at) || '')}, ${esc((CD_M[C.lthr.m]?.n || '').toLowerCase())}en. ${C.lthr.m === 'bike' ? 'Más gépen kb. 5-tel feljebb.' : 'Biciklin kb. 5-tel lejjebb.'} Az órán: Beállítások → Edzés → Pulzuszónák → Manuális (2. zóna teteje ${z1}, 4. zóna teteje ${showNum(L)}).</div>`;
+  } else h += `<div class="bw-note">Még nincs LTHR-ed. Csináld meg a 30 perces tesztet (a FELSŐTEST 2 napon felajánlja a kardió kártya), vagy írd be, ha már tudod.</div>`;
+  h += `<div class="cd-hrow"><button class="secondary" data-cdlthr>${L ? 'LTHR módosítása' : 'LTHR beírása'}</button>${C.start ? '<button class="secondary" data-cdrestart>Terv újrakezdése</button>' : ''}</div>`;
+  if (!all.length) return h + '<div class="empty">Még nincs kardió. Minden edzésnap végén ott a kardió kártya – töltsd ki, vagy hagyd ki.</div></section>';
+  // gépenként: alap edzések távja 30 percre vetítve + átlagpulzus
+  const used = Object.keys(CD_M).filter(m => all.some(x => x.e.m === m));
+  if (!cdChartM || !used.includes(cdChartM)) cdChartM = used.slice().sort((a, b) => all.filter(x => x.e.m === b).length - all.filter(x => x.e.m === a).length)[0];
+  if (used.length > 1) h += `<div class="cd-chips cd-mchips">${used.map(m => `<button class="chip${m === cdChartM ? ' on' : ''}" data-cdm="${m}">${CD_M[m].i} ${CD_M[m].n}</button>`).join('')}</div>`;
+  const A = all.filter(x => x.e.m === cdChartM && x.e.t === 'A');
+  const lab = x => fmtDate(x.e.time) || '';
+  const dist = A.filter(x => cdPer30(x.e)).map(x => ({ wt: cdR2(cdPer30(x.e)), lab: lab(x), read: [`${showNum(cdR2(cdPer30(x.e)))} km / 30 perc`, ` · ${cdText(x.e, true)} · ${lab(x)}`] }));
+  const hrs = A.filter(x => cdNum(x.e.hr)).map(x => ({ wt: cdNum(x.e.hr), lab: lab(x), read: [`♥ ${showNum(x.e.hr)} bpm`, ` · ${cdText(x.e, true)} · ${lab(x)}`] }));
+  h += dist.length ? lineChart(dist, 'Alap kardió: táv 30 percre vetítve', 'Kardió táv', true, 'km') : '<div class="empty">A táv-grafikonhoz írd be az időt és a távot az alap (1. zónás) kardióknál.</div>';
+  if (hrs.length > 1) h += lineChart(hrs, 'Alap kardió: átlagpulzus (ha csökken, fejlődsz)', 'Kardió pulzus', false, 'bpm');
+  const tests = (C.tests || []).slice().reverse();
+  if (tests.length) h += `<div class="warm-sec">LTHR-TESZTEK</div>` + tests.map(x => `<div class="cd-row"><b>${esc(fmtDate(x.at))}</b><span>${esc(CD_M[x.m]?.n || '')} · LTHR <b>${showNum(x.v)}</b>${x.km && x.min ? ` · ${showNum(cdR2(x.km / x.min * 30))} km / 30 perc` : ''}</span></div>`).join('');
+  const recent = Object.entries(C.log || {}).filter(([, e]) => e && (e.done || e.skip)).map(([k, e]) => ({ k, e })).sort((a, b) => (b.e.time || b.e.ts || 0) - (a.e.time || a.e.ts || 0)).slice(0, 8);
+  h += `<div class="warm-sec">LEGUTÓBBI ALKALMAK</div>` + recent.map(x => { const d = +x.k.split('-')[2], z = cdZone(x.e.m, cdNum(x.e.hr)); return `<div class="cd-row${x.e.skip ? ' sk' : ''}"><b>${esc(fmtDate(x.e.time || x.e.ts) || '')}</b><span>${esc(DAYS[d]?.short || '')} · ${x.e.skip ? 'kihagyva' : `${esc(CD_T[x.e.t]?.n || '')} · ${esc(cdText(x.e))}${z ? ` <i class="cd-z z${z}">${z}. z.</i>` : ''}`}</span></div>`; }).join('');
+  return h + '</section>';
+}
+function bindCardioHistory(root) {
+  root.querySelectorAll('[data-cdm]').forEach(b => b.onclick = () => { cdChartM = b.dataset.cdm; renderHistory(); });
+  root.querySelector('[data-cdlthr]')?.addEventListener('click', openLthrSheet);
+  root.querySelector('[data-cdrestart]')?.addEventListener('click', () => { if (!confirm('Újrakezded a 12 hetes kardiótervet? Ez a hét lesz az 1. hét (az eddigi kardióid megmaradnak).')) return; cdEnsure().start = weekStartOf(Date.now()); save(); renderHistory(); toast('A kardióterv újraindult: ez az 1. hét.'); });
+}
+function openLthrSheet() {
+  const C = cdS(); let m = C.lthr?.m || 'ell';
+  document.getElementById('lthrSheet')?.remove();
+  const el = document.createElement('div'); el.id = 'lthrSheet'; el.className = 'overlay sheet-overlay';
+  el.innerHTML = `<div class="sheet" role="dialog" aria-label="LTHR"><div class="sheet-title">❤️ LTHR (laktátküszöb-pulzus)<small>A 30 perces teszt utolsó 20 percének átlagpulzusa</small></div>
+    <input class="lib-search" id="lthrIn" inputmode="numeric" placeholder="pl. 168" value="${C.lthr?.v ? esc(C.lthr.v) : ''}">
+    <div class="warm-sec">MELYIK GÉPEN MÉRTED?</div><div class="chip-row">${Object.entries(CD_M).map(([id, x]) => `<button class="chip" data-lm="${id}">${x.i} ${x.n}</button>`).join('')}</div>
+    <div class="sheet-note">Ebből számolja az app a zónáidat: 1. zóna = LTHR × 0,85 alatt, 2. zóna = LTHR × 0,85 – LTHR, 3. zóna = LTHR fölött.</div>
+    <div class="sheet-row"><button class="primary" data-ls>Mentés</button><button data-lx>Mégse</button></div></div>`;
+  document.body.appendChild(el);
+  const paint = () => el.querySelectorAll('[data-lm]').forEach(b => b.classList.toggle('on', b.dataset.lm === m)); paint();
+  el.querySelectorAll('[data-lm]').forEach(b => b.onclick = () => { m = b.dataset.lm; paint(); });
+  const close = () => el.remove();
+  el.onclick = ev => { if (ev.target === el) close(); };
+  el.querySelector('[data-lx]').onclick = close;
+  el.querySelector('[data-ls]').onclick = () => {
+    const v = toNum(el.querySelector('#lthrIn').value);
+    if (!(v >= 100 && v <= 220)) { el.querySelector('#lthrIn').classList.add('invalid'); toast('Az LTHR 100 és 220 között legyen.'); return; }
+    const X = cdEnsure(), k = 'kezi-' + Date.now();
+    X.tests.push({ k, v, at: Date.now(), m, km: 0, min: 0 }); X.lthr = { v, at: Date.now(), m, k };
+    if (!X.start) X.start = weekStartOf(Date.now());
+    save(); close(); renderHistory(); toast(`LTHR: ${showNum(v)} bpm – a zónáid frissültek.`);
+  };
+}
+
 /* v57: futó edzésóra a napfejlécben (az első pipától; ha kész a nap vagy 4 óránál régebbi, nem látszik) */
 function dayStart(c, w, d) {
   let t0 = Infinity;
@@ -1398,6 +1652,7 @@ function renderHistory() {
   const doneSets = rows.reduce((a, x) => a + x.done, 0), allSets = rows.reduce((a, x) => a + x.total, 0);
   h += `<section class="summary-card"><div class="summary-title">${cycLabel(c)}${w}. HÉT ÖSSZESÍTŐ</div><div class="summary-stats three"><div><strong>${started}/4</strong><span>edzésnap elkezdve</span></div><div><strong>${finished}/4</strong><span>edzésnap kész</span></div><div><strong>${doneSets}/${allSets}</strong><span>munkasorozat kész</span></div></div><div class="summary-row total"><span>Heti megmozgatott súly</span><b>${kg(rows.reduce((a, x) => a + x.vol, 0))} kg</b></div>${rows.map(x => `<div class="summary-row"><span>${x.name}</span><b>${x.done}/${x.total} szett · ${kg(x.vol)} kg${x.total && x.done >= x.total ? ' ✓' : ''}</b></div>`).join('')}</section>`;
 
+  h += cardioHistoryHtml();
   h += weekMuscleHtml();
   h += monthHtml();
   h += recentRankUpsHtml();
@@ -1420,6 +1675,7 @@ function renderHistory() {
   h += `<div class="note">Az alkalmazás minden változást azonnal ment, és naponta külön helyi másolatot is készít. A fájlba mentés külön, letölthető másolatot ad. IRONLOG ${APP_VERSION}</div>`;
   workout.innerHTML = h + hevyCard;
   $('histSearch').oninput = e => { histQuery = e.target.value; filterHistory(); };
+  const cdh = workout.querySelector('.cd-hist'); if (cdh) { bindCardioHistory(cdh); bindCharts(cdh); }
   workout.querySelectorAll('[data-mm]').forEach(b => b.onclick = () => { muscleMode = b.dataset.mm; renderHistory(); });
   workout.querySelectorAll('.ru-row[data-rstats], .inj-row[data-rstats]').forEach(b => b.onclick = () => openStats(b.dataset.rstats));
   $('monthPrev').onclick = () => { monthSel = (monthSel ?? monthKey(Date.now())) - 1; renderHistory(); };
@@ -1488,11 +1744,13 @@ function bwChartHtml() {
   const pts = hist.map(x => ({ wt: x.kg, lab: fmtDate(x.t), read: [`${showNum(x.kg)} kg`, ` · ${new Date(x.t).toLocaleDateString('hu-HU')}`] }));
   return lineChart(pts, 'Testsúly változása', 'Testsúly', false);
 }
-function lineChart(pts, title, aria, upGood) {
+function lineChart(pts, title, aria, upGood, unit = 'kg') {
   const W = 320, H = 150, L = 36, R = 14, T = 20, B = 24;
   const ws = pts.map(p => p.wt); let lo = Math.min(...ws), hi = Math.max(...ws);
-  if (hi - lo < 4) { lo -= 2; hi += 2; }
-  const pad = (hi - lo) * 0.12; lo = Math.max(0, Math.floor(lo - pad)); hi = Math.ceil(hi + pad);
+  // v64: a kardió-görbéknél (km, bpm) kisebb a minimális tartomány és finomabb a kerekítés, különben laposnak látszik
+  const span = unit === 'km' ? 0.6 : unit === 'bpm' ? 8 : 4, rs = unit === 'km' ? 10 : 1;
+  if (hi - lo < span) { lo -= span / 2; hi += span / 2; }
+  const pad = (hi - lo) * 0.12; lo = Math.max(0, Math.floor((lo - pad) * rs) / rs); hi = Math.ceil((hi + pad) * rs) / rs;
   const X = i => pts.length === 1 ? (L + W - R) / 2 : L + i * (W - L - R) / (pts.length - 1);
   const Y = v => T + (hi - v) * (H - T - B) / (hi - lo);
   const grid = [lo, (lo + hi) / 2, hi].map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="ch-grid"/><text x="${L - 6}" y="${(Y(v) + 3).toFixed(1)}" class="ch-axis" text-anchor="end">${showNum(Math.round(v * 10) / 10)}</text>`).join('');
@@ -1502,9 +1760,9 @@ function lineChart(pts, title, aria, upGood) {
   const dots = pts.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p.wt).toFixed(1)}" r="4" class="ch-dot${p.inj ? ' inj' : ''}"/>`).join('');
   const first = pts[0].wt, last = pts[lastI].wt, diff = Math.round((last - first) * 10) / 10;
   return `<div class="chart-wrap" data-pts="${esc(JSON.stringify(pts.map((p, i) => ({ ...p, cx: X(i), cy: Y(p.wt) }))))}">
-  <div class="chart-head"><span>${esc(title)}</span><b class="${diff > 0 && upGood ? 'up' : ''}">${pts.length > 1 ? (diff > 0 ? '+' : '') + showNum(diff) + ' kg' : ''}</b></div>
+  <div class="chart-head"><span>${esc(title)}</span><b class="${(upGood ? diff > 0 : unit === 'bpm' && diff < 0) ? 'up' : ''}">${pts.length > 1 ? (diff > 0 ? '+' : '') + showNum(diff) + ' ' + unit : ''}</b></div>
   <div class="chart-read"></div>
-  <svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="${esc(aria)}: ${showNum(first)} kg-tól ${showNum(last)} kg-ig, ${pts.length} edzés">${grid}<line class="ch-cross" y1="${T - 6}" y2="${H - B}" x1="-10" x2="-10"/><path d="${path}" class="ch-line"/>${dots}${lbl(lastI)}${maxI !== lastI ? lbl(maxI) : ''}<text x="${L}" y="${H - 6}" class="ch-axis">${esc(pts[0].lab)}</text>${pts.length > 1 ? `<text x="${W - R}" y="${H - 6}" class="ch-axis" text-anchor="end">${esc(pts[lastI].lab)}</text>` : ''}<rect x="0" y="0" width="${W}" height="${H}" fill="transparent" class="ch-hit"/></svg></div>`;
+  <svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="${esc(aria)}: ${showNum(first)} ${unit}-tól ${showNum(last)} ${unit}-ig, ${pts.length} edzés">${grid}<line class="ch-cross" y1="${T - 6}" y2="${H - B}" x1="-10" x2="-10"/><path d="${path}" class="ch-line"/>${dots}${lbl(lastI)}${maxI !== lastI ? lbl(maxI) : ''}<text x="${L}" y="${H - 6}" class="ch-axis">${esc(pts[0].lab)}</text>${pts.length > 1 ? `<text x="${W - R}" y="${H - 6}" class="ch-axis" text-anchor="end">${esc(pts[lastI].lab)}</text>` : ''}<rect x="0" y="0" width="${W}" height="${H}" fill="transparent" class="ch-hit"/></svg></div>`;
 }
 function bindCharts(root) {
   root.querySelectorAll('.chart-wrap').forEach(wrap => {
@@ -2507,7 +2765,7 @@ function workoutSummary(c, w, d) {
   const ovA = overallRank(before), ovB = overallRank();
   // a nap utolsó szettje után még kb. 1 perc munka – a mért idő az első és az utolsó pipa között telt el
   const dur = t1 > t0 ? t1 - t0 + 60000 : 0;
-  return { k, c, w, d, ex, sets, dur, vol: dayVolume(c, w, d), pv: prevDayVolume(c, w, d), G, ups, ovA, ovB, ovUp: rankLvl(ovB) > rankLvl(ovA) && rankLvl(ovA) >= 0, t: t0 < Infinity ? t0 : Date.now(), prN: ex.reduce((a, e) => a + e.prs.filter(p => p.kind !== 'first').length, 0) };
+  return { k, c, w, d, ex, sets, dur, vol: dayVolume(c, w, d), pv: prevDayVolume(c, w, d), G, ups, ovA, ovB, ovUp: rankLvl(ovB) > rankLvl(ovA) && rankLvl(ovA) >= 0, t: t0 < Infinity ? t0 : Date.now(), prN: ex.reduce((a, e) => a + e.prs.filter(p => p.kind !== 'first').length, 0), cd: cdEntry(c, w, d) };
 }
 const durText = ms => { const m = Math.round(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)} ó ${m % 60} p` : `${m} perc`; };
 function prText(p, e) {
@@ -2528,6 +2786,7 @@ function summaryHtml(S) {
   const prs = S.ex.filter(e => e.prs.some(p => p.kind !== 'first'));
   if (prs.length) h += `<div class="ws-sec">🏆 ÚJ REKORDOK</div>` + prs.map(e => `<div class="ws-pr"><b>${esc(hun(e.id))}</b>${e.prs.filter(p => p.kind !== 'first').map(p => `<span>${prText(p, e)}</span>`).join('')}</div>`).join('');
   h += `<div class="ws-sec">GYAKORLATOK</div><div class="ws-ex">` + S.ex.map(e => `<div><span>${injOf(e.r) ? '🩹 ' : ''}${esc(hun(e.id))}${e.prs.some(p => p.kind !== 'first') ? ' 🏆' : e.prs[0]?.kind === 'first' ? ' <em>első</em>' : ''}</span><b>${e.n} × ${e.best ? `${showNum(e.best.weight)} kg × ${showNum(e.best.reps)}` : '—'}</b></div>`).join('') + '</div>';
+  if (S.cd?.done) h += `<div class="ws-sec">🏃 KARDIÓ</div><div class="ws-ex"><div><span>${esc(CD_T[S.cd.t]?.n || '')} · ${esc(CD_M[S.cd.m]?.n || '')}</span><b>${esc(cdText(S.cd, true))}</b></div></div>`;
   return h;
 }
 function openSummary(c, w, d) {
@@ -3309,9 +3568,10 @@ function renderInfo() {
     'A <b>gyakorlat nevére</b> koppintva statisztika és fejlődési görbe.',
     '<b>📝 Jegyzet</b>: gépbeállítás, fogás – minden héten ott lesz.',
     'Saját testsúlyos gyakorlatnál (húzódzkodás, lábemelés) a súly lehet <b>0</b>; plusz súlynál írd be a pluszt.',
+    '<b>🏃 KARDIÓ</b>: minden edzésnap végén. Válaszd ki a gépet (elliptikus, bicikli, futópad) és a típust (alap / küszöb / teszt), írd be az időt, a távot, a szintet és az óra szerinti átlagpulzust, majd <b>✓ KÉSZ</b> – vagy <b>Ma kihagyom</b>. A 🎯 sor a 12 hetes kardióterv szerint mondja, mit csinálj ma.',
     'A 6. hét végén indíts <b>ÚJ CIKLUST</b> – a régi eredmények megmaradnak.']);
   h += sec('📈 FEJLŐDÉS · 🏅 RANGOK · 👥 BARÁTOK', [
-    '<b>FEJLŐDÉS</b>: heti és havi összefoglaló, rekordok, minden gyakorlat előzménye, biztonsági mentés fájlba.',
+    '<b>FEJLŐDÉS</b>: heti és havi összefoglaló, kardió (LTHR, pulzuszónák, táv- és pulzusgörbe), rekordok, minden gyakorlat előzménye, biztonsági mentés fájlba.',
     `<b>RANGOK</b>: ${RANKS.map(r => r.n).join(' → ')}, I–III fokozattal.`+' A jelenlegi programod gyakorlataiból, az utolsó 2 edzés legjobb szettjéből számol, a testsúlyodhoz igazítva.',
     '<b>BARÁTOK</b>: látod a többiek edzéseit, edzésnapjait és rangjait. A megosztást a profilodban kikapcsolhatod.']);
   h += sec('🔒 AZ ADATAID', [
