@@ -864,7 +864,17 @@ const cdNum = v => { const n = toNum(v); return Number.isFinite(n) && n > 0 ? n 
 const cdDone = (st = state) => Object.entries(cdS(st).log || {}).filter(([, e]) => e && e.done).map(([k, e]) => ({ k, e })).sort((a, b) => (a.e.time || 0) - (b.e.time || 0));
 const cdPer30 = e => cdNum(e.km) && cdNum(e.min) ? cdNum(e.km) / cdNum(e.min) * 30 : 0;
 /* LTHR gépenként: biciklin kb. 5 ütéssel alacsonyabb (becslés), amíg nincs külön biciklis teszt */
-function cdLthr(m) { const L = cdS().lthr; if (!L?.v) return 0; let v = Number(L.v); if (m === 'bike' && L.m !== 'bike') v -= 5; else if (m !== 'bike' && L.m === 'bike') v += 5; return v; }
+/* Becslés teszt nélkül (Ádám kérése: „ha nincs, legyen VO2max-becslés”): kor + nyugalmi pulzus (Egészség app)
+   → max pulzus (a mért, vagy Tanaka: 208 − 0,7 × kor), LTHR ≈ nyugalmi + 0,85 × (max − nyugalmi) (pulzustartalék),
+   VO2max ≈ 15,3 × max / nyugalmi (Uth–Sørensen). Tájékoztató érték – az LTHR-teszt felülírja. */
+function cdEst(st = state) {
+  const P = cdS(st).prof || {}, age = P.by ? new Date().getFullYear() - Number(P.by) : 0, rest = Number(P.rest) || 0;
+  if (!(age >= 12 && age <= 90 && rest >= 30 && rest <= 110)) return null;
+  const mm = Number(P.max) >= 140 && Number(P.max) <= 230, max = mm ? Number(P.max) : Math.round(208 - 0.7 * age);
+  return { age, rest, max, maxEst: !mm, lthr: Math.round(rest + 0.85 * (max - rest)), vo2: Math.round(15.3 * max / rest * 10) / 10 };
+}
+function cdLthrObj() { const L = cdS().lthr; if (L?.v) return L; const E = cdEst(); return E ? { v: E.lthr, m: 'ell', est: true } : null; }
+function cdLthr(m) { const L = cdLthrObj(); if (!L?.v) return 0; let v = Number(L.v); if (m === 'bike' && L.m !== 'bike') v -= 5; else if (m !== 'bike' && L.m === 'bike') v += 5; return v; }
 const cdZ1 = m => Math.round(cdLthr(m) * 0.85);
 function cdZone(m, hr) { const L = cdLthr(m); if (!L || !hr) return 0; return hr <= cdZ1(m) ? 1 : hr <= L ? 2 : 3; }
 /* a terv hete (1–12, utána újrakezdődik); 0 = még nem indult */
@@ -911,9 +921,10 @@ function cdGoalHtml(k, e, plan) {
     if (prev && cdPer30(prev)) out.push(`Előző teszt: <b>${showNum(cdR2(cdPer30(prev)))} km / 30 perc</b>${prev.lthr ? `, LTHR ${showNum(prev.lthr)}` : ''} – ennél többet célozz.`);
     return out;
   }
-  if (!L) out.push('Még nincs LTHR-ed: maradj <b>beszédtempóban</b> (végig teljes mondatokban tudj beszélni). Az LTHR-tesztet a FELSŐTEST 2 napon ajánlja fel az app, vagy a Fejlődés oldalon beírhatod.');
+  if (!L) out.push('Még nincs LTHR-ed: maradj <b>beszédtempóban</b> (végig teljes mondatokban tudj beszélni). Ha a Fejlődés oldalon megadod a korod és a nyugalmi pulzusod, addig becsült zónákkal számol; a pontos értéket az LTHR-teszt adja (a FELSŐTEST 2 napon ajánlja fel az app).');
+  else if (cdLthrObj()?.est) out.push('A zónák most <b>becsültek</b> (kor + nyugalmi pulzus alapján) – az LTHR-teszt pontosabb. Ellenőrzésnek: az 1. zónában teljes mondatokban tudj beszélni.');
   if (t === 'A') {
-    if (L) out.push(`Pulzus végig <b>${z1} bpm alatt</b> (1. zóna)${m === 'bike' && cdS().lthr?.m !== 'bike' ? ' – biciklin 5-tel lejjebb' : ''}`);
+    if (L) out.push(`Pulzus végig <b>${z1} bpm alatt</b> (1. zóna)${m === 'bike' && cdLthrObj()?.m !== 'bike' ? ' – biciklin 5-tel lejjebb' : ''}`);
     if (prev && cdPer30(prev)) out.push(`Cél: ${showNum(min)} perc alatt <b>${showNum(cdR2(cdPer30(prev) / 30 * min + 0.005))} km-nél több</b> ugyanakkora pulzussal${cdNum(prev.lvl) ? ` (előző: ${showNum(prev.lvl)}. szint)` : ''}`);
     // szintemelés: az utolsó 2 alap edzés ezen a gépen legalább 5 ütéssel a plafon alatt maradt
     const two = cdDone().filter(x => x.k !== k && x.e.m === m && x.e.t === 'A').slice(-2).map(x => x.e);
@@ -1033,16 +1044,23 @@ function cdFinish(card, k) {
 }
 /* Fejlődés oldal: KARDIÓ kártya */
 function cardioHistoryHtml() {
-  const C = cdS(), all = cdDone(), L = C.lthr?.v, pw = cdPlanWeek();
+  const C = cdS(), all = cdDone(), LO = cdLthrObj(), L = LO?.v, pw = cdPlanWeek(), E = cdEst(), P = C.prof || {};
   const ws = weekStartOf(Date.now()), weekN = all.filter(x => (x.e.time || 0) >= ws).length;
+  const appleVo2 = Number(P.vo2) > 0 ? Number(P.vo2) : 0, vo2 = appleVo2 || E?.vo2 || 0;
   let h = `<section class="summary-card cd-hist"><div class="summary-title">🏃 KARDIÓ</div>
-    <div class="summary-stats three"><div><strong>${weekN}</strong><span>kardió a héten (cél 3–4)</span></div><div><strong>${pw ? pw + '.' : '–'}</strong><span>hét a 12 hetes tervben</span></div><div><strong>${L ? showNum(L) : '–'}</strong><span>LTHR (bpm)</span></div></div>`;
+    <div class="summary-stats three"><div><strong>${weekN}</strong><span>kardió a héten (cél 3–4)</span></div><div><strong>${pw ? pw + '.' : '–'}</strong><span>hét a 12 hetes tervben</span></div><div><strong>${appleVo2 ? showNum(appleVo2) : vo2 ? '≈ ' + showNum(Math.round(vo2)) : '–'}</strong><span>VO2max ${appleVo2 ? '(Apple Watch)' : vo2 ? '(becslés)' : ''}</span></div></div>`;
   if (L) {
     const z1 = Math.round(L * 0.85);
     h += `<div class="cd-zones"><span class="z1">1. zóna<b>≤ ${z1}</b></span><span class="z2">2. zóna<b>${z1 + 1}–${showNum(L)}</b></span><span class="z3">3. zóna<b>&gt; ${showNum(L)}</b></span></div>
-      <div class="bw-note">Mért: ${esc(fmtDate(C.lthr.at) || '')}, ${esc((CD_M[C.lthr.m]?.n || '').toLowerCase())}en. ${C.lthr.m === 'bike' ? 'Más gépen kb. 5-tel feljebb.' : 'Biciklin kb. 5-tel lejjebb.'} Az órán: Beállítások → Edzés → Pulzuszónák → Manuális (2. zóna teteje ${z1}, 4. zóna teteje ${showNum(L)}).</div>`;
-  } else h += `<div class="bw-note">Még nincs LTHR-ed. Csináld meg a 30 perces tesztet (a FELSŐTEST 2 napon felajánlja a kardió kártya), vagy írd be, ha már tudod.</div>`;
-  h += `<div class="cd-hrow"><button class="secondary" data-cdlthr>${L ? 'LTHR módosítása' : 'LTHR beírása'}</button>${C.start ? '<button class="secondary" data-cdrestart>Terv újrakezdése</button>' : ''}</div>`;
+      <div class="bw-note">${LO.est ? `<b>Becsült LTHR: ${showNum(L)}</b> (${E.age} év, nyugalmi pulzus ${showNum(E.rest)}, max pulzus ${E.maxEst ? '≈ ' : ''}${showNum(E.max)}). A 30 perces teszt pontosabb – a FELSŐTEST 2 napon felajánlja a kardió kártya.` : `<b>LTHR: ${showNum(L)}</b>, mért: ${esc(fmtDate(LO.at) || '')}, ${esc((CD_M[LO.m]?.n || '').toLowerCase())}en.`} ${LO.m === 'bike' ? 'Más gépen kb. 5-tel feljebb.' : 'Biciklin kb. 5-tel lejjebb.'} Az órán: Beállítások → Edzés → Pulzuszónák → Manuális (2. zóna teteje ${z1}, 4. zóna teteje ${showNum(L)}).</div>`;
+  } else h += `<div class="bw-note">Még nincs LTHR-ed. Add meg a korod és a nyugalmi pulzusod – ebből becsli a zónáidat és a VO2max-odat –, vagy csináld meg a 30 perces tesztet (a FELSŐTEST 2 napon felajánlja a kardió kártya).</div>`;
+  // VO2max: becslés (kor + nyugalmi pulzus) és / vagy az Apple Watch Kardiófittség értéke
+  if (vo2) {
+    h += `<div class="warm-sec">VO2MAX – ÁLLÓKÉPESSÉG</div><div class="bw-note">${E ? `Becslés: <b>≈ ${showNum(E.vo2)} ml/kg/perc</b> (15,3 × max pulzus ÷ nyugalmi pulzus). ` : ''}${appleVo2 ? `Apple Watch Kardiófittség: <b>${showNum(appleVo2)}</b> – ez pontosabb, ha van. ` : ''}Ha a nyugalmi pulzusod csökken, a becslés nő: havonta frissítsd (Egészség app → Szív → Nyugalmi pulzus).</div>`;
+    const vh = (P.hist || []).filter(x => x.vo2 > 0);
+    if (vh.length > 1) h += lineChart(vh.map(x => ({ wt: Math.round(x.vo2 * 10) / 10, lab: fmtDate(x.at), read: [`VO2max ${x.apple ? '' : '≈ '}${showNum(Math.round(x.vo2 * 10) / 10)}`, ` · nyugalmi pulzus ${showNum(x.rest)} · ${fmtDate(x.at)}${x.apple ? ' · Apple Watch' : ' · becslés'}`] })), 'VO2max változása', 'VO2max', true, 'ml/kg/p');
+  }
+  h += `<div class="cd-hrow"><button class="secondary" data-cdprof>${E ? 'Kor, nyugalmi pulzus' : 'Becslés: kor + pulzus'}</button><button class="secondary" data-cdlthr>${C.lthr?.v ? 'LTHR módosítása' : 'LTHR beírása'}</button>${C.start ? '<button class="secondary" data-cdrestart>Terv újrakezdése</button>' : ''}</div>`;
   if (!all.length) return h + '<div class="empty">Még nincs kardió. Minden edzésnap végén ott a kardió kártya – töltsd ki, vagy hagyd ki.</div></section>';
   // gépenként: alap edzések távja 30 percre vetítve + átlagpulzus
   const used = Object.keys(CD_M).filter(m => all.some(x => x.e.m === m));
@@ -1063,7 +1081,43 @@ function cardioHistoryHtml() {
 function bindCardioHistory(root) {
   root.querySelectorAll('[data-cdm]').forEach(b => b.onclick = () => { cdChartM = b.dataset.cdm; renderHistory(); });
   root.querySelector('[data-cdlthr]')?.addEventListener('click', openLthrSheet);
+  root.querySelector('[data-cdprof]')?.addEventListener('click', openFitSheet);
   root.querySelector('[data-cdrestart]')?.addEventListener('click', () => { if (!confirm('Újrakezded a 12 hetes kardiótervet? Ez a hét lesz az 1. hét (az eddigi kardióid megmaradnak).')) return; cdEnsure().start = weekStartOf(Date.now()); save(); renderHistory(); toast('A kardióterv újraindult: ez az 1. hét.'); });
+}
+/* kor + nyugalmi pulzus (+ ha van: mért max pulzus, Apple Watch Kardiófittség) a becsléshez */
+function openFitSheet() {
+  const P = cdS().prof || {};
+  document.getElementById('fitSheet')?.remove();
+  const el = document.createElement('div'); el.id = 'fitSheet'; el.className = 'overlay sheet-overlay';
+  const f = (id, label, ph, v) => `<label class="cd-f wide"><span>${label}</span><input id="${id}" inputmode="decimal" autocomplete="off" placeholder="${ph}" value="${v ? esc(showNum(v)) : ''}"></label>`;
+  el.innerHTML = `<div class="sheet" role="dialog" aria-label="Becslés"><div class="sheet-title">❤️ Becslés teszt nélkül<small>Ebből becsli az app a zónáidat (amíg nincs LTHR-teszted) és a VO2max-odat</small></div>
+    ${f('fitBy', 'Születési év', 'pl. 2003', P.by)}
+    ${f('fitRest', 'Nyugalmi pulzus <i>Egészség app → Szív → Nyugalmi pulzus</i>', 'pl. 58', P.rest)}
+    ${f('fitMax', 'Max pulzus <i>ha tudod – üresen a korodból becsli</i>', 'pl. 195', P.max)}
+    ${f('fitVo2', 'Apple Watch Kardiófittség (VO2max) <i>ha van</i>', 'pl. 44,5', P.vo2)}
+    <div class="sheet-note">A Kardiófittséget az óra szabadtéri gyaloglásból, futásból vagy túrából számolja (Egészség app → Szív → Kardiófittség). Termi gépen nem méri, ezért becsül az app.</div>
+    <div class="sheet-row"><button class="primary" data-fs>Mentés</button><button data-fx>Mégse</button></div></div>`;
+  document.body.appendChild(el);
+  const close = () => el.remove();
+  el.onclick = ev => { if (ev.target === el) close(); };
+  el.querySelector('[data-fx]').onclick = close;
+  el.querySelector('[data-fs]').onclick = () => {
+    const by = toNum(el.querySelector('#fitBy').value), rest = toNum(el.querySelector('#fitRest').value), mx = el.querySelector('#fitMax').value.trim(), vo = el.querySelector('#fitVo2').value.trim(), y = new Date().getFullYear();
+    const bad = [];
+    if (!(by >= y - 90 && by <= y - 12)) bad.push('fitBy');
+    if (!(rest >= 30 && rest <= 110)) bad.push('fitRest');
+    if (mx && !(toNum(mx) >= 140 && toNum(mx) <= 230)) bad.push('fitMax');
+    if (vo && !(toNum(vo) >= 15 && toNum(vo) <= 90)) bad.push('fitVo2');
+    if (bad.length) { bad.forEach(id => el.querySelector('#' + id).classList.add('invalid')); toast('Nézd át a pirossal jelölt mezőt (év, nyugalmi pulzus 30–110, max pulzus 140–230, VO2max 15–90).'); return; }
+    const C = cdEnsure(), prof = { ...(C.prof || {}), by: Math.round(by), rest: Math.round(rest), max: mx ? Math.round(toNum(mx)) : '', vo2: vo ? toNum(vo) : '' };
+    C.prof = prof;
+    const E = cdEst(), apple = prof.vo2 > 0, rec = { at: Date.now(), rest: prof.rest, vo2: apple ? prof.vo2 : E?.vo2 || 0, apple };
+    // naponta egy pont a VO2max-görbén (ugyanazon a napon a frissebb felülírja)
+    const hist = (prof.hist || []).filter(x => today() !== new Date(x.at).toISOString().slice(0, 10));
+    prof.hist = [...hist, rec].slice(-60);
+    save(); close(); renderHistory();
+    toast(E ? `Mentve. VO2max ≈ ${showNum(Math.round(E.vo2))}${C.lthr?.v ? '' : `, becsült LTHR ${E.lthr}`}.` : 'Mentve.');
+  };
 }
 function openLthrSheet() {
   const C = cdS(); let m = C.lthr?.m || 'ell';
@@ -3571,7 +3625,7 @@ function renderInfo() {
     '<b>🏃 KARDIÓ</b>: minden edzésnap végén. Válaszd ki a gépet (elliptikus, bicikli, futópad) és a típust (alap / küszöb / teszt), írd be az időt, a távot, a szintet és az óra szerinti átlagpulzust, majd <b>✓ KÉSZ</b> – vagy <b>Ma kihagyom</b>. A 🎯 sor a 12 hetes kardióterv szerint mondja, mit csinálj ma.',
     'A 6. hét végén indíts <b>ÚJ CIKLUST</b> – a régi eredmények megmaradnak.']);
   h += sec('📈 FEJLŐDÉS · 🏅 RANGOK · 👥 BARÁTOK', [
-    '<b>FEJLŐDÉS</b>: heti és havi összefoglaló, kardió (LTHR, pulzuszónák, táv- és pulzusgörbe), rekordok, minden gyakorlat előzménye, biztonsági mentés fájlba.',
+    '<b>FEJLŐDÉS</b>: heti és havi összefoglaló, kardió (LTHR, pulzuszónák, VO2max-becslés, táv- és pulzusgörbe), rekordok, minden gyakorlat előzménye, biztonsági mentés fájlba.',
     `<b>RANGOK</b>: ${RANKS.map(r => r.n).join(' → ')}, I–III fokozattal.`+' A jelenlegi programod gyakorlataiból, az utolsó 2 edzés legjobb szettjéből számol, a testsúlyodhoz igazítva.',
     '<b>BARÁTOK</b>: látod a többiek edzéseit, edzésnapjait és rangjait. A megosztást a profilodban kikapcsolhatod.']);
   h += sec('🔒 AZ ADATAID', [
